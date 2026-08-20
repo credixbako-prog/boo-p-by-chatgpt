@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">BOO-P — proposition 1, Le Signet</title>
+  <desc id="desc">Un livre fermé vertical crème, un signet ocre et une trace sauge, sur fond bleu nuit.</desc>
+  <rect width="1024" height="1024" fill="#0F1B2D"/>
+
+  <!-- Ombre douce de la reliure -->
+  <rect x="304" y="166" width="476" height="674" rx="58" fill="#6D8F7A" opacity=".38"/>
+
+  <!-- Livre fermé vu de face -->
+  <rect x="244" y="132" width="484" height="680" rx="54" fill="#F2EDE3"/>
+  <path d="M350 154V790" fill="none" stroke="#0F1B2D" stroke-width="22" opacity=".12"/>
+  <path d="M694 184V748C694 766 680 780 662 780H290" fill="none" stroke="#0F1B2D" stroke-width="18" stroke-linecap="round" opacity=".1"/>
+
+  <!-- Trace calme sur la couverture -->
+  <path d="M420 520C476 458 544 453 604 502C640 532 665 539 694 526" fill="none" stroke="#6D8F7A" stroke-width="28" stroke-linecap="round" stroke-dasharray="1 70"/>
+
+  <!-- Signet qui dépasse du livre -->
+  <path d="M548 748H628V902L588 870L548 902V748Z" fill="#D28B3D"/>
+</svg>

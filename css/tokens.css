@@ -1,0 +1,174 @@
+/* ============================================================
+   BOOP — Design Tokens
+   "Interface Effacée" Design System
+   ============================================================ */
+
+:root {
+  /* ── Brand Colors ───────────────────────────────────────── */
+  --color-bleu-nuit:        #0F1B2D;
+  --color-vert-sauge:       #6D8F7A;
+  --color-ocre:             #D28B3D;
+  --color-creme:            #F2EDE3;
+  --color-cream-paper:      #F2EDE3;
+  --color-midnight-blue:    #0F1B2D;
+  --color-sage-green:       #6D8F7A;
+  --color-terracotta-ocre:  #D28B3D;
+  --color-white:            #FFFFFF;
+  --color-grey-light:       #E6E0D5;
+  --color-grey-dark:        #707070;
+
+  /* ── Surface System ─────────────────────────────────────── */
+  --surface:                #FEF9EF;
+  --surface-dim:            #DEDAD0;
+  --surface-bright:         #FEF9EF;
+  --surface-container-lowest: #FFFFFF;
+  --surface-container-low:  #F8F3E9;
+  --surface-container:      #F2EDE3;
+  --surface-container-high: #EDE8DE;
+  --surface-container-highest: #E7E2D8;
+
+  /* ── On-Surface (Text) ──────────────────────────────────── */
+  --on-surface:             #1D1C16;
+  --on-surface-variant:     #44474C;
+  --on-surface-muted:       #75777D;
+  --inverse-surface:        #32302A;
+  --inverse-on-surface:     #F5F0E6;
+
+  /* ── Outline ────────────────────────────────────────────── */
+  --outline:                #75777D;
+  --outline-variant:        #C5C6CD;
+  --outline-subtle:         rgba(15, 27, 45, 0.08);
+
+  /* ── Semantic Colors ────────────────────────────────────── */
+  --color-trace:            var(--color-vert-sauge);
+  --color-action:           var(--color-ocre);
+  --color-ink:              var(--color-bleu-nuit);
+  --color-paper:            var(--color-creme);
+
+  /* ── Vert Sauge Variants ────────────────────────────────── */
+  --vert-sauge-light:       #8FB09D;
+  --vert-sauge-dim:         #557363;
+  --vert-sauge-glow:        rgba(109, 143, 122, 0.15);
+  --vert-sauge-surface:     rgba(109, 143, 122, 0.08);
+
+  /* ── Ocre Variants ─────────────────────────────────────── */
+  --ocre-light:             #E4A85D;
+  --ocre-dim:               #B07430;
+  --ocre-glow:              rgba(210, 139, 61, 0.15);
+  --ocre-surface:           rgba(210, 139, 61, 0.08);
+
+  /* ── Error ──────────────────────────────────────────────── */
+  --color-error:            #BA1A1A;
+  --color-on-error:         #FFFFFF;
+
+  /* ── Typography ─────────────────────────────────────────── */
+  --font-display:           'Playfair Display', 'Georgia', serif;
+  --font-body:              'Poppins', 'Segoe UI', sans-serif;
+
+  /* Display Large — Onboarding headlines, Timer */
+  --text-display-lg:        700 48px/56px var(--font-display);
+  --text-display-lg-ls:     -0.02em;
+
+  /* Display Medium — Section headers */
+  --text-display-md:        600 36px/44px var(--font-display);
+  --text-display-md-ls:     -0.01em;
+
+  /* Headline Large — Greetings, Card titles */
+  --text-headline-lg:       600 32px/40px var(--font-display);
+
+  /* Headline Large Mobile */
+  --text-headline-lg-m:     600 28px/36px var(--font-display);
+
+  /* Headline Medium — Subsections */
+  --text-headline-md:       500 24px/32px var(--font-display);
+
+  /* Body Large — Reflections, Quotes */
+  --text-body-lg:           400 18px/28px var(--font-body);
+
+  /* Body Medium — Default text */
+  --text-body-md:           400 16px/24px var(--font-body);
+
+  /* Body Small */
+  --text-body-sm:           400 14px/20px var(--font-body);
+
+  /* Label Medium — Buttons, Nav */
+  --text-label-md:          600 14px/20px var(--font-body);
+  --text-label-md-ls:       0.05em;
+
+  /* Label Small — Metadata */
+  --text-label-sm:          500 12px/16px var(--font-body);
+  --text-label-sm-ls:       0.04em;
+
+  /* Label XS — Tiny labels */
+  --text-label-xs:          600 10px/14px var(--font-body);
+  --text-label-xs-ls:       0.06em;
+
+  /* ── Spacing (8px base unit) ────────────────────────────── */
+  --space-1:                4px;
+  --space-2:                8px;
+  --space-3:                12px;
+  --space-4:                16px;
+  --space-5:                20px;
+  --space-6:                24px;
+  --space-8:                32px;
+  --space-10:               40px;
+  --space-12:               48px;
+  --space-16:               64px;
+  --space-20:               80px;
+
+  /* Layout Margins */
+  --margin-mobile:          24px;
+  --margin-desktop:         64px;
+  --gutter:                 16px;
+  --section-gap:            40px;
+  --content-max-width:      430px;
+
+  /* ── Border Radius ──────────────────────────────────────── */
+  --radius-xs:              4px;
+  --radius-sm:              8px;
+  --radius-md:              12px;
+  --radius-lg:              16px;
+  --radius-xl:              20px;
+  --radius-2xl:             24px;
+  --radius-full:            9999px;
+
+  /* ── Shadows (Ambient — Blur>20, Opacity<0.08) ──────────── */
+  --shadow-ambient:         0 4px 24px rgba(15, 27, 45, 0.06);
+  --shadow-ambient-lg:      0 8px 40px rgba(15, 27, 45, 0.07);
+  --shadow-ambient-xl:      0 12px 48px rgba(15, 27, 45, 0.08);
+  --shadow-soft:            0 2px 12px rgba(15, 27, 45, 0.04);
+  --shadow-inner:           inset 0 2px 8px rgba(15, 27, 45, 0.04);
+  --shadow-glow-sauge:      0 0 24px rgba(109, 143, 122, 0.2);
+  --shadow-glow-ocre:       0 0 24px rgba(210, 139, 61, 0.2);
+
+  /* ── Transitions ────────────────────────────────────────── */
+  --ease-out:               cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:            cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring:            cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-gentle:            cubic-bezier(0.4, 0, 0.2, 1);
+
+  --duration-fast:          150ms;
+  --duration-normal:        300ms;
+  --duration-slow:          500ms;
+  --duration-slower:        800ms;
+
+  /* ── Z-Index Scale ──────────────────────────────────────── */
+  --z-base:                 0;
+  --z-elevated:             10;
+  --z-sticky:               20;
+  --z-overlay:              30;
+  --z-modal:                40;
+  --z-fab:                  50;
+  --z-nav:                  60;
+  --z-toast:                70;
+
+  /* ── Icon ───────────────────────────────────────────────── */
+  --icon-stroke:            1.5px;
+  --icon-size-sm:           20px;
+  --icon-size-md:           24px;
+  --icon-size-lg:           28px;
+
+  /* ── Bottom Nav ─────────────────────────────────────────── */
+  --nav-height:             72px;
+  --nav-safe-area:          env(safe-area-inset-bottom, 0px);
+}

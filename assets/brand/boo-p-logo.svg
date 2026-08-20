@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 360" role="img" aria-labelledby="title desc">
+  <title id="title">Logo BOO-P</title>
+  <desc id="desc">Le symbole BOO-P associe un livre ouvert, un marque-page ocre et une trace sauge.</desc>
+
+  <!-- Symbole -->
+  <g transform="translate(34 38)">
+    <rect width="284" height="284" rx="70" fill="#0F1B2D"/>
+    <path d="M49 70C82 64 116 75 142 101V213C117 193 86 188 49 196V70Z" fill="#F2EDE3"/>
+    <path d="M235 70C202 64 168 75 142 101V213C167 193 198 188 235 196V70Z" fill="#F2EDE3"/>
+    <path d="M129 71H155V154L142 144L129 154V71Z" fill="#D28B3D"/>
+    <path d="M71 173C95 156 118 159 139 176C160 193 186 192 218 170" fill="none" stroke="#6D8F7A" stroke-width="9" stroke-linecap="round" stroke-dasharray="1 22"/>
+  </g>
+
+  <!-- Signature typographique -->
+  <g font-family="Poppins, Avenir Next, Segoe UI, sans-serif" font-size="154" font-weight="700" letter-spacing="-7">
+    <text x="370" y="216" fill="#0F1B2D">BOO</text>
+    <text x="714" y="216" fill="#6D8F7A" letter-spacing="0">–</text>
+    <text x="842" y="216" fill="#0F1B2D">P</text>
+  </g>
+  <text x="378" y="279" fill="#0F1B2D" opacity=".72" font-family="Playfair Display, Georgia, serif" font-size="34" font-style="italic" letter-spacing=".3">Chaque lecture laisse une trace.</text>
+</svg>

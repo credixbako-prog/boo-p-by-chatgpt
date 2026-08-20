@@ -1,0 +1,335 @@
+<!DOCTYPE html><html class="light" lang="fr" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>BOOKTRAIL - Profil &amp; ADN</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "tertiary": "#000000",
+                      "inverse-on-surface": "#f5f0e6",
+                      "inverse-surface": "#32302a",
+                      "on-secondary": "#ffffff",
+                      "on-error": "#ffffff",
+                      "surface-dim": "#dedad0",
+                      "outline-variant": "#c5c6cd",
+                      "surface-container-highest": "#e7e2d8",
+                      "tertiary-container": "#2c1600",
+                      "primary": "#000000",
+                      "vert-sauge": "#6D8F7A",
+                      "surface-variant": "#e7e2d8",
+                      "on-surface-variant": "#44474c",
+                      "surface-container-high": "#ede8de",
+                      "surface-container-low": "#f8f3e9",
+                      "surface-container": "#f2ede3",
+                      "on-primary-fixed": "#101c2e",
+                      "secondary-fixed": "#c7ebd3",
+                      "on-error-container": "#93000a",
+                      "on-surface": "#1d1c16",
+                      "error": "#ba1a1a",
+                      "bleu-nuit": "#0F1B2D",
+                      "secondary": "#456552",
+                      "primary-fixed-dim": "#bbc7df",
+                      "tertiary-fixed-dim": "#ffb870",
+                      "on-primary-container": "#79849b",
+                      "on-secondary-fixed": "#002112",
+                      "on-primary-fixed-variant": "#3c475b",
+                      "on-background": "#1d1c16",
+                      "ocre-terracotta": "#D28B3D",
+                      "error-container": "#ffdad6",
+                      "inverse-primary": "#bbc7df",
+                      "creme-parchment": "#F2EDE3",
+                      "primary-container": "#101c2e",
+                      "on-tertiary-fixed-variant": "#693c00",
+                      "on-primary": "#ffffff",
+                      "tertiary-fixed": "#ffdcbe",
+                      "on-tertiary-fixed": "#2c1600",
+                      "on-secondary-fixed-variant": "#2d4d3b",
+                      "on-secondary-container": "#496a56",
+                      "surface-bright": "#fef9ef",
+                      "background": "#fef9ef",
+                      "surface-tint": "#535f74",
+                      "outline": "#75777d",
+                      "on-tertiary": "#ffffff",
+                      "primary-fixed": "#d7e3fc",
+                      "surface": "#fef9ef",
+                      "secondary-container": "#c4e8d0",
+                      "secondary-fixed-dim": "#abcfb8",
+                      "on-tertiary-container": "#b77528",
+                      "surface-container-lowest": "#ffffff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "gutter": "16px",
+                      "margin-desktop": "64px",
+                      "margin-mobile": "24px",
+                      "base": "8px",
+                      "section-gap": "40px"
+              },
+              "fontFamily": {
+                      "label-md": [
+                              "Poppins"
+                      ],
+                      "label-sm": [
+                              "Poppins"
+                      ],
+                      "body-lg": [
+                              "Poppins"
+                      ],
+                      "display-lg": [
+                              "Playfair Display"
+                      ],
+                      "headline-md": [
+                              "Playfair Display"
+                      ],
+                      "headline-lg-mobile": [
+                              "Playfair Display"
+                      ],
+                      "body-md": [
+                              "Poppins"
+                      ],
+                      "headline-lg": [
+                              "Playfair Display"
+                      ]
+              },
+              "fontSize": {
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "56px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "28px",
+                              {
+                                      "lineHeight": "36px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "fontWeight": "600"
+                              }
+                      }
+              }
+            },
+          }
+    </script>
+<style>
+        body {
+            background-color: #F2EDE3;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .soft-shadow {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.02);
+        }
+        .inset-shadow {
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .book-shadow {
+            box-shadow: 2px 4px 12px rgba(15, 27, 45, 0.15), 1px 2px 4px rgba(15, 27, 45, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .book-shadow:active {
+            transform: translateY(2px) scale(0.98);
+            box-shadow: 1px 2px 6px rgba(15, 27, 45, 0.1);
+        }
+        .tag-interactive {
+            transition: all 0.2s ease-out;
+        }
+        .tag-interactive:active {
+            background-color: theme('colors.surface-container-high');
+            transform: scale(0.96);
+        }
+        /* Hide scrollbar for horizontal scroll */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="text-bleu-nuit font-body-md min-h-screen flex flex-col relative pb-28" style="font-family: &quot;Playfair Display&quot;, serif;">
+<!-- Top Navigation Placeholder (Usually hidden on this specific profile view per minimal design, but added safe area) -->
+<header class="pt-12 pb-6 px-margin-mobile flex justify-center items-center">
+<!-- Logo or subtle branding could go here, keeping it erased -->
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 flex flex-col w-full max-w-md mx-auto">
+<!-- Profile Header -->
+<section class="px-margin-mobile mb-8">
+<div class="flex items-center gap-6 mb-4">
+<div class="w-20 h-20 rounded-full bg-surface-container-highest soft-shadow overflow-hidden border-2 border-surface-container-low flex-shrink-0">
+<img alt="Dixon" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAq-zLVd8xmhFDP98JYxxq-P_qcyVM-OUqrn2dIVjL3iteWIghVY42OWVpYyPzavdYYHsUbWsDf4IjiKgr_RiAmYK7RKFAMHUrKeqgX9qklYf2YTobRqjkkQmpV71zrFrLs-gKGuvu957AIQ_ebPh-mwqR81tTcZl8RNs3weMM_L7h01f6R5wZVXOqOWhpn-ZjQZMWWAFeGLMpzeSdizLHNWBLDE0j3zVWdR7lLotE2GBQ68MhSwyzvMw">
+</div>
+<div class="flex-1 flex justify-around">
+<div class="flex flex-col items-center">
+<span class="font-headline-md text-bleu-nuit font-display-lg font-semibold">42</span>
+<span class="text-label-sm text-on-surface-variant italic">livres</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="font-headline-md text-bleu-nuit font-display-lg font-semibold">86</span>
+<span class="text-label-sm text-on-surface-variant italic">heures</span>
+</div>
+<div class="flex flex-col items-center">
+<span class="font-headline-md text-ocre-terracotta font-display-lg font-semibold">7</span>
+<span class="text-label-sm text-on-surface-variant italic">transmis</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col">
+<h1 class="font-headline-lg-mobile text-bleu-nuit tracking-tight font-headline-lg font-bold">Dixon</h1>
+<p class="font-label-md text-on-surface-variant uppercase tracking-widest">Lecteur explorateur</p>
+<div class="flex items-center gap-1 mt-1 text-on-surface-variant">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+<span class="text-label-sm italic">Paris, France</span>
+</div>
+</div>
+</section>
+<!-- Stats Grid -->
+<!-- Mon ADN de lecteur (Books) -->
+<section class="mb-section-gap"><div class="px-margin-mobile mb-4">
+<h2 class="font-headline-md text-bleu-nuit font-display-lg font-bold">Mon ADN de lecteur</h2>
+</div>
+<div class="px-margin-mobile flex flex-col gap-3">
+<div class="flex items-center justify-between p-3 bg-surface-container-low rounded-lg border-l-4 border-bleu-nuit">
+<span class="font-label-md text-bleu-nuit">La Sainte Bible</span>
+<span class="material-symbols-outlined text-bleu-nuit/40">chevron_right</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-low rounded-lg border-l-4 border-creme-parchment">
+<span class="font-label-md text-bleu-nuit">Le Petit Prince</span>
+<span class="material-symbols-outlined text-bleu-nuit/40">chevron_right</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-low rounded-lg border-l-4 border-[#3a3530]">
+<span class="font-label-md text-bleu-nuit">Les Frères Karamazov</span>
+<span class="material-symbols-outlined text-bleu-nuit/40">chevron_right</span>
+</div>
+</div></section>
+<!-- Centres d'intérêt -->
+<section class="px-margin-mobile mb-section-gap">
+<h2 class="font-headline-md text-bleu-nuit mb-4 font-display-lg font-bold">Informations</h2>
+<div class="grid grid-cols-1 gap-3">
+<div class="flex items-center gap-4 p-4 bg-surface-container-low rounded-xl soft-shadow">
+<div class="w-10 h-10 rounded-full bg-ocre-terracotta/10 flex items-center justify-center text-ocre-terracotta">
+<span class="material-symbols-outlined">groups</span>
+</div>
+<div class="flex-1">
+<p class="text-label-sm text-on-surface-variant">Club de lecture</p>
+<p class="font-label-md text-bleu-nuit">Cercle des Classiques</p>
+</div>
+</div>
+<div class="flex items-center gap-4 p-4 bg-surface-container-low rounded-xl soft-shadow">
+<div class="w-10 h-10 rounded-full bg-ocre-terracotta/10 flex items-center justify-center text-ocre-terracotta">
+<span class="material-symbols-outlined">person_add</span>
+</div>
+<div class="flex-1">
+<p class="text-label-sm text-on-surface-variant">Connexions</p>
+<p class="font-label-md text-bleu-nuit">128 lecteurs</p>
+</div>
+</div>
+</div>
+</section>
+<section class="px-margin-mobile mb-section-gap">
+<div class="flex justify-between items-center mb-4">
+<h2 class="font-headline-md text-bleu-nuit font-display-lg font-bold">Objectifs</h2>
+<span class="text-ocre-terracotta font-label-sm">Voir tout</span>
+</div>
+<div class="bg-surface-container-low p-4 rounded-xl border border-black/5">
+<div class="flex justify-between mb-2">
+<span class="font-label-md text-bleu-nuit">Défi 2024</span>
+<span class="font-label-sm text-on-surface-variant">12 / 24 livres</span>
+</div>
+<div class="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-ocre-terracotta w-1/2"></div>
+</div>
+</div>
+</section><section class="px-margin-mobile mb-section-gap">
+<h2 class="font-headline-md text-headline-md text-bleu-nuit mb-4 font-display-lg font-bold">Centres d'intérêt</h2>
+<div class="flex flex-wrap gap-2">
+<button class="px-4 py-1.5 rounded-full border-[1.5px] border-bleu-nuit/20 font-label-md text-label-md text-bleu-nuit tag-interactive bg-surface-container-low/50">Philosophie</button>
+<button class="px-4 py-1.5 rounded-full border-[1.5px] border-bleu-nuit/20 font-label-md text-label-md text-bleu-nuit tag-interactive bg-surface-container-low/50">Spiritualité</button>
+<button class="px-4 py-1.5 rounded-full border-[1.5px] border-bleu-nuit/20 font-label-md text-label-md text-bleu-nuit tag-interactive bg-surface-container-low/50">Architecture</button>
+<button class="px-4 py-1.5 rounded-full border-[1.5px] border-bleu-nuit/20 font-label-md text-label-md text-bleu-nuit tag-interactive bg-surface-container-low/50">Histoire Classique</button>
+<button class="w-8 h-8 rounded-full border-[1.5px] border-bleu-nuit text-bleu-nuit flex items-center justify-center tag-interactive">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+</section>
+</main>
+<!-- BottomNavBar - Strictly applying JSON instructions -->
+<nav class="md:hidden bg-creme-parchment/80 backdrop-blur-md fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-6 pb-8 pt-4 border-t border-black/5"><!-- Home -->
+<a class="flex flex-col items-center justify-center text-bleu-nuit/40 transition-colors" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'wght' 200;">home</span>
+</a>
+<!-- Timer -->
+<a class="flex flex-col items-center justify-center text-bleu-nuit/40 transition-colors" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'wght' 200;">schedule</span>
+</a>
+<!-- Library -->
+<a class="flex flex-col items-center justify-center text-bleu-nuit/40 transition-colors" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'wght' 200;">menu_book</span>
+</a>
+<!-- Profile (Active) -->
+<a class="flex flex-col items-center justify-center text-ocre-terracotta transition-transform duration-200" href="#">
+<div class="w-8 h-8 rounded-full border-[1.5px] border-ocre-terracotta p-[2px] overflow-hidden">
+<img alt="Profile" class="w-full h-full rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAq-zLVd8xmhFDP98JYxxq-P_qcyVM-OUqrn2dIVjL3iteWIghVY42OWVpYyPzavdYYHsUbWsDf4IjiKgr_RiAmYK7RKFAMHUrKeqgX9qklYf2YTobRqjkkQmpV71zrFrLs-gKGuvu957AIQ_ebPh-mwqR81tTcZl8RNs3weMM_L7h01f6R5wZVXOqOWhpn-ZjQZMWWAFeGLMpzeSdizLHNWBLDE0j3zVWdR7lLotE2GBQ68MhSwyzvMw">
+</div>
+</a></nav>
+
+
+
+
+</body></html>

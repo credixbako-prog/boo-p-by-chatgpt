@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f1e8">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="BOO-P">
+  <meta name="description" content="BOO-P, compagnon personnel et communautaire de lecture — prototype web MVP v5 avec authentification et Traces sécurisées.">
+  <title>BOO-P — Compagnon de lecture</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/icons/boo-p-apple-touch-icon.png">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+  <script src="js/supabase-config.js?v=20260820-1"></script>
+  <script src="js/auth.js?v=20260820-4"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/tokens.css?v=20260820-2">
+  <link rel="stylesheet" href="css/base.css?v=20260820-3">
+  <link rel="stylesheet" href="css/animations.css?v=20260820-2">
+  <link rel="stylesheet" href="css/mvp-v5.css?v=20260820-3">
+</head>
+<body>
+  <a class="skip-link" href="#main-view">Aller au contenu</a>
+  <div class="offline-banner" id="offline-banner" role="status" hidden>
+    Hors connexion — vos changements sont conservés sur cet appareil et mis en attente.
+  </div>
+
+  <div class="app-shell" id="app-shell">
+    <aside class="side-nav" aria-label="Navigation principale">
+      <a class="brand" href="#home" aria-label="BOO-P, Accueil">
+        <img src="assets/brand/closed-book-proposals/boo-p-closed-01-signet.png" alt="" width="42" height="42">
+        <span>BOO-P</span>
+      </a>
+      <nav class="side-nav__links" id="desktop-nav"></nav>
+      <p class="simulation-note"><span class="status-dot" aria-hidden="true"></span> Prototype hybride<br><small>Traces et photos sécurisées · exemples fictifs</small></p>
+    </aside>
+
+    <div class="app-column">
+      <header class="topbar" id="topbar">
+        <a class="brand brand--mobile" href="#home" aria-label="BOO-P, Accueil">
+          <img src="assets/brand/closed-book-proposals/boo-p-closed-01-signet.png" alt="" width="36" height="36">
+          <span>BOO-P</span>
+        </a>
+        <div class="topbar__context" aria-live="polite">
+          <span class="eyebrow" id="view-eyebrow">Votre espace</span>
+          <strong id="view-title">Accueil</strong>
+        </div>
+        <div class="topbar__actions">
+          <button class="icon-button" type="button" data-action="open-search" aria-label="Ouvrir la recherche globale" title="Rechercher"><span aria-hidden="true">⌕</span></button>
+          <button class="icon-button notification-button" type="button" data-action="open-notifications" aria-label="Ouvrir les notifications" title="Notifications"><span aria-hidden="true">♢</span><span class="notification-badge" id="notification-badge" hidden></span></button>
+          <a class="avatar-button" href="#profile" aria-label="Ouvrir le profil" id="profile-shortcut">D</a>
+        </div>
+      </header>
+
+      <main class="main-view" id="main-view" tabindex="-1">
+        <div class="view-loading" role="status"><span class="loader" aria-hidden="true"></span> Préparation de votre sentier…</div>
+      </main>
+
+      <nav class="bottom-nav" id="mobile-nav" aria-label="Navigation principale"></nav>
+    </div>
+  </div>
+
+  <dialog class="app-dialog" id="app-dialog" aria-labelledby="dialog-title">
+    <div class="dialog-head">
+      <div><p class="eyebrow" id="dialog-eyebrow">BOO-P</p><h2 id="dialog-title">Fenêtre</h2></div>
+      <button class="icon-button" type="button" data-action="close-dialog" aria-label="Fermer">×</button>
+    </div>
+    <div class="dialog-body" id="dialog-body"></div>
+  </dialog>
+
+  <dialog class="app-dialog app-dialog--wide" id="search-dialog" aria-labelledby="search-title">
+    <div class="dialog-head">
+      <div><p class="eyebrow">Dans tout BOO-P</p><h2 id="search-title">Recherche globale</h2></div>
+      <button class="icon-button" type="button" data-action="close-search" aria-label="Fermer">×</button>
+    </div>
+    <div class="dialog-body">
+      <label class="search-field" for="global-search"><span aria-hidden="true">⌕</span><input id="global-search" type="search" autocomplete="off" placeholder="Livre, lecteur, club ou salon…"></label>
+      <div id="global-search-results" aria-live="polite"></div>
+    </div>
+  </dialog>
+
+  <dialog class="app-dialog app-dialog--notifications" id="notifications-dialog" aria-labelledby="notifications-title">
+    <div class="dialog-head">
+      <div><p class="eyebrow">Centre local</p><h2 id="notifications-title">Notifications</h2></div>
+      <button class="icon-button" type="button" data-action="close-notifications" aria-label="Fermer">×</button>
+    </div>
+    <div class="dialog-body" id="notifications-body"></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="sr-only" id="live-region" role="status" aria-live="polite"></div>
+
+  <script src="js/store.js?v=20260820-6"></script>
+  <script src="js/community-api.js?v=20260820-1"></script>
+  <script src="js/speech.js?v=20260820-2"></script>
+  <script src="js/mvp-app.js?v=20260820-4"></script>
+  <script src="js/pwa.js?v=20260820-1"></script>
+</body>
+</html>

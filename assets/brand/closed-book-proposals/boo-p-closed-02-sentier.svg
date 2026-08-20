@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">BOO-P — proposition 2, Le Sentier</title>
+  <desc id="desc">Un livre fermé horizontal, traversé par une trace sauge et accompagné d’un signet ocre.</desc>
+  <rect width="1024" height="1024" fill="#0F1B2D"/>
+
+  <!-- Couverture supérieure -->
+  <path d="M190 318H744C794 318 834 358 834 408V440H268C225 440 190 405 190 362V318Z" fill="#6D8F7A"/>
+
+  <!-- Bloc de pages fermé -->
+  <path d="M230 402H784C812 402 834 424 834 452V654C834 684 810 708 780 708H276C228 708 190 670 190 622V442C190 420 208 402 230 402Z" fill="#F2EDE3"/>
+
+  <!-- Reliure et chants de pages -->
+  <path d="M282 430V680" fill="none" stroke="#0F1B2D" stroke-width="22" opacity=".13"/>
+  <path d="M324 474H780M324 636H780" fill="none" stroke="#0F1B2D" stroke-width="15" stroke-linecap="round" opacity=".09"/>
+
+  <!-- Le sentier chemine sur le livre -->
+  <path d="M350 558C438 516 516 520 584 562C645 600 708 600 776 558" fill="none" stroke="#6D8F7A" stroke-width="27" stroke-linecap="round" stroke-dasharray="1 68"/>
+
+  <!-- Signet -->
+  <path d="M630 684H710V852L670 820L630 852V684Z" fill="#D28B3D"/>
+</svg>

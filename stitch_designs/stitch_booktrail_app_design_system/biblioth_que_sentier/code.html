@@ -1,0 +1,297 @@
+<!DOCTYPE html><html class="light" lang="fr"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>BOOKTRAIL - Bibliothèque &amp; Sentier</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary": "#000000",
+                        "inverse-on-surface": "#f5f0e6",
+                        "inverse-surface": "#32302a",
+                        "on-secondary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "surface-dim": "#dedad0",
+                        "outline-variant": "#c5c6cd",
+                        "surface-container-highest": "#e7e2d8",
+                        "tertiary-container": "#2c1600",
+                        "primary": "#000000",
+                        "vert-sauge": "#6D8F7A",
+                        "surface-variant": "#e7e2d8",
+                        "on-surface-variant": "#44474c",
+                        "surface-container-high": "#ede8de",
+                        "surface-container-low": "#f8f3e9",
+                        "surface-container": "#f2ede3",
+                        "on-primary-fixed": "#101c2e",
+                        "secondary-fixed": "#c7ebd3",
+                        "on-error-container": "#93000a",
+                        "on-surface": "#1d1c16",
+                        "error": "#ba1a1a",
+                        "bleu-nuit": "#0F1B2D",
+                        "secondary": "#456552",
+                        "primary-fixed-dim": "#bbc7df",
+                        "tertiary-fixed-dim": "#ffb870",
+                        "on-primary-container": "#79849b",
+                        "on-secondary-fixed": "#002112",
+                        "on-primary-fixed-variant": "#3c475b",
+                        "on-background": "#1d1c16",
+                        "ocre-terracotta": "#D28B3D",
+                        "error-container": "#ffdad6",
+                        "inverse-primary": "#bbc7df",
+                        "creme-parchment": "#F2EDE3",
+                        "primary-container": "#101c2e",
+                        "on-tertiary-fixed-variant": "#693c00",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed": "#ffdcbe",
+                        "on-tertiary-fixed": "#2c1600",
+                        "on-secondary-fixed-variant": "#2d4d3b",
+                        "on-secondary-container": "#496a56",
+                        "surface-bright": "#fef9ef",
+                        "background": "#fef9ef",
+                        "surface-tint": "#535f74",
+                        "outline": "#75777d",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed": "#d7e3fc",
+                        "surface": "#fef9ef",
+                        "secondary-container": "#c4e8d0",
+                        "secondary-fixed-dim": "#abcfb8",
+                        "on-tertiary-container": "#b77528",
+                        "surface-container-lowest": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "margin-desktop": "64px",
+                        "margin-mobile": "24px",
+                        "base": "8px",
+                        "section-gap": "40px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Poppins"],
+                        "label-sm": ["Poppins"],
+                        "body-lg": ["Poppins"],
+                        "display-lg": ["Playfair Display"],
+                        "headline-md": ["Playfair Display"],
+                        "headline-lg-mobile": ["Playfair Display"],
+                        "body-md": ["Poppins"],
+                        "headline-lg": ["Playfair Display"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "36px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #F2EDE3; /* creme-parchment */
+            color: #0F1B2D; /* bleu-nuit */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        /* Hide scrollbar for clean editorial look */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Ambient subtle shadow for cards */
+        .ambient-shadow {
+            box-shadow: 0 4px 24px rgba(15, 27, 45, 0.04);
+        }
+        
+        /* Tactile press effect */
+        .active-press:active {
+            transform: scale(0.98);
+            transition: transform 0.1s ease;
+        }
+    </style>
+</head>
+<body class="bg-creme-parchment min-h-screen relative overflow-x-hidden md:hidden pb-[100px]">
+<!-- Top AppBar (Shared Component Logic - Suppressed border, heavy anchor typography) -->
+<header class="bg-background dark:bg-background docked full-width top-0 flat no shadows flex justify-between items-center w-full px-margin-mobile py-4 max-w-[1100px] mx-auto z-40 sticky">
+<button class="text-bleu-nuit dark:text-inverse-on-surface hover:opacity-80 transition-opacity active:scale-95 duration-150 p-2 -ml-2">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0; font-weight: 300;">menu</span>
+</button>
+<h1 class="font-display-lg text-[24px] leading-[32px] tracking-tight text-bleu-nuit dark:text-inverse-on-surface font-bold">B</h1>
+<button class="text-bleu-nuit dark:text-inverse-on-surface hover:opacity-80 transition-opacity active:scale-95 duration-150 w-8 h-8 rounded-full overflow-hidden border border-surface-dim">
+<img class="w-full h-full object-cover" data-alt="A minimalist, high-contrast, black and white portrait photo of a sophisticated reader's profile avatar. The lighting is soft and studio-quality, emphasizing elegance and a quiet intellectual mood. Editorial style, clean white background, subtle grain." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyDzKJl7jA3KEFUODe1Go2EWWi7LvshU6GPe8B7U24q7MA3TF_R97TDMVmDRdS9m_JZ-LOsNUJjpBaQIrzu_Qu-J6S95BJTMgEEbPjSuTWPIuPYEUZa5atkhhBgjKpmEApsC7S8lrOuHjBj34GUcaLHmKVvWKmJYin3Gmb979JuH3kKkXLlqR8gGYN4q_gy0A2mel3-ydvThJx6zRVR73LnRG5SnM-pwRc87WWX-EGMx3YZ9MHKD2R6Q">
+</button>
+</header>
+<!-- Segmented Control (Tabs) -->
+<div class="px-margin-mobile pt-2 pb-6 z-30 sticky top-[64px] bg-creme-parchment/95 backdrop-blur-sm">
+<div class="flex space-x-6 border-b border-surface-dim relative">
+<!-- Active Tab -->
+<button class="pb-3 px-1 relative text-bleu-nuit font-label-md text-label-md active-press">
+                Ma Bibliothèque
+                <div class="absolute bottom-[-1px] left-0 w-full h-[2px] bg-ocre-terracotta"></div>
+</button>
+<!-- Inactive Tab -->
+<button class="pb-3 px-1 relative text-on-surface-variant font-label-md text-label-md opacity-60 hover:opacity-100 transition-opacity active-press">
+                Mon Sentier
+            </button>
+</div>
+</div>
+<!-- Main Content: Library Grid -->
+<main class="px-margin-mobile animate-[fadeIn_0.5s_ease-out]">
+<div class="grid grid-cols-3 gap-4 pb-section-gap">
+<!-- Book Card 1 -->
+<div class="aspect-[2/3] rounded-lg overflow-hidden ambient-shadow relative group active-press cursor-pointer" style="opacity: 1; transform: translateY(0px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" data-alt="A beautifully designed, minimalist book cover featuring abstract geometric shapes in muted earthy tones (sage green, deep terracotta, navy blue) on a textured cream parchment background. The typography is elegant and sparse. Editorial photography style, soft natural lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCijCVtot3CG_khAk_zLFamij61xMh24S0bmivDR5r4R5YdSwafzEhZarWE2Oqs0t8oKiMfF39R8k3AFNeYPsKC4M1VzMypYRZUL6DX_g_SZHt9Q-xQxZb0eUSPL6R3PSjKJwKossUrh8sXdNwwC_cQovsVXmyzPvY2IfnU7eIXeFCkb7DKtaX8lKmb3VrDRYdvEBDFVYDXKNvRKZwdfgiWWIkA1itgjBz_GDIEqI1yxK_qA4yyP2i_LA">
+<div class="absolute inset-0 bg-bleu-nuit/0 group-hover:bg-bleu-nuit/10 transition-colors duration-300"></div>
+<div class="absolute bottom-2 left-0 w-full flex flex-col items-center px-2 pointer-events-none">
+    <span class="text-[10px] font-label-sm text-bleu-nuit/40 mb-1">42%</span>
+    <div class="w-full h-[1px] bg-bleu-nuit/10 rounded-full overflow-hidden">
+        <div class="h-full bg-ocre-terracotta/40" style="width: 42%"></div>
+    </div>
+</div></div>
+<!-- Book Card 2 -->
+<div class="aspect-[2/3] rounded-lg overflow-hidden ambient-shadow relative group active-press cursor-pointer mt-4" style="opacity: 1; transform: translateY(0px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" data-alt="An elegant vintage-inspired book cover design. The cover shows a delicate botanical illustration of a fern leaf in fine dark ink on a warm beige background. Minimalist aesthetic, high-quality tactile paper texture visible. Soft, diffused lighting, quiet mood." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDbXEGCtuIPFmAWuLH7FWZGMsI5CoTvHT9ea1tY3f70-Xo0LR3qDEkdZ9CV38NIjgtnbcXUTmDtpmAqBt0tbhsUia0gqHyJRpO07hLsey51TkXbTrlulPS1MwX0taiGok8pkEf9QJK35SBM35SSUmfQ2pl6Y7ogSuTT1_-xTYrhTi4U21bHY-bwMm9zT08dzbqNP1cVGokhtUy6iO1RH87OYEI2wdUuB1AtDNLuzKdjlRZ8z4JG4e_IKQ">
+<div class="absolute inset-0 bg-bleu-nuit/0 group-hover:bg-bleu-nuit/10 transition-colors duration-300"></div>
+<div class="absolute bottom-2 left-0 w-full flex flex-col items-center px-2 pointer-events-none">
+    <span class="text-[10px] font-label-sm text-bleu-nuit/40 mb-1">88%</span>
+    <div class="w-full h-[1px] bg-bleu-nuit/10 rounded-full overflow-hidden">
+        <div class="h-full bg-ocre-terracotta/40" style="width: 88%"></div>
+    </div>
+</div></div>
+<!-- Book Card 3 -->
+<div class="aspect-[2/3] rounded-lg overflow-hidden ambient-shadow relative group active-press cursor-pointer" style="opacity: 1; transform: translateY(0px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" data-alt="A modern, striking book cover with a deep midnight blue (bleu nuit) background. The central motif is a minimalist, stylized gold sun or moon phase. The design is clean, sophisticated, and evokes a sense of deep reflection. High-end editorial feel, sharp focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAxanSb1i7kSb9qFlw8sAgBXAS2ErOvtAqXjgrtD-5pyuDKx1qtHHEx34G0UcM4XQJ-kdZZHp5FYCoSEs8oAdrgikO94A1H_bQAFmw5OnkOHjdTZSpW_SmWU5NINry-TnvgmxtjGHHyHbA5wMabeygzsP5Sw5Ad51ohyarGcu-Mr04TkAN9xHGR3exU-FtWOuvcOfqw26m8u5ARkAlruET5hmoELsyBZeBNbJ6wen-WfExM9emHGcV7Zg">
+<div class="absolute inset-0 bg-bleu-nuit/0 group-hover:bg-bleu-nuit/10 transition-colors duration-300"></div>
+<div class="absolute bottom-2 left-0 w-full flex flex-col items-center px-2 pointer-events-none">
+    <span class="text-[10px] font-label-sm text-bleu-nuit/40 mb-1">15%</span>
+    <div class="w-full h-[1px] bg-bleu-nuit/10 rounded-full overflow-hidden">
+        <div class="h-full bg-ocre-terracotta/40" style="width: 15%"></div>
+    </div>
+</div></div>
+<!-- Book Card 4 -->
+<div class="aspect-[2/3] rounded-lg overflow-hidden ambient-shadow relative group active-press cursor-pointer mt-2" style="opacity: 1; transform: translateY(0px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" data-alt="A minimalist architectural photography style book cover. It features a high-contrast black and white photograph of a curving staircase casting sharp shadows on a bright white wall. The composition is asymmetrical and poetic. Premium art book aesthetic, soft grain." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAwFtKN7aq7aRe155ez9UHIodhFxSYSo_U4qrGQg5ooZfcRafELcVipb0rkbtc2I5lL0UL8S1TEPtVZdxEFtCft1XtULwM3KZUXUDgGaK5uz82XneiH89JNOGvBrovJ9y5qlHcaSNKyp_cvR_-jARN6vG6cNd9lTnLxQXL0aZtKeDNAR928L-k3Xb_UvW8VrZSxm1ZLLQ2oN9753AH9A8LRYpUQ0Buz7mzvlPhiVHveKCQbf3gk9g3dyg">
+<div class="absolute inset-0 bg-bleu-nuit/0 group-hover:bg-bleu-nuit/10 transition-colors duration-300"></div>
+<div class="absolute bottom-2 left-0 w-full flex flex-col items-center px-2 pointer-events-none">
+    <span class="text-[10px] font-label-sm text-bleu-nuit/40 mb-1">65%</span>
+    <div class="w-full h-[1px] bg-bleu-nuit/10 rounded-full overflow-hidden">
+        <div class="h-full bg-ocre-terracotta/40" style="width: 65%"></div>
+    </div>
+</div></div>
+<!-- Book Card 5 -->
+<div class="aspect-[2/3] rounded-lg overflow-hidden ambient-shadow relative group active-press cursor-pointer mt-6" style="opacity: 1; transform: translateY(0px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" data-alt="A tactile, textured book cover design resembling old, slightly weathered leather in a rich, warm terracotta color. There is a single, debossed geometric diamond shape in the center. The mood is heritage, antique, yet radically simplified. Warm studio lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA9SmpyXk_lyDbONaBsAxZhhXQb4e-GbT6uzgtXMM1qYJyUavmprqqjbTcF0JD6M4LCtpJx__nAFHyHY_RgDH93NHhzdEUvp-jTptIMjXYUkzNElph0fgSxh8-H2gPUs_yHt-ZbdYKtiwvophnzW-aDnoCFpecIidHxTkAKny2tF-2J3z-M7b8C6kwlVXGMVQsO92dp9rMx4DAcXfmIim8JI3Rl9Ax72-tUDH81h8reSUznPs6RBRQXcA">
+<div class="absolute inset-0 bg-bleu-nuit/0 group-hover:bg-bleu-nuit/10 transition-colors duration-300"></div>
+<div class="absolute bottom-2 left-0 w-full flex flex-col items-center px-2 pointer-events-none">
+    <span class="text-[10px] font-label-sm text-bleu-nuit/40 mb-1">31%</span>
+    <div class="w-full h-[1px] bg-bleu-nuit/10 rounded-full overflow-hidden">
+        <div class="h-full bg-ocre-terracotta/40" style="width: 31%"></div>
+    </div>
+</div></div>
+<!-- Book Card 6 -->
+<div class="aspect-[2/3] rounded-lg overflow-hidden ambient-shadow relative group active-press cursor-pointer mt-1" style="opacity: 1; transform: translateY(0px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out" data-alt="A serene, abstract landscape book cover. Soft watercolor washes of muted sage green, pale ochre, and deep navy blend together horizontally, suggesting a distant horizon. Minimalist, calming, reflective mood. Printed on rough watercolor paper texture." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA6CbeKiumRWaCgYpe4XBVNhhgmODeFGqY-vhwm1c6zejLyy0zr8emFtZoos2OpJz_qN3qVoRfi7_in6wHtr7KYZXWei72vr6K_JrgK-mkxUI88KVl-NypRXOhoLTzio7opmPhy37I4DWS01MMXS9n5WtK-8J6WwEOr7uME1e1oFRMXJcI69VmUoIY31Sayta414UYkZWVQ5uSzdhHIMIIf9YgbS0mOK0unITMKnr1NsC2HMax9Q0SWTg">
+<div class="absolute inset-0 bg-bleu-nuit/0 group-hover:bg-bleu-nuit/10 transition-colors duration-300"></div>
+<div class="absolute bottom-2 left-0 w-full flex flex-col items-center px-2 pointer-events-none">
+    <span class="text-[10px] font-label-sm text-bleu-nuit/40 mb-1">92%</span>
+    <div class="w-full h-[1px] bg-bleu-nuit/10 rounded-full overflow-hidden">
+        <div class="h-full bg-ocre-terracotta/40" style="width: 92%"></div>
+    </div>
+</div></div>
+<!-- Book Card 7 -->
+<div class="aspect-[2/3] rounded-lg overflow-hidden ambient-shadow relative group active-press cursor-pointer mt-4" style="opacity: 1; transform: translateY(0px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;">
+<div class="bg-cover bg-center w-full h-full group-hover:scale-105 transition-transform duration-500 ease-out" data-alt="A typographic book cover featuring a single large, elegant serif letter 'A' in deep navy blue against a pristine cream background. The letterform is classic and beautiful, dominating the space. Clean, editorial layout, high-key lighting, minimalist intellectual aesthetic." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDTKsmXwkixy8SS_Zrm9Z_OVsVuNIX6kLA55dlfJ6X3b1TZ5CoXeYgkU4p2YZRfjGmi6M6xCqTz3hGScOCn4wJF8a226qh04MqmK3xjEnYyW301fFv6tlDPCZ1cM77n3o1mi8HkItxKufZ_G0xALbUxTcHaQLGZ38QZi3V--7H6JYGWnCHlOqu059PCIhXiryriG1gBEeIYHvUDLS0gU7yx7JaK8vBhYV1A5-A50GvDFz9kfn_1vvcQwQ')"></div>
+<div class="absolute inset-0 bg-bleu-nuit/0 group-hover:bg-bleu-nuit/10 transition-colors duration-300"></div>
+<div class="absolute bottom-2 left-0 w-full flex flex-col items-center px-2 pointer-events-none">
+    <span class="text-[10px] font-label-sm text-bleu-nuit/40 mb-1">5%</span>
+    <div class="w-full h-[1px] bg-bleu-nuit/10 rounded-full overflow-hidden">
+        <div class="h-full bg-ocre-terracotta/40" style="width: 5%"></div>
+    </div>
+</div></div>
+<!-- Book Card 8 -->
+<div class="aspect-[2/3] rounded-lg overflow-hidden ambient-shadow relative group active-press cursor-pointer mt-8" style="opacity: 1; transform: translateY(0px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;">
+<div class="bg-cover bg-center w-full h-full group-hover:scale-105 transition-transform duration-500 ease-out" data-alt="A conceptual book cover design showing a minimalist, abstract topographical map with thin, flowing lines in soft gold and grey on a textured white background. It suggests a journey or a path. Quiet, sophisticated, and modern. Soft, even lighting." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC1u-LNR2C6-uHjY5q5q5vFRNLCdRJ7BAcxRdbvJNRErIU2dLxCfXmLQANW3yWNXzixPvMQ0kmCmmKCFoOcu5HKQ1r_uJP3KaayWEb5-hsrBr69_A9B8zRQ833NFKwHiFMEKTOH1jX5CWdJx00kiMcKFMC1Io2TJGrswC6XNKfIabaoJLj0vxs13qOa5Z8QZFuMcojkzaNNxJ73d5yX6irqxjrzUnGOpTeFY1VkgYjoF0pLrhIafqLGWQ')"></div>
+<div class="absolute inset-0 bg-bleu-nuit/0 group-hover:bg-bleu-nuit/10 transition-colors duration-300"></div>
+<div class="absolute bottom-2 left-0 w-full flex flex-col items-center px-2 pointer-events-none">
+    <span class="text-[10px] font-label-sm text-bleu-nuit/40 mb-1">54%</span>
+    <div class="w-full h-[1px] bg-bleu-nuit/10 rounded-full overflow-hidden">
+        <div class="h-full bg-ocre-terracotta/40" style="width: 54%"></div>
+    </div>
+</div></div>
+<!-- Book Card 9 -->
+<div class="aspect-[2/3] rounded-lg overflow-hidden ambient-shadow relative group active-press cursor-pointer mt-3" style="opacity: 1; transform: translateY(0px); transition: opacity 0.6s ease-out, transform 0.6s ease-out;">
+<div class="bg-cover bg-center w-full h-full group-hover:scale-105 transition-transform duration-500 ease-out" data-alt="A striking minimalist cover featuring a single, stark black ink brushstroke on a textured, warm beige parchment background. The stroke is expressive yet controlled. The aesthetic is inspired by Zen calligraphy, conveying a sense of mindfulness and quiet focus." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB2WLKNZ7ZBVCd1e_YcZtKBnvIFu2PJmk5qrpGMPXsqAm__km1DbHPvPZ_iZoOd62A8Bx77fgO-Gb2GEC0SNhc94BUOYS9X_tti6aCyfDaLDmAh8tEBQRGRHgm1lMKdCh--bjt3haaHYhofrqHkp0vw7zZyNP91nOfj5xR1WsKLYc19bG5bkuFAmVqGlflLB3igkmrqJTPKzKxCzemReEmDGVKdN_tzy0-bNoXpMoKzmRKOh_RZdph55w')"></div>
+<div class="absolute inset-0 bg-bleu-nuit/0 group-hover:bg-bleu-nuit/10 transition-colors duration-300"></div>
+<div class="absolute bottom-2 left-0 w-full flex flex-col items-center px-2 pointer-events-none">
+    <span class="text-[10px] font-label-sm text-bleu-nuit/40 mb-1">77%</span>
+    <div class="w-full h-[1px] bg-bleu-nuit/10 rounded-full overflow-hidden">
+        <div class="h-full bg-ocre-terracotta/40" style="width: 77%"></div>
+    </div>
+</div></div>
+</div>
+</main>
+<!-- Floating Action Button (FAB) -->
+<button class="fixed bottom-[100px] right-margin-mobile w-14 h-14 bg-ocre-terracotta rounded-full flex items-center justify-center shadow-[0_8px_32px_rgba(210,139,61,0.4)] active:scale-95 transition-transform duration-200 z-40">
+<span class="material-symbols-outlined text-background" style="font-variation-settings: 'FILL' 0, 'wght' 300;">barcode_scanner</span>
+</button>
+<!-- BottomNavBar (Shared Component) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-6 pb-8 pt-4 bg-creme-parchment/90 dark:bg-inverse-surface/90 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.05)] rounded-t-xl">
+<!-- Tab 1: Home (Inactive) -->
+<button class="flex flex-col items-center justify-center text-bleu-nuit/40 dark:text-surface-variant hover:text-bleu-nuit dark:hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">home_max</span>
+<span class="font-label-sm text-[10px]">Accueil</span>
+</button>
+<!-- Tab 2: Timer/Session (Inactive) -->
+<button class="flex flex-col items-center justify-center text-bleu-nuit/40 dark:text-surface-variant hover:text-bleu-nuit dark:hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">timer</span>
+<span class="font-label-sm text-[10px]">Session</span>
+</button>
+<!-- Tab 3: Bibliothèque & Sentier (Active) -->
+<button class="flex flex-col items-center justify-center text-ocre-terracotta dark:text-tertiary-fixed scale-110 transition-transform duration-200 ease-out">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">auto_stories</span>
+<span class="font-label-sm text-[10px]">Bibliothèque</span>
+</button>
+<!-- Tab 4: Profile (Inactive) -->
+<button class="flex flex-col items-center justify-center text-bleu-nuit/40 dark:text-surface-variant hover:text-bleu-nuit dark:hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">person</span>
+<span class="font-label-sm text-[10px]">Profil</span>
+</button>
+</nav>
+<script>
+        // Simple script to handle fade-in animations on load for a smooth feel
+        document.addEventListener('DOMContentLoaded', () => {
+            const cards = document.querySelectorAll('.grid > div');
+            cards.forEach((card, index) => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(10px)';
+                setTimeout(() => {
+                    card.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, 50 * index); // Staggered delay
+            });
+        });
+    </script>
+
+
+</body></html>

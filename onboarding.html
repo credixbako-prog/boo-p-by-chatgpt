@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f6f1e8">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="BOO-P">
+  <title>BOO-P — Onboarding</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/icons/boo-p-apple-touch-icon.png">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+  <script src="js/supabase-config.js?v=20260820-1"></script>
+  <script src="js/auth.js?v=20260820-4"></script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..700;1,400..700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- App Styles -->
+  <link rel="stylesheet" href="css/tokens.css?v=20260820-1">
+  <link rel="stylesheet" href="css/base.css?v=20260820-2">
+  <link rel="stylesheet" href="css/components.css?v=20260820-1">
+  <link rel="stylesheet" href="css/animations.css?v=20260820-1">
+  <link rel="stylesheet" href="css/screens.css?v=20260820-2">
+  
+  <!-- Onboarding Specific Styles -->
+  <style>
+    body {
+      background-color: var(--surface);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .onboarding-container {
+      width: 100%;
+      max-width: var(--content-max-width);
+      height: 100vh;
+      max-height: 900px;
+      position: relative;
+      overflow: hidden;
+      background-color: var(--surface);
+      box-shadow: var(--shadow-ambient-xl);
+    }
+    @media (min-width: 480px) {
+      .onboarding-container {
+        height: 90vh;
+        border-radius: 32px;
+      }
+    }
+
+    .step-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: var(--space-6) var(--margin-mobile) 100px var(--margin-mobile);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(20px);
+      transition: all var(--duration-slow) var(--ease-out);
+      overflow-y: auto;
+    }
+
+    .step-wrapper.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateX(0);
+    }
+
+    .step-wrapper.previous {
+      transform: translateX(-20px);
+    }
+
+    /* Logo Anim */
+    .onboarding-logo {
+      font: 700 48px var(--font-display);
+      color: var(--color-bleu-nuit);
+      text-align: center;
+      margin-bottom: var(--space-6);
+      animation: bookmark-unfold 1s var(--ease-spring) both;
+    }
+
+    /* Title */
+    .onboarding-title {
+      text-align: center;
+      margin-bottom: var(--space-6);
+      animation: fade-up 1s var(--ease-out) 0.3s both;
+    }
+
+    /* Book Grid */
+    .book-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+      animation: fade-up 1s var(--ease-out) 0.5s both;
+    }
+
+    .book-tile {
+      appearance: none;
+      border: none;
+      padding: 0;
+      text-align: left;
+      font: inherit;
+      position: relative;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      aspect-ratio: 3/4;
+      cursor: pointer;
+      box-shadow: var(--shadow-ambient);
+      transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal);
+      display: flex;
+      align-items: flex-end;
+      padding: var(--space-3);
+    }
+    
+    .book-tile:hover {
+      transform: scale(1.02);
+      box-shadow: var(--shadow-ambient-lg);
+    }
+
+    .book-tile:focus-visible,
+    .theme-tag:focus-visible,
+    .btn-continue:focus-visible {
+      outline: 3px solid rgba(210, 139, 61, 0.45);
+      outline-offset: 3px;
+    }
+
+    .book-tile.selected {
+      transform: scale(0.95);
+      box-shadow: var(--shadow-glow-sauge);
+    }
+
+    .book-tile__overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(109, 143, 122, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity var(--duration-normal);
+      z-index: 2;
+    }
+
+    .book-tile.selected .book-tile__overlay {
+      opacity: 1;
+    }
+
+    .book-tile__check {
+      width: 48px;
+      height: 48px;
+      stroke: var(--surface-container-lowest);
+      fill: none;
+      stroke-width: 2px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      transform: scale(0);
+      transition: transform var(--duration-spring) 0.1s;
+    }
+
+    .book-tile.selected .book-tile__check {
+      transform: scale(1);
+    }
+
+    .book-tile__title {
+      display: block;
+      width: 100%;
+      margin: calc(var(--space-3) * -1);
+      margin-top: 0;
+      padding: 28px var(--space-3) var(--space-3);
+      background: linear-gradient(transparent, rgba(7, 14, 24, .82));
+      font: 600 14px/1.2 var(--font-display);
+      color: white;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      position: relative;
+      z-index: 1;
+    }
+
+    .book-tile__cover {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform var(--duration-slow) var(--ease-out);
+    }
+    .book-tile:hover .book-tile__cover { transform: scale(1.035); }
+
+    /* Search Input */
+    .search-wrapper {
+      margin-bottom: var(--space-4);
+      animation: fade-up 1s var(--ease-out) 0.4s both;
+    }
+    
+    .search-input {
+      width: 100%;
+      background: var(--surface-container-lowest);
+      border: 1px solid var(--outline-subtle);
+      border-radius: var(--radius-full);
+      padding: var(--space-3) var(--space-5);
+      font: var(--text-body-md);
+      box-shadow: var(--shadow-soft);
+      transition: box-shadow var(--duration-fast);
+    }
+    .search-input:focus {
+      box-shadow: var(--shadow-ambient-lg);
+      outline: none;
+    }
+
+    /* Bottom Bar */
+    .bottom-action-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      padding: var(--space-4) var(--margin-mobile);
+      background: linear-gradient(to top, var(--surface) 60%, transparent);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-3);
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .bottom-action-bar > * {
+      pointer-events: auto;
+    }
+
+    .btn-continue {
+      width: 100%;
+      padding: var(--space-4);
+      background: var(--color-ocre);
+      color: var(--surface-container-lowest);
+      border-radius: var(--radius-full);
+      font: var(--text-label-md);
+      letter-spacing: var(--text-label-md-ls);
+      border: none;
+      box-shadow: var(--shadow-ambient);
+      transition: all var(--duration-normal);
+      opacity: 0.5;
+      pointer-events: none;
+    }
+    
+    .btn-continue.active {
+      opacity: 1;
+      pointer-events: auto;
+      cursor: pointer;
+      box-shadow: var(--shadow-ambient-md);
+    }
+
+    .btn-continue.active {
+      opacity: 1;
+      pointer-events: auto;
+      box-shadow: var(--shadow-glow-ocre);
+    }
+    
+    .btn-continue.active:active {
+      transform: scale(0.98);
+    }
+
+    .selection-counter {
+      font: var(--text-label-sm);
+      color: var(--on-surface-variant);
+    }
+
+    /* Indicators */
+    .step-indicators {
+      display: flex;
+      gap: var(--space-2);
+      margin-top: var(--space-2);
+    }
+
+    .indicator-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: var(--radius-full);
+      background: var(--outline-variant);
+      transition: all var(--duration-normal);
+    }
+
+    .indicator-dot.active {
+      background: var(--color-bleu-nuit);
+      transform: scale(1.5);
+    }
+
+    /* Ring / Slider */
+    .goal-ring-container {
+      width: 240px;
+      height: 240px;
+      margin: var(--space-8) auto;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+    }
+
+    .goal-ring-svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .goal-ring-bg {
+      fill: none;
+      stroke: var(--surface-container-high);
+      stroke-width: 12;
+      transform: rotate(-90deg);
+      transform-origin: center;
+    }
+
+    .goal-ring-progress {
+      fill: none;
+      stroke: var(--color-vert-sauge);
+      stroke-width: 12;
+      stroke-linecap: round;
+      stroke-dasharray: 628; /* 2 * pi * 100 */
+      stroke-dashoffset: 628;
+      transition: stroke-dashoffset 0.1s linear;
+      transform: rotate(-90deg);
+      transform-origin: center;
+    }
+
+    .goal-ring-knob {
+      fill: var(--color-ocre);
+      stroke: var(--surface-container-lowest);
+      stroke-width: 4;
+      cursor: pointer;
+      filter: drop-shadow(var(--shadow-ambient));
+    }
+
+    .goal-time-display {
+      position: absolute;
+      text-align: center;
+    }
+
+    .goal-time-val {
+      font: 700 48px/1 var(--font-display);
+      color: var(--color-bleu-nuit);
+    }
+
+    .goal-time-unit {
+      font: var(--text-label-md);
+      color: var(--on-surface-variant);
+    }
+
+    .goal-helper { max-width: 430px; margin: -18px auto 16px; text-align: center; }
+    .goal-presets { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+    .goal-preset {
+      min-width: 68px;
+      min-height: 42px;
+      padding: 8px 12px;
+      border: 1px solid var(--outline-subtle);
+      border-radius: var(--radius-full);
+      background: var(--surface-container-lowest);
+      color: var(--color-bleu-nuit);
+      cursor: pointer;
+      font: var(--text-label-md);
+    }
+    .goal-preset.active { border-color: var(--color-vert-sauge); background: rgba(109,143,122,.14); color: var(--color-bleu-nuit); }
+
+    /* Theme Tags */
+    .theme-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      justify-content: center;
+      margin-bottom: var(--space-6);
+    }
+
+    .custom-theme-entry { display:flex; gap:10px; width:min(480px,100%); margin:0 auto; }
+    .custom-theme-entry input { min-width:0; flex:1; padding:var(--space-3) var(--space-4); border:1px solid var(--outline-subtle); border-radius:var(--radius-full); background:var(--surface-container-lowest); color:var(--color-bleu-nuit); font:var(--text-body-md); }
+    .custom-theme-entry input:focus { outline:3px solid rgba(210,139,61,.28); outline-offset:2px; }
+    .custom-theme-entry button { flex:0 0 auto; }
+    
+    .theme-tag {
+      appearance: none;
+      font: inherit;
+      padding: var(--space-3) var(--space-5);
+      border-radius: var(--radius-full);
+      border: 1px solid var(--outline-variant);
+      background: var(--surface-container-lowest);
+      color: var(--color-bleu-nuit);
+      font: var(--text-label-sm);
+      cursor: pointer;
+      transition: all var(--duration-fast);
+    }
+    
+    .theme-tag.active {
+      background: var(--color-bleu-nuit);
+      color: var(--surface-container-lowest);
+      border-color: var(--color-bleu-nuit);
+    }
+
+    /* Sentier Animation Step 3 */
+    .sentier-container {
+      position: relative;
+      width: 100%;
+      margin: var(--space-8) 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .sentier-line {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 0;
+      background: var(--color-vert-sauge);
+      transition: height 2s var(--ease-out);
+    }
+
+    .sentier-book {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      margin-bottom: var(--space-8);
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.6s var(--ease-out);
+    }
+    .sentier-book.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .sentier-book.left {
+      flex-direction: row-reverse;
+      padding-left: 50%;
+    }
+    
+    .sentier-book.right {
+      flex-direction: row;
+      padding-right: 50%;
+    }
+    
+    .sentier-book-card {
+      background: var(--surface-container-lowest);
+      padding: var(--space-3);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-ambient);
+      width: 140px;
+      margin: 0 var(--space-4);
+      position: relative;
+    }
+
+    .sentier-book-card::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      width: 12px;
+      height: 12px;
+      background: var(--color-vert-sauge);
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      transform: translateY(-50%);
+    }
+
+    .sentier-book.left .sentier-book-card::before {
+      right: -26px;
+    }
+    .sentier-book.right .sentier-book-card::before {
+      left: -26px;
+    }
+
+    .sentier-book-title {
+      font: 500 12px/1.2 var(--font-display);
+      color: var(--color-bleu-nuit);
+    }
+
+    /* Confetti */
+    .confetti {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      pointer-events: none;
+      animation: fall 3s ease-out forwards;
+    }
+    @keyframes fall {
+      0% { transform: translateY(-20px) scale(0); opacity: 1; }
+      10% { transform: translateY(-40px) scale(1); }
+      100% { transform: translateY(200px) scale(0.5); opacity: 0; }
+    }
+
+    .onboarding-home-link {
+      position: absolute;
+      z-index: 20;
+      top: 18px;
+      left: 18px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--color-bleu-nuit);
+      font: 500 12px/1 var(--font-body);
+      opacity: .65;
+    }
+    .onboarding-home-link:hover { opacity: 1; }
+    .onboarding-brand { display:flex; align-items:center; justify-content:center; gap:12px; }
+    .onboarding-brand img { width:58px; height:58px; border-radius:16px; box-shadow:var(--shadow-ambient); }
+    .privacy-options { display:grid; gap:14px; margin:28px 0; }
+    .privacy-option { display:flex; gap:14px; align-items:flex-start; padding:18px; border:1px solid var(--outline-subtle); border-radius:18px; background:var(--surface-container-lowest); cursor:pointer; box-shadow:var(--shadow-soft); }
+    .privacy-option:has(input:checked) { border-color:var(--color-vert-sauge); box-shadow:var(--shadow-glow-sauge); }
+    .privacy-option input { margin-top:5px; accent-color:var(--color-vert-sauge); }
+    .privacy-option strong { display:block; margin-bottom:4px; color:var(--color-bleu-nuit); }
+    .privacy-option span span { display:block; color:var(--on-surface-variant); font-size:12px; line-height:1.5; }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.001ms !important; transition-duration:.001ms !important; } }
+  </style>
+</head>
+<body>
+
+  <div class="onboarding-container">
+    <a class="onboarding-home-link" href="index.html" aria-label="Retourner à la page d’accueil"><span aria-hidden="true">←</span> Accueil</a>
+    
+    <!-- STEP 1: Éveil des Souvenirs -->
+    <div class="step-wrapper active" id="step1">
+      <div class="onboarding-logo onboarding-brand" aria-label="BOO-P"><img src="assets/brand/closed-book-proposals/boo-p-closed-01-signet.png" alt=""><span>BOO-P</span></div>
+      <h1 class="onboarding-title text-display-md">Quels livres ont laissé une trace en vous ?</h1>
+      
+      <div class="search-wrapper">
+        <input type="search" class="search-input" id="bookSearch" placeholder="Rechercher un livre..." aria-label="Rechercher un livre">
+      </div>
+
+      <div class="book-grid" id="bookGrid">
+        <!-- Generated by JS -->
+      </div>
+    </div>
+
+    <!-- STEP 2: Projection -->
+    <div class="step-wrapper" id="step2">
+      <h1 class="onboarding-title text-display-md" style="margin-top: 40px;">Combien de temps souhaitez-vous lire chaque jour ?</h1>
+      
+      <div class="goal-ring-container" id="goalRingContainer" role="slider" tabindex="0" aria-label="Objectif quotidien de lecture" aria-valuemin="5" aria-valuemax="60" aria-valuenow="15">
+        <svg class="goal-ring-svg" viewBox="0 0 220 220">
+          <circle class="goal-ring-bg" cx="110" cy="110" r="100"></circle>
+          <circle class="goal-ring-progress" id="goalProgress" cx="110" cy="110" r="100"></circle>
+          <circle class="goal-ring-knob" id="goalKnob" cx="110" cy="10" r="12"></circle>
+        </svg>
+        <div class="goal-time-display">
+          <div class="goal-time-val" id="goalVal">15</div>
+          <div class="goal-time-unit">min / jour</div>
+        </div>
+      </div>
+
+      <p class="goal-helper text-body-md text-muted">Faites glisser le repère orange sur l’anneau ou choisissez un rythme. Vous pourrez le modifier plus tard.</p>
+      <div class="goal-presets" aria-label="Objectifs suggérés">
+        <button type="button" class="goal-preset" data-goal-preset="10">10 min</button>
+        <button type="button" class="goal-preset" data-goal-preset="15">15 min</button>
+        <button type="button" class="goal-preset" data-goal-preset="20">20 min</button>
+        <button type="button" class="goal-preset" data-goal-preset="30">30 min</button>
+        <button type="button" class="goal-preset" data-goal-preset="45">45 min</button>
+      </div>
+
+    </div>
+
+    <!-- STEP 3: Thèmes -->
+    <div class="step-wrapper" id="step3">
+      <h1 class="onboarding-title text-display-md" style="margin-top: 40px;">Qu’est-ce qui nourrit votre curiosité ?</h1>
+      <p class="text-body-md text-center text-muted" style="margin-bottom:var(--space-8);">Choisissez librement vos thèmes et centres d’intérêt.</p>
+      <div class="theme-tags" id="themeTags">
+        <button type="button" class="theme-tag" aria-pressed="false">Philosophie</button>
+        <button type="button" class="theme-tag" aria-pressed="false">Spiritualité</button>
+        <button type="button" class="theme-tag" aria-pressed="false">Roman</button>
+        <button type="button" class="theme-tag" aria-pressed="false">Poésie</button>
+        <button type="button" class="theme-tag" aria-pressed="false">Science</button>
+        <button type="button" class="theme-tag" aria-pressed="false">Histoire</button>
+        <button type="button" class="theme-tag" aria-pressed="false">Art</button>
+        <button type="button" class="theme-tag" aria-pressed="false">Psychologie</button>
+        <button type="button" class="theme-tag" aria-pressed="false">Autre</button>
+      </div>
+      <div class="custom-theme-entry">
+        <label class="sr-only" for="customTheme">Ajouter un autre centre d’intérêt</label>
+        <input id="customTheme" type="text" maxlength="40" placeholder="Votre thème ou centre d’intérêt">
+        <button type="button" class="theme-tag" id="addCustomTheme">Ajouter</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: Votre Sentier commence -->
+    <div class="step-wrapper" id="step4">
+      <h1 class="onboarding-title text-display-md" style="margin-top: 40px;">Votre histoire de lecteur commence ici.</h1>
+      
+      <div class="sentier-container" id="sentierContainer">
+        <div class="sentier-line" id="sentierLine"></div>
+        <div id="sentierBooksWrapper" style="width: 100%; position: relative; z-index: 2; margin-top: 40px;">
+          <!-- Generated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Action Bar -->
+    <div class="bottom-action-bar">
+      <div class="selection-counter" id="selectionCounter">0/3 sélectionnés</div>
+      <button class="btn-continue" id="btnContinue" disabled>Continuer</button>
+      <div class="step-indicators">
+        <div class="indicator-dot active" id="dot1"></div>
+        <div class="indicator-dot" id="dot2"></div>
+        <div class="indicator-dot" id="dot3"></div>
+        <div class="indicator-dot" id="dot4"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="js/store.js?v=20260820-6"></script>
+  <script src="js/onboarding.js?v=20260820-7"></script>
+  <script src="js/pwa.js?v=20260820-1"></script>
+</body>
+</html>

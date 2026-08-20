@@ -1,0 +1,286 @@
+<!DOCTYPE html><html lang="en" style=""><head></head><body class="bg-creme-parchment text-on-surface font-body-md antialiased selection:bg-secondary-container selection:text-on-secondary-container h-screen overflow-hidden flex flex-col relative"><svg class="inline-defs-container" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden"></svg>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>Booktrail - Session de Lecture</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Typography -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&amp;family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&amp;display=swap" rel="stylesheet">
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "tertiary": "#000000",
+                    "inverse-on-surface": "#f5f0e6",
+                    "inverse-surface": "#32302a",
+                    "on-secondary": "#ffffff",
+                    "on-error": "#ffffff",
+                    "surface-dim": "#dedad0",
+                    "outline-variant": "#c5c6cd",
+                    "surface-container-highest": "#e7e2d8",
+                    "tertiary-container": "#2c1600",
+                    "primary": "#000000",
+                    "vert-sauge": "#6D8F7A",
+                    "surface-variant": "#e7e2d8",
+                    "on-surface-variant": "#44474c",
+                    "surface-container-high": "#ede8de",
+                    "surface-container-low": "#f8f3e9",
+                    "surface-container": "#f2ede3",
+                    "on-primary-fixed": "#101c2e",
+                    "secondary-fixed": "#c7ebd3",
+                    "on-error-container": "#93000a",
+                    "on-surface": "#1d1c16",
+                    "error": "#ba1a1a",
+                    "bleu-nuit": "#0F1B2D",
+                    "secondary": "#456552",
+                    "primary-fixed-dim": "#bbc7df",
+                    "tertiary-fixed-dim": "#ffb870",
+                    "on-primary-container": "#79849b",
+                    "on-secondary-fixed": "#002112",
+                    "on-primary-fixed-variant": "#3c475b",
+                    "on-background": "#1d1c16",
+                    "ocre-terracotta": "#D28B3D",
+                    "error-container": "#ffdad6",
+                    "inverse-primary": "#bbc7df",
+                    "creme-parchment": "#F2EDE3",
+                    "primary-container": "#101c2e",
+                    "on-tertiary-fixed-variant": "#693c00",
+                    "on-primary": "#ffffff",
+                    "tertiary-fixed": "#ffdcbe",
+                    "on-tertiary-fixed": "#2c1600",
+                    "on-secondary-fixed-variant": "#2d4d3b",
+                    "on-secondary-container": "#496a56",
+                    "surface-bright": "#fef9ef",
+                    "background": "#fef9ef",
+                    "surface-tint": "#535f74",
+                    "outline": "#75777d",
+                    "on-tertiary": "#ffffff",
+                    "primary-fixed": "#d7e3fc",
+                    "surface": "#fef9ef",
+                    "secondary-container": "#c4e8d0",
+                    "secondary-fixed-dim": "#abcfb8",
+                    "on-tertiary-container": "#b77528",
+                    "surface-container-lowest": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "gutter": "16px",
+                    "margin-desktop": "64px",
+                    "margin-mobile": "24px",
+                    "base": "8px",
+                    "section-gap": "40px"
+            },
+            "fontFamily": {
+                    "label-md": ["Poppins"],
+                    "label-sm": ["Poppins"],
+                    "body-lg": ["Poppins"],
+                    "display-lg": ["Playfair Display"],
+                    "headline-md": ["Playfair Display"],
+                    "headline-lg-mobile": ["Playfair Display"],
+                    "body-md": ["Poppins"],
+                    "headline-lg": ["Playfair Display"]
+            },
+            "fontSize": {
+                    "label-md": ["14px", {"lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "500"}],
+                    "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "500"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "600"}]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        /* Custom Keyframes for the sophisticated ripple effect to match the 'Interface Effacée' feel */
+        @keyframes subtle-ripple {
+            0% {
+                transform: scale(1);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(1.6);
+                opacity: 0;
+            }
+        }
+        .animate-ripple-1 { animation: subtle-ripple 3s cubic-bezier(0.25, 1, 0.5, 1) infinite; }
+        .animate-ripple-2 { animation: subtle-ripple 3s cubic-bezier(0.25, 1, 0.5, 1) 1s infinite; }
+        .animate-ripple-3 { animation: subtle-ripple 3s cubic-bezier(0.25, 1, 0.5, 1) 2s infinite; }
+    </style>
+
+
+<!-- Top Action (Minimal Close for Focus Mode) -->
+<div class="w-full px-margin-mobile pt-12 pb-4 flex justify-end z-10 relative">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-variant transition-colors text-outline">
+<span class="material-symbols-outlined text-[24px]" data-icon="close">close</span>
+</button>
+</div>
+<!-- Main Focus Canvas -->
+<main class="flex-1 flex flex-col items-center w-full max-w-md mx-auto relative z-0 pb-32">
+<!-- Book Identity (Miniature) -->
+<div class="flex flex-col items-center space-y-3 opacity-90 transition-opacity hover:opacity-100 relative"><div class="absolute -top-2 z-20 -left-12">
+    <button class="w-10 h-10 rounded-full bg-surface-container-lowest shadow-sm border border-ocre-terracotta/40 flex items-center justify-center text-ocre-terracotta active:scale-95 transition-all hover:bg-ocre-terracotta/5"><span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 0, 'wght' 500;">add</span></button>
+  </div>
+<img class="w-[52px] h-[78px] object-cover shadow-[0_4px_12px_rgba(0,0,0,0.06)] rounded-sm border border-surface-variant/50" data-alt="A macro, beautifully lit top-down shot of the physical book cover of 'L'Étranger' by Albert Camus. The cover has a textured, off-white parchment feel with classic, minimalist French editorial typography in deep midnight blue ink. Soft, diffused natural light highlights the thick paper grain and subtle embossing. The aesthetic is elegant, premium, and quietly intellectual." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDdc8xwghXXpTABCFnl9UWmj29N8XTRz3krTRshXXvkZcTPNzxo3AsG7hVO4j0dzzlzPseIDNMapPt57jBJUyN4xgicFTnzMQQ5qz9F6lvpuIw1hZOvLSdN8imQo9ru6vDDjIZHNoQHcaaG5vPpTTLAf8gFhAeOsBwJ8oKI8wMGcYI0V3yIKiJzxeDePSPsnNH3_-QIm5iUfcrMcl-tri13Thg891diR47YIfQq08tjMLkHy8JreecpwA">
+<div class="text-center flex flex-col gap-0.5">
+<h2 class="font-label-sm text-label-sm text-bleu-nuit uppercase tracking-wider">L'Étranger</h2>
+<p class="font-label-sm text-label-sm text-outline font-normal">Albert Camus</p>
+</div>
+</div>
+<!-- The Focal Timer -->
+<div class="relative w-[280px] h-[280px] mt-10 flex items-center justify-center group cursor-pointer">
+<!-- Background Ambient Glow -->
+<div class="absolute inset-0 bg-vert-sauge/5 rounded-full blur-2xl transition-all duration-700 group-hover:bg-vert-sauge/10"></div>
+<!-- SVG Progress Ring -->
+<svg class="absolute inset-0 w-full h-full transform -rotate-90 drop-shadow-sm" viewBox="0 0 100 100">
+<!-- Track -->
+<circle class="stroke-surface-variant/40" cx="50" cy="50" fill="none" r="48" stroke-width="1.5"></circle>
+<!-- Active Progress (Calculated for ~ 24 mins of maybe an hour goal) -->
+<circle class="stroke-vert-sauge transition-all duration-1000 ease-in-out" cx="50" cy="50" fill="none" r="48" stroke-dasharray="301.59" stroke-dashoffset="180" stroke-linecap="round" stroke-width="2"></circle>
+</svg>
+<!-- Time Display -->
+<div class="flex flex-col items-center justify-center z-10 relative">
+<div class="font-display-lg text-display-lg text-bleu-nuit tracking-tight" style="font-feature-settings: &quot;tnum&quot;;">24:18</div>
+<div class="font-label-sm text-label-sm text-vert-sauge uppercase tracking-[0.2em] mt-1 opacity-80">En cours</div>
+</div>
+</div>
+<!-- Tactile Rotary Page Slider -->
+<div class="w-full mt-14 flex flex-col items-center px-margin-mobile">
+<div class="flex items-baseline space-x-2 mb-4"><span class="font-label-sm text-label-sm text-outline uppercase tracking-widest">Page</span><input type="number" value="142" class="w-16 bg-transparent border-b border-ocre-terracotta font-headline-md text-headline-md text-bleu-nuit text-center focus:outline-none focus:border-b-2 transition-all"><button class="ml-2 w-10 h-10 flex items-center justify-center text-ocre-terracotta hover:opacity-80 transition-opacity active:scale-90 rounded-full hover:bg-ocre-terracotta/10"><span class="material-symbols-outlined text-[28px]" style="font-variation-settings: &quot;FILL&quot; 1, &quot;wght&quot; 400;">check_circle</span></button></div>
+<!-- Dial Mechanism -->
+<div class="relative w-full max-w-[280px] h-12 flex items-center justify-center overflow-hidden cursor-ew-resize opacity-80 hover:opacity-100 transition-opacity">
+<!-- Edge fade masks for physical depth -->
+<div class="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-creme-parchment to-transparent z-10 pointer-events-none"></div>
+<div class="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-creme-parchment to-transparent z-10 pointer-events-none"></div>
+<!-- SVG Tick Marks (Simulating mechanical dial) -->
+<svg class="absolute left-1/2 -translate-x-1/2 text-outline-variant" height="24" width="200%">
+<defs>
+<pattern height="24" id="dial-ticks" patternUnits="userSpaceOnUse" width="40">
+<!-- Minor ticks -->
+<line stroke="currentColor" stroke-linecap="round" stroke-width="1" x1="10" x2="10" y1="8" y2="24"></line>
+<line stroke="currentColor" stroke-linecap="round" stroke-width="1" x1="20" x2="20" y1="12" y2="24"></line>
+<line stroke="currentColor" stroke-linecap="round" stroke-width="1" x1="30" x2="30" y1="12" y2="24"></line>
+<!-- Major tick -->
+<line stroke="currentColor" stroke-linecap="round" stroke-width="1.5" x1="40" x2="40" y1="4" y2="24"></line>
+</pattern>
+</defs>
+<rect fill="url(#dial-ticks)" height="100%" width="100%"></rect>
+</svg>
+<!-- Center Playhead -->
+<div class="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-[2px] bg-ocre-terracotta rounded-full z-20 shadow-sm"></div>
+</div>
+</div>
+<!-- Dictaphone Voice Note Button -->
+<div class="mt-auto mb-8 w-full px-margin-mobile flex items-center justify-center gap-8 relative">
+  <!-- Lexicon Button (New) -->
+  
+
+  <!-- Dictaphone Voice Note Button (Existing logic, adjusted size) -->
+  <div class="relative flex items-center justify-center w-20 h-20">
+    <!-- Concentric Ripple Waves -->
+    <div class="absolute inset-0 rounded-full border border-vert-sauge/40 animate-ripple-1"></div>
+    <div class="absolute inset-0 rounded-full border border-vert-sauge/30 animate-ripple-2"></div>
+    <div class="absolute inset-0 rounded-full border border-vert-sauge/20 animate-ripple-3"></div>
+    <!-- Tactile Button Surface -->
+    <button class="relative z-10 w-16 h-16 rounded-full bg-surface-container-lowest shadow-[0_8px_24px_rgba(109,143,122,0.15)] border border-surface-variant/50 flex items-center justify-center text-bleu-nuit active:scale-95 active:shadow-inner transition-all duration-200">
+      <span class="material-symbols-outlined text-[24px]" data-icon="mic" style="font-variation-settings: &quot;FILL&quot; 0, &quot;wght&quot; 300;">mic</span>
+    </button>
+  </div>
+</div>
+<div class="w-full px-margin-mobile mt-8">
+  <div class="relative flex items-center bg-surface-container-lowest/50 border border-bleu-nuit/10 rounded-lg px-4 py-3 shadow-sm focus-within:border-bleu-nuit/30 transition-all"><input type="text" placeholder="Ajouter un commentaire..." class="w-full bg-transparent border-none p-0 text-body-md text-bleu-nuit placeholder:text-bleu-nuit/40 focus:ring-0"><button class="ml-2 text-ocre-terracotta hover:opacity-80 transition-opacity"><span class="material-symbols-outlined text-[24px]">check</span></button></div>
+</div></main>
+<!-- BottomNavBar (Strict Implementation from JSON for Active State) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-6 pb-8 pt-4 bg-creme-parchment/90 backdrop-blur-md shadow-[0_-4px_20px_rgba(0,0,0,0.05)] rounded-t-xl"><!-- Item 1: La Clairière -->
+<a class="flex flex-col items-center justify-center text-bleu-nuit/40 hover:text-bleu-nuit transition-colors w-16 h-12" href="#">
+  <span class="material-symbols-outlined text-[24px]" style="font-variation-settings: &quot;FILL&quot; 0, &quot;wght&quot; 200;">home_max</span>
+</a>
+<!-- Item 2: Session de lecture (ACTIVE) -->
+<a class="flex flex-col items-center justify-center text-ocre-terracotta scale-110 transition-transform w-16 h-12 relative" href="#">
+  <span class="material-symbols-outlined text-[28px]" style="font-variation-settings: &quot;FILL&quot; 1, &quot;wght&quot; 300;">timer</span>
+  <div class="absolute -bottom-2 w-1 h-1 rounded-full bg-ocre-terracotta"></div>
+</a>
+<!-- Item 3: Bibliothèque -->
+<a class="flex flex-col items-center justify-center text-bleu-nuit/40 hover:text-bleu-nuit transition-colors w-16 h-12" href="#">
+  <span class="material-symbols-outlined text-[24px]" style="font-variation-settings: &quot;FILL&quot; 0, &quot;wght&quot; 200;">auto_stories</span>
+</a>
+<!-- Item 4: Profil -->
+<a class="flex flex-col items-center justify-center text-bleu-nuit/40 hover:text-bleu-nuit transition-colors w-16 h-12" href="#">
+  <span class="material-symbols-outlined text-[24px]" style="font-variation-settings: &quot;FILL&quot; 0, &quot;wght&quot; 200;">person</span>
+</a></nav>
+<!-- Simple script for tactile feedback simulation on the slider (visual only for this demo) -->
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dial = document.querySelector('.cursor-ew-resize');
+            const pageNumber = document.querySelector('.text-headline-md');
+            let isDragging = false;
+            let startX;
+            let currentPage = 142;
+
+            dial.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                startX = e.pageX;
+                dial.classList.add('cursor-grabbing');
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const diff = e.pageX - startX;
+                if (Math.abs(diff) > 10) {
+                    // Simulate page changing
+                    currentPage += diff > 0 ? 1 : -1;
+                    pageNumber.textContent = Math.max(1, currentPage); // Prevent negative pages
+                    startX = e.pageX; // Reset start for continuous drag
+                    // Haptic feedback could be triggered here via navigator.vibrate(5)
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                dial.classList.remove('cursor-grabbing');
+            });
+            
+            // Touch support
+            dial.addEventListener('touchstart', (e) => {
+                isDragging = true;
+                startX = e.touches[0].pageX;
+            }, {passive: true});
+            
+            document.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+                const diff = e.touches[0].pageX - startX;
+                if (Math.abs(diff) > 15) {
+                    currentPage += diff > 0 ? 1 : -1;
+                    pageNumber.textContent = Math.max(1, currentPage);
+                    startX = e.touches[0].pageX;
+                }
+            }, {passive: true});
+            
+            document.addEventListener('touchend', () => {
+                isDragging = false;
+            });
+        });
+    </script>
+
+
+
+
+
+
+</body></html>

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1120" role="img" aria-labelledby="title desc">
+  <title id="title">Planche d’identité BOO-P — La trace ouverte</title>
+  <desc id="desc">Présentation du logo BOO-P, de son icône d’application, de sa palette et de ses principes graphiques.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#0F1B2D" flood-opacity=".08"/>
+    </filter>
+    <clipPath id="app-mask"><rect x="0" y="0" width="284" height="284" rx="66"/></clipPath>
+  </defs>
+
+  <rect width="1600" height="1120" fill="#F2EDE3"/>
+  <circle cx="1450" cy="-30" r="300" fill="#6D8F7A" opacity=".08"/>
+  <circle cx="90" cy="1110" r="260" fill="#D28B3D" opacity=".08"/>
+
+  <text x="92" y="92" fill="#6D8F7A" font-family="Poppins, Segoe UI, sans-serif" font-size="22" font-weight="600" letter-spacing="4">IDENTITÉ PROPOSÉE</text>
+  <text x="92" y="150" fill="#0F1B2D" font-family="Playfair Display, Georgia, serif" font-size="58" font-weight="600">La trace ouverte</text>
+  <text x="92" y="194" fill="#0F1B2D" opacity=".62" font-family="Poppins, Segoe UI, sans-serif" font-size="20">Un compagnon de lecture calme, personnel et mémorable.</text>
+
+  <!-- Logo card -->
+  <rect x="72" y="246" width="1456" height="360" rx="36" fill="#FEF9EF" filter="url(#shadow)"/>
+  <g transform="translate(142 286)">
+    <rect width="280" height="280" rx="68" fill="#0F1B2D"/>
+    <path d="M48 69C81 63 114 74 140 100V210C115 190 85 186 48 194V69Z" fill="#F2EDE3"/>
+    <path d="M232 69C199 63 166 74 140 100V210C165 190 195 186 232 194V69Z" fill="#F2EDE3"/>
+    <path d="M127 70H153V151L140 141L127 151V70Z" fill="#D28B3D"/>
+    <path d="M70 170C94 154 117 156 137 173C158 190 184 189 215 168" fill="none" stroke="#6D8F7A" stroke-width="9" stroke-linecap="round" stroke-dasharray="1 22"/>
+  </g>
+  <g font-family="Poppins, Avenir Next, Segoe UI, sans-serif" font-size="154" font-weight="700" letter-spacing="-7">
+    <text x="500" y="447" fill="#0F1B2D">BOO</text>
+    <text x="844" y="447" fill="#6D8F7A" letter-spacing="0">–</text>
+    <text x="972" y="447" fill="#0F1B2D">P</text>
+  </g>
+  <text x="508" y="512" fill="#0F1B2D" opacity=".72" font-family="Playfair Display, Georgia, serif" font-size="34" font-style="italic">Chaque lecture laisse une trace.</text>
+
+  <!-- App icon card -->
+  <rect x="72" y="654" width="646" height="386" rx="36" fill="#FEF9EF" filter="url(#shadow)"/>
+  <text x="120" y="716" fill="#0F1B2D" font-family="Poppins, Segoe UI, sans-serif" font-size="25" font-weight="600">Icône d’application</text>
+  <g transform="translate(120 746)" clip-path="url(#app-mask)">
+    <rect width="284" height="284" fill="#0F1B2D"/>
+    <path d="M49 69C82 63 116 74 142 100V212C117 192 86 187 49 195V69Z" fill="#F2EDE3"/>
+    <path d="M235 69C202 63 168 74 142 100V212C167 192 198 187 235 195V69Z" fill="#F2EDE3"/>
+    <path d="M129 70H155V153L142 143L129 153V70Z" fill="#D28B3D"/>
+    <path d="M71 172C95 155 118 158 139 175C160 192 186 191 218 169" fill="none" stroke="#6D8F7A" stroke-width="9" stroke-linecap="round" stroke-dasharray="1 22"/>
+  </g>
+  <g transform="translate(449 790)">
+    <rect width="116" height="116" rx="27" fill="#0F1B2D"/>
+    <path d="M20 29C34 26 48 31 58 41V87C48 79 35 77 20 80V29Z" fill="#F2EDE3"/>
+    <path d="M96 29C82 26 68 31 58 41V87C68 79 81 77 96 80V29Z" fill="#F2EDE3"/>
+    <path d="M53 29H63V62L58 58L53 62V29Z" fill="#D28B3D"/>
+    <path d="M29 70C39 63 48 64 57 71C66 78 77 78 90 69" fill="none" stroke="#6D8F7A" stroke-width="4" stroke-linecap="round" stroke-dasharray="1 9"/>
+  </g>
+  <g transform="translate(590 823)">
+    <rect width="56" height="56" rx="13" fill="#0F1B2D"/>
+    <path d="M10 14C16 13 23 15 28 20V42C23 38 17 37 10 39V14Z" fill="#F2EDE3"/>
+    <path d="M46 14C40 13 33 15 28 20V42C33 38 39 37 46 39V14Z" fill="#F2EDE3"/>
+    <path d="M25 14H31V30L28 28L25 30V14Z" fill="#D28B3D"/>
+  </g>
+  <text x="450" y="948" fill="#0F1B2D" opacity=".6" font-family="Poppins, Segoe UI, sans-serif" font-size="16">Lisible de 48 px à 1024 px</text>
+
+  <!-- Rationale card -->
+  <rect x="762" y="654" width="766" height="386" rx="36" fill="#0F1B2D" filter="url(#shadow)"/>
+  <text x="814" y="716" fill="#F2EDE3" font-family="Poppins, Segoe UI, sans-serif" font-size="25" font-weight="600">Le langage du symbole</text>
+
+  <circle cx="834" cy="782" r="12" fill="#F2EDE3"/>
+  <text x="866" y="791" fill="#F2EDE3" font-family="Poppins, Segoe UI, sans-serif" font-size="19" font-weight="600">Le livre ouvert</text>
+  <text x="866" y="820" fill="#F2EDE3" opacity=".65" font-family="Poppins, Segoe UI, sans-serif" font-size="16">L’expérience de lecture, sans détour.</text>
+
+  <circle cx="834" cy="870" r="12" fill="#D28B3D"/>
+  <text x="866" y="879" fill="#F2EDE3" font-family="Poppins, Segoe UI, sans-serif" font-size="19" font-weight="600">Le marque-page ocre</text>
+  <text x="866" y="908" fill="#F2EDE3" opacity=".65" font-family="Poppins, Segoe UI, sans-serif" font-size="16">La pensée que l’on choisit de garder.</text>
+
+  <circle cx="834" cy="958" r="12" fill="#6D8F7A"/>
+  <text x="866" y="967" fill="#F2EDE3" font-family="Poppins, Segoe UI, sans-serif" font-size="19" font-weight="600">La trace sauge</text>
+  <text x="866" y="996" fill="#F2EDE3" opacity=".65" font-family="Poppins, Segoe UI, sans-serif" font-size="16">Le chemin intime construit livre après livre.</text>
+
+  <!-- Palette -->
+  <g transform="translate(1234 84)">
+    <circle cx="0" cy="0" r="20" fill="#0F1B2D"/>
+    <circle cx="50" cy="0" r="20" fill="#6D8F7A"/>
+    <circle cx="100" cy="0" r="20" fill="#D28B3D"/>
+    <circle cx="150" cy="0" r="20" fill="#FEF9EF" stroke="#0F1B2D" stroke-opacity=".12"/>
+  </g>
+</svg>

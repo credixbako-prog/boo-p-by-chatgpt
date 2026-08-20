@@ -1,0 +1,26 @@
+{
+  "name": "BOO-P — Compagnon de lecture",
+  "short_name": "BOO-P",
+  "description": "Le compagnon qui garde la mémoire des livres qui vous transforment.",
+  "lang": "fr",
+  "id": "./",
+  "start_url": "./app.html#home",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f1e8",
+  "theme_color": "#f6f1e8",
+  "icons": [
+    {
+      "src": "assets/icons/boo-p-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/boo-p-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

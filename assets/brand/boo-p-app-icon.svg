@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Icône de l’application BOO-P</title>
+  <desc id="desc">Un livre ouvert crème, traversé par une trace sauge et marqué d’un signet ocre, sur fond bleu nuit.</desc>
+  <rect width="1024" height="1024" fill="#0F1B2D"/>
+
+  <!-- Deux pages ouvertes : la mémoire de lecture -->
+  <path d="M176 248C296 228 416 267 512 360V766C421 694 310 674 176 704V248Z" fill="#F2EDE3"/>
+  <path d="M848 248C728 228 608 267 512 360V766C603 694 714 674 848 704V248Z" fill="#F2EDE3"/>
+
+  <!-- Plis de page discrets -->
+  <path d="M236 329C329 319 416 349 476 410" fill="none" stroke="#0F1B2D" stroke-width="24" stroke-linecap="round" opacity=".12"/>
+  <path d="M788 329C695 319 608 349 548 410" fill="none" stroke="#0F1B2D" stroke-width="24" stroke-linecap="round" opacity=".12"/>
+
+  <!-- Le marque-page : une pensée conservée -->
+  <path d="M466 252H558V552L512 516L466 552V252Z" fill="#D28B3D"/>
+
+  <!-- La trace : le chemin unique du lecteur -->
+  <path d="M258 622C344 563 425 571 498 631C574 693 665 689 778 612" fill="none" stroke="#6D8F7A" stroke-width="30" stroke-linecap="round" stroke-dasharray="1 76"/>
+</svg>

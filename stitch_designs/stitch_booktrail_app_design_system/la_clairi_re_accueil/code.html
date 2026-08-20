@@ -1,0 +1,249 @@
+<!DOCTYPE html><html lang="fr" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>BOOKTRAIL - La Clairière</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&amp;family=Poppins:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary": "#000000",
+                        "inverse-on-surface": "#f5f0e6",
+                        "inverse-surface": "#32302a",
+                        "on-secondary": "#ffffff",
+                        "on-error": "#ffffff",
+                        "surface-dim": "#dedad0",
+                        "outline-variant": "#c5c6cd",
+                        "surface-container-highest": "#e7e2d8",
+                        "tertiary-container": "#2c1600",
+                        "primary": "#000000",
+                        "vert-sauge": "#6D8F7A",
+                        "surface-variant": "#e7e2d8",
+                        "on-surface-variant": "#44474c",
+                        "surface-container-high": "#ede8de",
+                        "surface-container-low": "#f8f3e9",
+                        "surface-container": "#f2ede3",
+                        "on-primary-fixed": "#101c2e",
+                        "secondary-fixed": "#c7ebd3",
+                        "on-error-container": "#93000a",
+                        "on-surface": "#1d1c16",
+                        "error": "#ba1a1a",
+                        "bleu-nuit": "#0F1B2D",
+                        "secondary": "#456552",
+                        "primary-fixed-dim": "#bbc7df",
+                        "tertiary-fixed-dim": "#ffb870",
+                        "on-primary-container": "#79849b",
+                        "on-secondary-fixed": "#002112",
+                        "on-primary-fixed-variant": "#3c475b",
+                        "on-background": "#1d1c16",
+                        "ocre-terracotta": "#D28B3D",
+                        "error-container": "#ffdad6",
+                        "inverse-primary": "#bbc7df",
+                        "creme-parchment": "#F2EDE3",
+                        "primary-container": "#101c2e",
+                        "on-tertiary-fixed-variant": "#693c00",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed": "#ffdcbe",
+                        "on-tertiary-fixed": "#2c1600",
+                        "on-secondary-fixed-variant": "#2d4d3b",
+                        "on-secondary-container": "#496a56",
+                        "surface-bright": "#fef9ef",
+                        "background": "#fef9ef",
+                        "surface-tint": "#535f74",
+                        "outline": "#75777d",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed": "#d7e3fc",
+                        "surface": "#fef9ef",
+                        "secondary-container": "#c4e8d0",
+                        "secondary-fixed-dim": "#abcfb8",
+                        "on-tertiary-container": "#b77528",
+                        "surface-container-lowest": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "gutter": "16px",
+                        "margin-desktop": "64px",
+                        "margin-mobile": "24px",
+                        "base": "8px",
+                        "section-gap": "40px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Poppins"],
+                        "label-sm": ["Poppins"],
+                        "body-lg": ["Poppins"],
+                        "display-lg": ["Playfair Display"],
+                        "headline-md": ["Playfair Display"],
+                        "headline-lg-mobile": ["Playfair Display"],
+                        "body-md": ["Poppins"],
+                        "headline-lg": ["Playfair Display"]
+                    },
+                    "fontSize": {
+                        "label-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "label-sm": ["12px", { "lineHeight": "16px", "fontWeight": "500" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "500" }],
+                        "headline-lg-mobile": ["28px", { "lineHeight": "36px", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #F2EDE3; /* creme-parchment */
+            color: #1d1c16; /* on-background */
+            font-family: 'Poppins', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            padding-bottom: 90px; /* Space for bottom nav */
+        }
+        
+        .serif-text {
+            font-family: 'Playfair Display', serif;
+        }
+
+        /* Subtle glow/diffused shadow */
+        .ambient-shadow {
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+        }
+        
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.35s;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+    </style>
+</head>
+<body class="bg-creme-parchment flex justify-center min-h-screen">
+<!-- Mobile Container -->
+<div class="w-full max-w-[400px] bg-creme-parchment relative min-h-screen flex flex-col">
+<!-- TopAppBar (from JSON) -->
+<header class="bg-background dark:bg-background flex justify-between items-center w-full px-margin-mobile py-4 max-w-[1100px] mx-auto top-0 z-10 sticky">
+<!-- Left: Monogram Logo instead of Menu as requested by user prompt, overriding JSON slightly for the logo but keeping the structure -->
+<div class="flex items-center">
+<span class="font-display-lg text-display-lg text-bleu-nuit dark:text-inverse-on-surface font-bold leading-none">B</span>
+</div>
+<!-- Right: Avatar -->
+<button class="h-10 w-10 flex items-center justify-center text-bleu-nuit hover:opacity-80 transition-opacity cursor-pointer">
+  <span class="material-symbols-outlined text-2xl">notifications</span>
+</button>
+</header>
+<!-- Main Content Scrollable Area -->
+<main class="flex-1 px-margin-mobile pb-section-gap overflow-y-auto">
+<!-- Greeting -->
+<section class="mt-8 mb-section-gap flex flex-col items-center">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile text-bleu-nuit mb-6 text-center">Bonjour, Dixon</h1>
+<!-- Circular Progress Ring -->
+<div class="relative w-32 h-32 flex items-center justify-center rounded-full bg-creme-parchment shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)]">
+<svg class="w-full h-full absolute inset-0" viewBox="0 0 100 100">
+<!-- Background track -->
+<circle class="text-surface-variant stroke-current" cx="50" cy="50" fill="transparent" r="46" stroke-width="2"></circle>
+<!-- Progress track (approx 75% for visual) -->
+<circle class="text-vert-sauge stroke-current progress-ring__circle" cx="50" cy="50" fill="transparent" r="46" stroke-dasharray="289.026" stroke-dashoffset="72.25" stroke-linecap="round" stroke-width="2"></circle>
+</svg>
+<!-- Center text -->
+<span class="font-body-md text-body-md text-bleu-nuit relative z-10 font-medium tracking-wide">15 min</span>
+</div>
+</section>
+<!-- Social Feed Section -->
+<section>
+<h2 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-widest mb-6 opacity-70 border-b border-surface-variant pb-2">La Clairière</h2>
+<!-- Activity Card -->
+<article class="bg-surface-container-lowest rounded-[20px] p-5 ambient-shadow mb-6 flex flex-col gap-4">
+<!-- Header -->
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+<img alt="Friend profile" class="w-full h-full object-cover" data-alt="A small circular profile picture of a woman with curly hair looking thoughtful, lit by soft window light in a cozy interior. The aesthetic is warm, natural, and editorial, matching a premium reading companion app style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD6TxMpv-Kha5WtYFD0k-W1Sn1vQZ4tpBIzsSHfY9nxr4lOvm21vVzv6CbaEwqEkQgkS8-MoLd29DdF7R-wCUJXaAotNnndTFScznXSBc4RzCZpMGW3Ht_o8uVDnf8uAMC6ZdnNTful9zcWG3E-TFH1i500UBpnu0TGI4W3EsX-5u7iDY5ej7ckZ4OtBMi2K08knr5c3G94_vuJH0VQWMen9XYirNsZ9Atru1zBL8eAscEHA_PetRDPSQ">
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-bleu-nuit">Clara Dupont</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-normal opacity-80">a terminé <em class="serif-text">L'Étranger</em></span>
+</div>
+</div>
+<!-- Reflection Block -->
+<div class="bg-surface-container-low rounded-xl p-4 my-2 relative">
+<!-- Decorative quote mark (subtle) -->
+<span class="material-symbols-outlined absolute top-2 left-2 text-surface-variant text-4xl opacity-50 pointer-events-none" style="font-variation-settings: 'FILL' 1;">format_quote</span>
+<p class="font-body-md text-body-md text-bleu-nuit serif-text italic relative z-10 leading-relaxed text-center px-4">
+                            "Une lecture troublante. Le soleil d'Alger semble brûler à travers les pages, et l'indifférence de Meursault m'a laissé un profond sentiment de vide. Un chef-d'œuvre de l'absurde."
+                        </p>
+</div>
+<!-- Actions -->
+<div class="flex justify-between items-center pt-2 gap-4">
+<button class="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border-[1.5px] border-surface-variant hover:border-ocre-terracotta hover:bg-surface-container-low transition-all group">
+<span class="material-symbols-outlined text-ocre-terracotta text-[20px] group-hover:scale-110 transition-transform">sign_language</span>
+<span class="font-label-sm text-label-sm text-bleu-nuit">Encourager</span>
+</button>
+<button class="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border-[1.5px] border-surface-variant hover:border-vert-sauge hover:bg-surface-container-low transition-all group">
+<span class="material-symbols-outlined text-vert-sauge text-[20px] group-hover:scale-110 transition-transform">footprint</span>
+<span class="font-label-sm text-label-sm text-bleu-nuit">Trace</span>
+</button>
+</div>
+</article>
+<!-- Another Activity Card (for rhythm) -->
+<article class="bg-surface-container-lowest rounded-[20px] p-5 ambient-shadow mb-6 flex flex-col gap-4 opacity-90">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+<img alt="Friend profile" class="w-full h-full object-cover" data-alt="A small circular profile picture of an older gentleman with glasses reading a book in a dimly lit library with warm ambient light. The style is classic, editorial, and sophisticated." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCBqe3fJ6rSzNfjoCUa5JPuR-vCHKEchCdglPVuYkKUnq8crf4fGsiJzt4OQ4_Y5vELWqau174FzrNu8shhGK9c1hANUlPaiOSXbn9uAJyhWMZE0ErsTivQaK7D5QZCYhFl6FH_pb1rybCgfKezj3hle7fhtheuOXCRbHg23Lj6bgx02N8to1Qb3q6wZbKtPkuKw7qCqpFtu_t1htY0VHGq7GL3QkzO16hXY06Rbrf3O9WV32C2o7SrFg">
+</div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-bleu-nuit">Marc Lefevre</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-normal opacity-80">a commencé <em class="serif-text">In Search of Lost Time</em></span>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-xl p-4 my-2">
+<p class="font-body-md text-body-md text-bleu-nuit serif-text italic text-center px-4">
+                            "Le voyage commence."
+                        </p>
+</div>
+<div class="flex justify-between items-center pt-2 gap-4">
+<button class="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border-[1.5px] border-surface-variant hover:border-ocre-terracotta hover:bg-surface-container-low transition-all group">
+<span class="material-symbols-outlined text-ocre-terracotta text-[20px] group-hover:scale-110 transition-transform">sign_language</span>
+</button>
+<button class="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border-[1.5px] border-surface-variant hover:border-vert-sauge hover:bg-surface-container-low transition-all group">
+<span class="material-symbols-outlined text-vert-sauge text-[20px] group-hover:scale-110 transition-transform">footprint</span>
+</button>
+</div>
+</article>
+</section>
+</main>
+<!-- BottomNavBar (from JSON) -->
+<nav class="bg-creme-parchment/80 dark:bg-inverse-surface/80 backdrop-blur-md shadow-[0_-4px_24px_rgba(0,0,0,0.06)] fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-6 pb-8 pt-4 rounded-t-xl max-w-[400px] md:hidden mx-auto right-0 border-t border-white/20"><!-- First Tab: La Clairière (Active) -->
+<button class="flex flex-col items-center justify-center text-ocre-terracotta transition-all duration-300 active:scale-90 group cursor-pointer">
+  <span class="material-symbols-outlined text-2xl group-hover:opacity-80" style="font-variation-settings: 'wght' 200, 'FILL' 0;">home</span>
+  <span class="font-label-sm text-label-sm mt-1 sr-only">La Clairière</span>
+</button>
+<!-- Second Tab: Timer -->
+<button class="flex flex-col items-center justify-center text-bleu-nuit/40 dark:text-surface-variant hover:text-bleu-nuit transition-colors duration-300 group cursor-pointer">
+  <span class="material-symbols-outlined text-2xl group-hover:opacity-80" style="font-variation-settings: 'wght' 200;">schedule</span>
+  <span class="font-label-sm text-label-sm mt-1 sr-only">Session</span>
+</button>
+<!-- Third Tab: Library -->
+<button class="flex flex-col items-center justify-center text-bleu-nuit/40 dark:text-surface-variant hover:text-bleu-nuit transition-colors duration-300 group cursor-pointer">
+  <span class="material-symbols-outlined text-2xl group-hover:opacity-80" style="font-variation-settings: 'wght' 200;">menu_book</span>
+  <span class="font-label-sm text-label-sm mt-1 sr-only">Bibliothèque</span>
+</button>
+<!-- Fourth Tab: Profile -->
+<button class="flex flex-col items-center justify-center text-bleu-nuit/40 dark:text-surface-variant hover:text-bleu-nuit transition-colors duration-300 group cursor-pointer">
+  <div class="h-7 w-7 rounded-full overflow-hidden border-[1.5px] border-surface-variant/50 group-hover:border-ocre-terracotta transition-all">
+    <img alt="Profil" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADqXQ2i4oxZHlXFGXPA9WdH0uRytEbxA2fiTV_Zk1KqAeAKP_l8Fs1xxWq7aDdcvsuH5-FPFpy4TkL99LmyVQ2xfz51O2dgt1w2matHvw7vYQm3uMDvYW6MZEybS42_5lddF4XDrpvka6MGbENlh26zYUJww6vCNSyQOLMxbsKLrJsgse1tvyDgJOLl1XkB4nMmjuqyZgaDgbPlab11EwcM6QloqqYV6cOl6q02SWd9WG0va4ws7PQDg">
+  </div>
+  <span class="font-label-sm text-label-sm mt-1 sr-only">Profil</span>
+</button></nav>
+</div>
+
+
+</body></html>
