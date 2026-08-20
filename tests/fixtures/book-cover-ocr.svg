@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1350" viewBox="0 0 900 1350">
+  <rect width="900" height="1350" fill="#f4ead8"/>
+  <rect x="48" y="48" width="804" height="1254" fill="none" stroke="#17324d" stroke-width="12"/>
+  <text x="450" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="104" font-weight="700" fill="#17324d">L'ETRANGER</text>
+  <text x="450" y="510" text-anchor="middle" font-family="Arial, sans-serif" font-size="64" fill="#17324d">ALBERT CAMUS</text>
+  <text x="450" y="1080" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" fill="#17324d">ISBN 9782070360024</text>
+  <text x="450" y="1170" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" fill="#17324d">GALLIMARD</text>
+</svg>

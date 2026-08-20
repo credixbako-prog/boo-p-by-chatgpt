@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'boo-p-webapp-v1';
+const CACHE_VERSION = 'boo-p-webapp-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const APP_SHELL = [
   './css/screens.css',
   './css/tokens.css',
   './js/auth.js',
+  './js/book-lookup.js',
   './js/community-api.js',
   './js/landing.js',
   './js/mvp-app.js',
@@ -57,6 +58,18 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(async () => (await caches.match(request, { ignoreSearch: true })) || caches.match('./index.html'))
+    );
+    return;
+  }
+
+  if (['script', 'style', 'worker'].includes(request.destination)) {
+    event.respondWith(
+      fetch(request)
+        .then(response => {
+          if (response.ok) caches.open(CACHE_VERSION).then(cache => cache.put(request, response.clone()));
+          return response;
+        })
+        .catch(() => caches.match(request, { ignoreSearch: true }))
     );
     return;
   }

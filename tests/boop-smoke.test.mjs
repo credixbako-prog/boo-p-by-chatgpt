@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { access, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import vm from 'node:vm';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = file => readFile(path.join(root, file), 'utf8');
@@ -48,6 +49,37 @@ test('Supabase: photos compressées et couche communautaire chargée', async () 
   await access(path.join(root, 'assets/community/boo-p-reading-moments-sprite-v1.png'));
 });
 
+test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles', async () => {
+  const [html, app, lookup, store] = await Promise.all([
+    read('app.html'), read('js/mvp-app.js'), read('js/book-lookup.js'), read('js/store.js')
+  ]);
+  assert.match(html, /js\/book-lookup\.js/);
+  assert.match(app, /data-form="isbn-lookup"/);
+  assert.match(app, /id="book-isbn-field"/);
+  assert.match(app, /data-action="analyze-book-cover"/);
+  assert.match(app, /Saisie manuelle ou correction/);
+  assert.doesNotMatch(app, /reconnaissance de couverture est simulée/i);
+  assert.doesNotMatch(app, /case 'recognize-cover'/);
+  assert.match(lookup, /www\.googleapis\.com\/books\/v1\/volumes/);
+  assert.match(lookup, /openlibrary\.org\/api\/books/);
+  assert.match(lookup, /tesseract\.js@7\.0\.0/);
+  assert.match(lookup, /BarcodeDetector/);
+  assert.match(lookup, /COVER_TARGET_BYTES = 360 \* 1024/);
+  assert.match(store, /isbn: data\.isbn/);
+  await access(path.join(root, 'tests/fixtures/book-cover-ocr.svg'));
+});
+
+test('ajout de livre: validation ISBN-10 et ISBN-13', async () => {
+  const source = await read('js/book-lookup.js');
+  const context = { window: { BT: {}, setTimeout, clearTimeout }, console };
+  vm.runInNewContext(source, context);
+  const lookup = context.window.BT.bookLookup;
+  assert.equal(lookup.normalizeISBN('978-2-07-036002-4'), '9782070360024');
+  assert.equal(lookup.isValidISBN('9782070360024'), true);
+  assert.equal(lookup.isValidISBN('2070360024'), true);
+  assert.equal(lookup.isValidISBN('9782070360023'), false);
+});
+
 test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts', async () => {
   const [manifestSource, index, app, onboarding, worker, workflow] = await Promise.all([
     read('manifest.webmanifest'), read('index.html'), read('app.html'), read('onboarding.html'),
@@ -61,7 +93,9 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v1/);
+  assert.match(worker, /boo-p-webapp-v2/);
+  assert.match(worker, /js\/book-lookup\.js/);
+  assert.match(worker, /\['script', 'style', 'worker'\]/);
   assert.match(worker, /ignoreSearch: true/);
   assert.match(workflow, /actions\/deploy-pages@v4/);
   await Promise.all([

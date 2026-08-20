@@ -55,6 +55,7 @@ BT.store = (() => {
     return {
       id: data.id || uid('book'), title: String(data.title || 'Sans titre'),
       authors: Array.isArray(data.authors) ? data.authors : [data.author || 'Auteur inconnu'].filter(Boolean),
+      isbn: data.isbn || '', publishedDate: data.publishedDate || '',
       publisher: data.publisher || '', edition: data.edition || '', format: data.format || 'Broché',
       totalPages, currentPage, description: data.description || '',
       status: statuses.includes(migratedStatus) ? migratedStatus : 'a-lire',
