@@ -9,7 +9,8 @@
     libraryQuery: '', libraryStatus: 'tous', notificationFilter: 'all',
     openComments: new Set(), friendQuery: '', lexiconQuery: '', timer: null, heartbeat: null,
     lastFocus: null, pendingCover: '', pendingCoverFile: null, pendingCoverKind: '', bookSuggestions: [],
-    pendingPostPhotoUrl: '', searchQuery: '', communityLoaded: false
+    pendingPostPhotoUrl: '', searchQuery: '', communityLoaded: false,
+    friendResults: [], friendSearchBusy: false, friendSearchTimer: null
   };
 
   const NAV = [
@@ -26,6 +27,7 @@
   const STATUS_LABELS = { 'a-lire': 'À lire', 'en-cours': 'En cours', 'en-pause': 'En pause', lu: 'Lu', abandonne: 'Abandonné' };
   const SITUATION_LABELS = { possede: 'Possédé', emprunte: 'Emprunté', prete: 'Prêté', donne: 'Donné' };
   const VISIBILITY_LABELS = { public: 'Public', friends: 'Amis uniquement', club: 'Club', me: 'Moi uniquement', private: 'Privé' };
+  const MEDIA_LABELS = { print: 'Livre papier', ebook: 'Livre numérique', audio: 'Livre audio' };
   const PHOTO_SCENES = [
     'Lectrice avec son livre dans un café lumineux', 'Lecture au bord d’une fenêtre un jour de pluie',
     'Lecteur au coucher du soleil', 'Livre ouvert dans un parc', 'Pause lecture dans un train',
@@ -74,7 +76,7 @@
     store.recoverActiveSession();
     const user = window.BT.auth?.getCurrentUser?.();
     const profile = store.getProfile();
-    if (user && (profile.email !== user.email || (!profile.name || profile.name === 'Dixon'))) store.saveProfile({ email: user.email, name: profile.name === 'Dixon' ? user.name : profile.name });
+    if (user && (profile.email !== user.email || (!profile.name || profile.name === 'Dixon') || (!profile.handle && user.profile?.handle))) store.saveProfile({ email: user.email, name: profile.name === 'Dixon' ? user.name : profile.name, handle:profile.handle || (user.profile?.handle ? `@${user.profile.handle}` : '') });
     ui.memoryIndex = Number(store.getSettings().memoryIndex) || 0;
     applyTheme();
     bindGlobalEvents();
@@ -85,6 +87,7 @@
     updateNetworkState();
     if (!location.hash) location.hash = '#home'; else render();
     refreshCommunity({ quiet:true });
+    refreshReaders('', { quiet:true });
     ui.timer = window.setInterval(tickSessionClock, 1000);
     ui.heartbeat = window.setInterval(() => store.heartbeatActiveSession(), 10000);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); render(); } });
@@ -178,13 +181,24 @@
   function closeDialog(dialog = document.getElementById('app-dialog')) { if (dialog?.open) dialog.close(); ui.lastFocus?.focus?.(); }
 
   function cover(book, size = '') {
-    const image = book.coverUrl ? `<img src="${attr(book.coverUrl)}" alt="Couverture de ${attr(book.title)}" loading="lazy" onerror="this.hidden=true">` : '';
+    const image = book.coverUrl ? `<img src="${attr(book.coverUrl)}" alt="Couverture de ${attr(book.title)}" loading="lazy" decoding="async" onerror="this.hidden=true">` : '';
     return `<div class="book-cover ${size ? `book-cover--${size}` : ''}" style="background:${attr(book.coverColor || '#315066')}">${image}<span>${esc(book.title)}</span></div>`;
   }
 
+  function bookProgress(book) {
+    const audio = book.mediaType === 'audio';
+    return {
+      value: audio ? book.currentMinute : book.currentPage,
+      total: audio ? book.durationMinutes : book.totalPages,
+      label: audio ? `${book.currentMinute || 0} min sur ${book.durationMinutes || '—'}` : `page ${book.currentPage || 0} sur ${book.totalPages || '—'}`
+    };
+  }
+
   function renderHome() {
-    const profile = store.getProfile(), active = store.getCurrentBook(), session = store.getActiveSession(), goals = store.getGoalProgress();
-    const inProgress = store.getBooks().filter(book => book.status === 'en-cours');
+    const profile = store.getProfile(), active = store.getCurrentBook(), session = active ? store.getActiveSessionForBook(active.id) : null, goals = store.getGoalProgress();
+    const inProgress = store.getBooks().filter(book => book.status === 'en-cours' && book.libraryState === 'library');
+    const openSessions = store.getActiveSessions();
+    const progress = active ? bookProgress(active) : null;
     const memory = getMemoryItems();
     const weekPct = pct(goals.week.value, goals.week.target), monthPct = pct(goals.month.value, goals.month.target), yearPct = pct(goals.year.value, goals.year.target);
     return `
@@ -209,24 +223,25 @@
         <div class="active-book-main">
           ${active ? cover(active) : `<div class="book-cover" style="background:linear-gradient(145deg,#17324d,#6f927c)"><span>Votre prochain livre</span></div>`}
           <div class="active-book-info">
-            <p class="eyebrow">Livre actif</p>
-            ${inProgress.length ? `<label class="sr-only" for="active-book-select">Changer de livre actif</label><select class="book-switcher" id="active-book-select" data-change="active-book"><option value="" ${!active ? 'selected' : ''}>Aucun livre actif</option>${inProgress.map(book => `<option value="${attr(book.id)}" ${active?.id === book.id ? 'selected' : ''}>${esc(book.title)} — ${esc(book.authors.join(', '))}</option>`).join('')}</select>` : ''}
+            <p class="eyebrow">Lectures en cours</p>
+            ${inProgress.length > 1 ? `<label class="sr-only" for="active-book-select">Choisir la lecture affichée</label><select class="book-switcher" id="active-book-select" data-change="active-book">${inProgress.map(book => `<option value="${attr(book.id)}" ${active?.id === book.id ? 'selected' : ''}>${esc(book.title)} — ${esc(book.authors.join(', '))}</option>`).join('')}</select>` : ''}
             <h2 id="active-book-title">${active ? esc(active.title) : 'Aucune lecture en cours'}</h2>
-            <p class="muted small">${active ? `${esc(active.authors.join(', '))} · page ${active.currentPage} sur ${active.totalPages || '—'}` : 'Choisissez un livre dans votre bibliothèque pour commencer.'}</p>
-            ${active ? `<div class="progress-track" aria-label="Progression ${pct(active.currentPage,active.totalPages)} %"><span style="--width:${pct(active.currentPage,active.totalPages)}%"></span></div>` : ''}
+            <p class="muted small">${active ? `${esc(active.authors.join(', '))} · ${progress.label}` : 'Choisissez un livre dans votre bibliothèque pour commencer.'}</p>
+            ${active ? `<div class="progress-track" aria-label="Progression ${pct(progress.value,progress.total)} %"><span style="--width:${pct(progress.value,progress.total)}%"></span></div>` : ''}
             ${session ? `<p class="session-state">${session.status === 'paused' ? 'Session en pause' : 'Session en cours'} · <span data-session-clock>${formatDuration(store.activeDuration(session))}</span>${session.autoPaused ? ' · pause automatique après 30 min' : ''}</p>` : ''}
           </div>
         </div>
         <div class="button-row">
-          ${active ? `<button class="button button--primary" type="button" data-action="${session ? 'resume-session' : 'start-session'}">${session ? 'Reprendre la session' : 'Démarrer une session'}</button><button class="button button--secondary" type="button" data-action="quick-trace">Laisser une Trace</button>` : `<a class="button button--primary" href="#path?tab=library">Choisir un livre</a>`}
+          ${active ? `<button class="button button--primary" type="button" data-action="${session ? 'resume-session' : 'start-session'}" data-id="${attr(session?.id || '')}">${session ? 'Reprendre cette session' : 'Démarrer une session'}</button><button class="button button--secondary" type="button" data-action="quick-trace" data-book-id="${attr(active.id)}">Laisser une Trace</button>` : `<a class="button button--primary" href="#path?tab=library">Choisir un livre</a>`}
           <button class="button button--ghost" type="button" data-action="manual-session">Ajouter une session passée</button>
         </div>
+        ${openSessions.length > 1 ? `<div class="open-session-list" aria-label="Sessions ouvertes">${openSessions.map(item => { const itemBook = store.getBookById(item.bookId); return `<button class="open-session-chip" type="button" data-action="focus-session" data-id="${attr(item.id)}"><span>${item.status === 'running' ? '▶' : 'Ⅱ'}</span><strong>${esc(itemBook?.title || 'Livre')}</strong><small>${formatDuration(store.activeDuration(item))}</small></button>`; }).join('')}</div>` : ''}
       </section>
 
       <section class="section-block" aria-labelledby="memory-title">
         <div class="section-heading"><div><p class="eyebrow">${memory.length} devinettes à réviser</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Ouvrez une carte pour révéler le mot, l’expression ou la Trace.</p></div><a class="text-link" href="#path?tab=lexicon">Mon lexique</a></div>
         <div class="memory-list" aria-label="Devinettes de la mémoire active">${memory.map((item,index) => renderMemoryQuiz(item,index)).join('')}</div>
-        <p class="memory-reminder small muted">Rappels mémoriels prévus : J+1, J+3, J+5 et J+30 · planification encore simulée.</p>
+        <p class="memory-reminder small muted">Révisions préparées à J+1, J+3, J+5 et J+30. Les rappels distants seront activés ultérieurement.</p>
       </section>`;
   }
 
@@ -234,12 +249,35 @@
     return `<a class="goal-mini" href="#path?tab=goals" aria-label="${label}, ${value}"><span class="progress-ring" style="--pct:${progress}"><span>${progress}%</span></span><span><strong>${label}</strong><small>${value}</small></span></a>`;
   }
 
+  function makeClozeMemory(text, source, kind = 'Trace personnelle', date = new Date().toISOString()) {
+    const stopWords = new Set(['alors','après','avant','avec','avoir','cette','comme','dans','depuis','entre','était','faire','leurs','livre','mais','même','notre','parce','pour','quand','sans','sous','toute','très','votre']);
+    const words = String(text || '').match(/[A-Za-zÀ-ÖØ-öø-ÿŒœ'-]{5,}/g) || [];
+    const answer = words.filter(word => !stopWords.has(normalize(word))).sort((a, b) => b.length - a.length)[0] || words[0];
+    if (!answer) return null;
+    const escaped = answer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const clue = String(text).replace(new RegExp(`\\b${escaped}\\b`, 'i'), '_____');
+    return { kind, question:`Quel mot manque dans ce passage : « ${clue} » ?`, answer, detail:String(text), source, date };
+  }
+
+  function memoryDefinitionClue(definition, answer) {
+    const escaped = String(answer || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return escaped ? String(definition || '').replace(new RegExp(escaped, 'gi'), '_____') : String(definition || '');
+  }
+
+  function lexiconMemoryMeta(item) {
+    const next = (item.reviewSchedule || []).find(stage => !stage.completedAt);
+    if (!next) return { memoryId:item.id, memoryType:'lexicon', reviewLabel:'Cycle initial terminé · révisions aléatoires à venir' };
+    const due = new Date(next.dueAt), dueToday = due.getTime() <= Date.now();
+    const step = next.random ? 'Révision aléatoire' : `Étape J+${next.day}`;
+    return { memoryId:item.id, memoryType:'lexicon', reviewLabel:dueToday ? `${step} · à revoir maintenant` : `${step} · prévue le ${formatDate(next.dueAt)}` };
+  }
+
   function getMemoryItems() {
     const books = store.getBooks();
     const personal = [
-      ...store.getLexicon().map(item => ({ kind:'Lexique personnel', question:`Quel mot correspond à cette définition : « ${item.definition} » ?`, answer:item.word, detail:item.definition, source:item.bookTitle || 'Note personnelle', date:item.updatedAt })),
-      ...store.getTraces().map(item => ({ kind:'Trace personnelle', question:`Quel souvenir aviez-vous gardé de « ${books.find(book => book.id === item.bookId)?.title || 'cette lecture'} » ?`, answer:item.text, detail:'Votre propre Trace', source:books.find(book => book.id === item.bookId)?.title || 'Trace personnelle', date:item.createdAt }))
-    ].sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+      ...store.getLexicon().map(item => ({ ...(item.kind === 'citation' ? makeClozeMemory(item.word, item.bookTitle || 'Citation personnelle', 'Citation à compléter', item.updatedAt) : { kind:item.kind === 'expression' ? 'Expression à retrouver' : 'Mot à retrouver', question:`${item.kind === 'expression' ? 'Quelle expression' : 'Quel mot'} correspond à cette explication : « ${memoryDefinitionClue(item.definition, item.word)} » ?`, answer:item.word, detail:item.definition, source:item.bookTitle || 'Note personnelle', date:item.updatedAt }), ...lexiconMemoryMeta(item) })),
+      ...store.getTraces().map(item => makeClozeMemory(item.text, books.find(book => book.id === item.bookId)?.title || 'Trace personnelle', 'Trace à compléter', item.createdAt))
+    ].filter(Boolean).sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
     const examples = [
       { kind:'Mot à retrouver', question:'Je suis un manuscrit ancien dont le texte visible recouvre une écriture effacée. Qui suis-je ?', answer:'Palimpseste', detail:'Un manuscrit réutilisé après effacement d’un premier texte.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je suis une révélation soudaine qui fait apparaître le sens d’une situation. Qui suis-je ?', answer:'Épiphanie', detail:'Une manifestation ou une compréhension soudaine et lumineuse.', source:'Exemple BOO-P' },
@@ -256,22 +294,24 @@
   }
 
   function renderMemoryQuiz(item, index) {
-    return `<details class="card memory-quiz"><summary><span class="memory-quiz__index">${String(index + 1).padStart(2,'0')}</span><span><span class="status-chip">${esc(item.kind)}</span><strong>${esc(item.question)}</strong></span><span class="memory-quiz__hint">Voir la réponse</span></summary><div class="memory-quiz__answer"><p class="eyebrow">Réponse</p><h3>${esc(item.answer)}</h3><p>${esc(item.detail || '')}</p><small class="muted">${esc(item.source)}</small></div></details>`;
+    const review = item.memoryType === 'lexicon' ? `<div class="memory-review-actions"><small class="muted">${esc(item.reviewLabel)}</small><div class="button-row"><button class="button button--sage button--small" type="button" data-action="memory-recalled" data-id="${attr(item.memoryId)}">Je l’ai retrouvé</button><button class="button button--ghost button--small" type="button" data-action="memory-retry" data-id="${attr(item.memoryId)}">À revoir demain</button></div></div>` : '';
+    return `<details class="card memory-quiz"><summary><span class="memory-quiz__index">${String(index + 1).padStart(2,'0')}</span><span><span class="status-chip">${esc(item.kind)}</span><strong>${esc(item.question)}</strong></span><span class="memory-quiz__hint">Voir la réponse</span></summary><div class="memory-quiz__answer"><p class="eyebrow">Réponse</p><h3>${esc(item.answer)}</h3><p>${esc(item.detail || '')}</p><small class="muted">${esc(item.source)}</small>${review}</div></details>`;
   }
 
   function renderSession() {
     const session = store.getActiveSession();
     if (!session) return '';
     const book = store.getBookById(session.bookId);
-    const max = book.totalPages || 99999;
+    const sessions = store.getActiveSessions(), audio = book.mediaType === 'audio';
+    const max = audio ? (book.durationMinutes || 99999) : (book.totalPages || 99999);
     return `<section class="session-view">
-      <div class="session-top"><button class="button button--ghost" type="button" data-action="leave-session">← Accueil</button><span class="simulated-badge">Sauvegarde locale active</span></div>
+      <div class="session-top"><button class="button button--ghost" type="button" data-action="leave-session">← Accueil</button>${sessions.length > 1 ? `<label class="session-switcher">Session<select data-change="focus-session">${sessions.map(item => { const itemBook = store.getBookById(item.bookId); return `<option value="${attr(item.id)}" ${item.id === session.id ? 'selected' : ''}>${esc(itemBook?.title || 'Livre')} · ${item.status === 'running' ? 'en lecture' : 'en pause'}</option>`; }).join('')}</select></label>` : ''}<span class="simulated-badge">Sauvegarde locale active</span></div>
       <div class="session-book">${cover(book,'small')}<div><p class="eyebrow">Lecture en cours</p><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p></div></div>
       <div class="session-timer"><span class="session-timer__value" data-session-clock>${formatDuration(store.activeDuration(session))}</span><span class="session-timer__status">${session.status === 'paused' ? 'En pause' : 'En lecture'}</span>${session.autoPaused ? '<p class="small muted">BOO-P a mis cette session en pause après 30 minutes en arrière-plan.</p>' : ''}</div>
-      <div class="session-controls"><button class="button button--secondary" type="button" data-action="quick-trace">Trace</button><button class="button button--primary session-control-main" type="button" data-action="toggle-session" aria-label="${session.status === 'paused' ? 'Reprendre' : 'Mettre en pause'}">${session.status === 'paused' ? '▶' : 'Ⅱ'}</button><button class="button button--sage" type="button" data-action="finish-session">Terminer</button></div>
+      <div class="session-controls"><button class="button button--secondary" type="button" data-action="quick-trace">Trace</button><button class="button button--secondary" type="button" data-action="session-lexicon">+ Lexique</button><button class="button button--primary session-control-main" type="button" data-action="toggle-session" aria-label="${session.status === 'paused' ? 'Reprendre' : 'Mettre en pause'}">${session.status === 'paused' ? '▶' : 'Ⅱ'}</button><button class="button button--sage" type="button" data-action="finish-session">Terminer</button></div>
       <aside class="card card-pad session-panel">
         <p class="eyebrow">Progression et note</p><div class="form-grid">
-          <label class="field">Page atteinte<input type="number" min="0" max="${max}" value="${session.endPage}" data-change="session-page"><span class="field-help">Bornée à ${book.totalPages || 'la valeur connue du livre'} pages.</span></label>
+          <label class="field">${audio ? 'Minute atteinte' : 'Page atteinte'}<input type="number" min="0" max="${max}" value="${session.endPage}" data-change="session-page"><span class="field-help">Bornée à ${audio ? `${book.durationMinutes || 'la durée connue'} minutes` : `${book.totalPages || 'la valeur connue du livre'} pages`}.</span></label>
           <label class="field">Note de session<textarea data-input="session-note" placeholder="Une impression à garder…">${esc(session.note)}</textarea></label>
           <label class="field">Trace en brouillon<textarea id="session-trace-draft" data-input="session-trace" placeholder="Écrivez ou dictez une Trace…">${esc(session.traceDraft)}</textarea></label>
           <button class="button button--secondary" type="button" data-action="dictate-trace">Dicter une Trace <span class="simulated-badge">selon navigateur</span></button>
@@ -319,7 +359,7 @@
   }
 
   function renderPostPhoto(post) {
-    if (post.photoUrl || post.photoData) return `<figure class="activity-photo"><img src="${attr(post.photoUrl || post.photoData)}" alt="Photo ajoutée à la Trace de ${attr(post.authorName)}" loading="lazy"></figure>`;
+    if (post.photoUrl || post.photoData) return `<figure class="activity-photo"><img src="${attr(post.photoUrl || post.photoData)}" alt="Photo ajoutée à la Trace de ${attr(post.authorName)}" loading="lazy" decoding="async"></figure>`;
     if (!Number.isInteger(post.photoIndex)) return '';
     const column = post.photoIndex % 5, row = Math.floor(post.photoIndex / 5);
     return `<figure class="activity-photo activity-photo--sprite" role="img" aria-label="Exemple fictif : ${attr(PHOTO_SCENES[post.photoIndex] || 'moment de lecture')}" style="--photo-x:${column * 25}%;--photo-y:${row * 100}%"><figcaption>Photo fictive de démonstration</figcaption></figure>`;
@@ -348,9 +388,15 @@
   function salonStatus(status) { return ({ waiting:'en attente', reading:'en lecture', paused:'en pause', finished:'terminé' })[status] || status; }
 
   function renderFriends() {
-    const users = store.getCommunity().users.filter(user => normalize(`${user.name} ${user.bio}`).includes(normalize(ui.friendQuery)));
-    return `<label class="search-field friend-search" for="friend-search"><span aria-hidden="true">⌕</span><input id="friend-search" data-input="friend-search" type="search" value="${attr(ui.friendQuery)}" placeholder="Rechercher un lecteur…"></label>
-      <div class="grid-2">${users.length ? users.map(user => `<article class="card friend-card"><span class="avatar">${esc(user.initials)}</span><div class="card-content"><h3>${esc(user.name)}</h3><p class="small muted">${user.profileVisibility === 'private' ? 'Profil privé · aperçu minimal' : esc(user.bio)}</p><div class="card-actions">${friendAction(user)}<button class="button button--ghost button--small" type="button" data-action="view-user" data-id="${attr(user.id)}">Voir le profil</button></div></div><details class="safety-menu"><summary aria-label="Options de sécurité">•••</summary><div class="safety-menu__panel"><button type="button" data-action="report-user" data-id="${attr(user.id)}">Signaler</button><button type="button" data-action="block-user" data-id="${attr(user.id)}">Bloquer</button></div></details></article>`).join('') : `<div class="empty-state"><h3>Aucun lecteur trouvé</h3><p>Essayez un prénom plus court ou sans accent.</p></div>`}</div>`;
+    const users = store.getCommunity().users.filter(user => user.isRemote && normalize(`${user.name} ${user.handle || ''}`).includes(normalize(ui.friendQuery)));
+    const accessLabel = user => user.profileVisibility === 'public'
+      ? 'Profil public · consultable maintenant'
+      : user.friendState === 'friend'
+        ? 'Profil privé · accès accepté'
+        : 'Profil privé · verrouillé avant acceptation';
+    return `<label class="search-field friend-search" for="friend-search"><span aria-hidden="true">⌕</span><span class="sr-only">Rechercher un lecteur ou un pseudonyme</span><input id="friend-search" data-input="friend-search" type="search" value="${attr(ui.friendQuery)}" placeholder="Rechercher un lecteur…"></label>
+      <p class="small muted">Recherche réelle parmi les comptes BOO-P. Les profils privés restent limités à leur aperçu tant que la demande n’est pas acceptée.</p>
+      ${ui.friendSearchBusy ? '<div class="view-loading" role="status"><span class="loader" aria-hidden="true"></span> Recherche des lecteurs…</div>' : `<div class="grid-2">${users.length ? users.map(user => `<article class="card friend-card"><span class="avatar">${esc(user.initials)}</span><div class="card-content"><h3>${esc(user.name)}</h3><p class="micro muted">${esc(user.handle || '')}</p><p class="small muted">${accessLabel(user)}</p><div class="card-actions">${friendAction(user)}<button class="button button--ghost button--small" type="button" data-action="view-user" data-id="${attr(user.id)}">${user.profileVisibility === 'private' && user.friendState !== 'friend' ? 'Voir l’aperçu' : 'Voir le profil'}</button></div></div><details class="safety-menu"><summary aria-label="Options de sécurité">•••</summary><div class="safety-menu__panel"><button type="button" data-action="report-user" data-id="${attr(user.id)}">Signaler</button><button type="button" data-action="block-user" data-id="${attr(user.id)}">Bloquer</button></div></details></article>`).join('') : `<div class="empty-state"><h3>Aucun lecteur trouvé</h3><p>${ui.friendQuery ? 'Essayez un prénom ou un pseudonyme plus court.' : 'Aucun autre compte BOO-P n’est encore visible.'}</p></div>`}</div>`}`;
   }
   function friendAction(user) {
     const map = {
@@ -371,20 +417,33 @@
   }
 
   function renderLibrary() {
+    const settings = store.getSettings();
     const books = store.getBooks().filter(book => {
       const matchesQuery = normalize(`${book.title} ${book.authors.join(' ')}`).includes(normalize(ui.libraryQuery));
-      return matchesQuery && (ui.libraryStatus === 'tous' || book.status === ui.libraryStatus);
+      const matchesStatus = ui.libraryStatus === 'tous' ? book.libraryState === 'library' : ui.libraryStatus === 'wishlist' ? book.libraryState === 'wishlist' : (book.libraryState === 'library' && book.status === ui.libraryStatus);
+      return matchesQuery && matchesStatus;
     });
-    return `<div class="toolbar"><label class="search-field" for="library-search"><span aria-hidden="true">⌕</span><input id="library-search" data-input="library-search" type="search" value="${attr(ui.libraryQuery)}" placeholder="Titre ou auteur…"></label><label class="sr-only" for="library-status">Filtrer par statut</label><select id="library-status" data-change="library-status"><option value="tous">Tous les statuts</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.libraryStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select><button class="button button--primary" type="button" data-action="add-book">Ajouter un livre</button></div>
-      ${books.length ? `<div class="book-grid">${books.map(book => `<button class="book-card" type="button" data-action="open-book" data-id="${attr(book.id)}">${cover(book)}<strong>${esc(book.title)}</strong><small>${esc(book.authors.join(', '))}</small><div class="progress-track" aria-hidden="true"><span style="--width:${pct(book.currentPage,book.totalPages)}%"></span></div><div class="book-meta-row"><span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${STATUS_LABELS[book.status]}</span><span class="micro muted">${SITUATION_LABELS[book.situation]}</span></div></button>`).join('')}</div>` : `<div class="empty-state"><h3>Aucun livre ne correspond</h3><p>Modifiez le filtre ou ajoutez un ouvrage manuellement.</p><button class="button button--primary" type="button" data-action="add-book">Ajouter un livre</button></div>`}
+    const view = settings.libraryView === 'grid' ? 'grid' : 'shelf';
+    return `<div class="toolbar"><label class="search-field" for="library-search"><span aria-hidden="true">⌕</span><input id="library-search" data-input="library-search" type="search" value="${attr(ui.libraryQuery)}" placeholder="Titre ou auteur…"></label><label class="sr-only" for="library-status">Filtrer la bibliothèque</label><select id="library-status" data-change="library-status"><option value="tous" ${ui.libraryStatus === 'tous' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${ui.libraryStatus === 'wishlist' ? 'selected' : ''}>Ma wishlist</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.libraryStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select><div class="view-toggle" role="group" aria-label="Affichage de la bibliothèque"><button class="icon-button" type="button" data-action="library-view" data-view="shelf" aria-pressed="${view === 'shelf'}" title="Meuble bibliothèque">▥</button><button class="icon-button" type="button" data-action="library-view" data-view="grid" aria-pressed="${view === 'grid'}" title="Grille">▦</button></div><button class="button button--primary" type="button" data-action="add-book">Ajouter un livre</button></div>
+      ${books.length ? renderLibraryBooks(books, view) : `<div class="empty-state"><h3>${ui.libraryStatus === 'wishlist' ? 'Votre wishlist est prête à accueillir des envies' : 'Aucun livre ne correspond'}</h3><p>${ui.libraryStatus === 'wishlist' ? 'Ajoutez une suggestion ou un livre manuellement.' : 'Modifiez le filtre ou ajoutez un ouvrage manuellement.'}</p><button class="button button--primary" type="button" data-action="add-book">Ajouter un livre</button></div>`}
       ${renderRecommendations()}`;
+  }
+
+  function renderLibraryBooks(books, view) {
+    const cards = books.map(book => {
+      const progress = bookProgress(book);
+      const meta = book.libraryState === 'wishlist' ? '<span class="status-chip">Wishlist</span>' : `<span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${STATUS_LABELS[book.status]}</span><span class="micro muted">${SITUATION_LABELS[book.situation]}</span>`;
+      return `<button class="book-card ${view === 'shelf' ? 'book-card--shelf' : ''}" type="button" data-action="open-book" data-id="${attr(book.id)}" aria-label="Ouvrir ${attr(book.title)}, ${MEDIA_LABELS[book.mediaType] || 'livre'}">${cover(book)}<strong>${esc(book.title)}</strong><small>${esc(book.authors.join(', '))}</small>${book.libraryState === 'library' ? `<div class="progress-track" aria-label="${attr(progress.label)}"><span style="--width:${pct(progress.value,progress.total)}%"></span></div>` : ''}<div class="book-meta-row"><span class="media-chip">${book.mediaType === 'audio' ? '🎧' : book.mediaType === 'ebook' ? '▤' : '▥'}</span>${meta}</div></button>`;
+    }).join('');
+    return view === 'shelf' ? `<div class="bookcase" aria-label="Bibliothèque en meuble"><div class="bookcase__top"></div><div class="bookcase__shelves">${cards}</div></div>` : `<div class="book-grid">${cards}</div>`;
   }
 
   function renderRecommendations() {
     const owned = new Set(store.getBooks().map(book => normalize(book.title)));
-    const suggestions = RECOMMENDATIONS.filter(book => !owned.has(normalize(book.title)));
+    const dismissed = new Set(store.getSettings().dismissedRecommendationIds || []);
+    const suggestions = RECOMMENDATIONS.filter(book => !owned.has(normalize(book.title)) && !dismissed.has(book.id));
     if (!suggestions.length) return '';
-    return `<section class="section-block recommendations" aria-labelledby="recommendations-title"><div class="section-heading"><div><p class="eyebrow">Suggestions BOO-P · prototype local</p><h2 id="recommendations-title">À découvrir</h2><p class="small muted">Une sélection éditoriale générale, non premium et non personnalisée.</p></div></div><div class="recommendation-grid">${suggestions.map(book => `<article class="card recommendation-card">${cover(book)}<div><h3>${esc(book.title)}</h3><p class="small muted">${esc(book.authors.join(', '))}</p><p class="small">${esc(book.reason)}</p><button class="button button--secondary button--small" type="button" data-action="add-recommendation" data-id="${attr(book.id)}">Ajouter à ma bibliothèque</button></div></article>`).join('')}</div></section>`;
+    return `<section class="section-block recommendations" aria-labelledby="recommendations-title"><div class="section-heading"><div><p class="eyebrow">Suggestions BOO-P · prototype local</p><h2 id="recommendations-title">À découvrir</h2><p class="small muted">Une sélection éditoriale générale, non premium et non personnalisée.</p></div></div><div class="recommendation-grid">${suggestions.map(book => `<article class="card recommendation-card">${cover(book)}<div><h3>${esc(book.title)}</h3><p class="small muted">${esc(book.authors.join(', '))}</p><p class="small">${esc(book.reason)}</p><div class="card-actions"><button class="button button--secondary button--small" type="button" data-action="wishlist-recommendation" data-id="${attr(book.id)}">♡ Wishlist</button><button class="button button--ghost button--small" type="button" data-action="dismiss-recommendation" data-id="${attr(book.id)}">Pas pour moi</button></div></div></article>`).join('')}</div></section>`;
   }
 
   function renderTrail() {
@@ -414,12 +473,12 @@
   function renderBookDetail() {
     const id = ui.params.get('id'), book = store.getBookById(id);
     if (!book) return `<div class="empty-state"><h1>Livre introuvable</h1><p>Il a peut-être été retiré de cette bibliothèque locale.</p><a class="button button--primary" href="#path?tab=library">Retour à la bibliothèque</a></div>`;
-    const sessions = store.getSessionsForBook(id), traces = store.getTraces(id), lexicon = store.getLexicon().filter(item => item.bookId === id), isActive = store.getCurrentBook()?.id === id;
-    return `<a class="text-link" href="#path?tab=library">← Ma bibliothèque</a><section class="book-detail-head section-block">${cover(book,'large')}<div class="book-detail-copy"><div class="button-row"><span class="status-chip status-chip--active">${STATUS_LABELS[book.status]}</span><span class="privacy-badge">${SITUATION_LABELS[book.situation]}</span>${book.historicalBeforeJoin ? '<span class="status-chip">Lu avant mon inscription</span>' : ''}</div><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p><p>${esc(book.description || 'Aucun résumé pour cette édition.')}</p><div class="progress-track" aria-label="Progression ${pct(book.currentPage,book.totalPages)} %"><span style="--width:${pct(book.currentPage,book.totalPages)}%"></span></div><p class="small muted">Page ${book.currentPage} sur ${book.totalPages || '—'}${book.rating ? ` · appréciation ${'🔖'.repeat(book.rating)}` : ''}</p><div class="button-row"><button class="button button--primary" type="button" data-action="book-session" data-id="${attr(id)}">${store.getActiveSession()?.bookId === id ? 'Reprendre la session' : 'Démarrer une session'}</button><button class="button button--secondary" type="button" data-action="${isActive ? 'unset-active' : 'set-active'}" data-id="${attr(id)}">${isActive ? 'Ne plus rendre actif' : 'Rendre actif'}</button><button class="button button--ghost" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div></div></section>
+    const sessions = store.getSessionsForBook(id), traces = store.getTraces(id), lexicon = store.getLexicon().filter(item => item.bookId === id), openSession = store.getActiveSessionForBook(id), progress = bookProgress(book), wishlist = book.libraryState === 'wishlist', audio = book.mediaType === 'audio';
+    return `<a class="text-link" href="#path?tab=${wishlist ? 'library' : 'library'}">← Ma bibliothèque</a><section class="book-detail-head section-block">${cover(book,'large')}<div class="book-detail-copy"><div class="button-row"><span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</span>${!wishlist ? `<span class="privacy-badge">${SITUATION_LABELS[book.situation]}</span>` : ''}<span class="media-chip">${MEDIA_LABELS[book.mediaType] || 'Livre'}</span>${book.historicalBeforeJoin ? '<span class="status-chip">Lu avant mon inscription</span>' : ''}</div><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p><p>${esc(book.description || 'Aucun résumé pour cette édition.')}</p>${!wishlist ? `<div class="progress-track" aria-label="Progression ${pct(progress.value,progress.total)} %"><span style="--width:${pct(progress.value,progress.total)}%"></span></div><p class="small muted">${progress.label}${book.rating ? ` · appréciation ${'🔖'.repeat(book.rating)}` : ''}</p>` : '<p class="small muted">Envie de lecture conservée dans votre wishlist.</p>'}<div class="button-row">${wishlist ? `<button class="button button--primary" type="button" data-action="move-to-library" data-id="${attr(id)}">Ajouter à ma bibliothèque</button>` : `<button class="button button--primary" type="button" data-action="book-session" data-id="${attr(id)}">${openSession ? 'Reprendre la session' : 'Démarrer une session'}</button>`}<button class="button button--ghost" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div></div></section>
       <div class="grid-2">
-        <section class="card card-pad"><div class="section-heading"><h2>Édition et progression</h2><button class="text-link" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div><dl class="metadata-list"><div><dt>Éditeur</dt><dd>${esc(book.publisher || 'Non renseigné')}</dd></div><div><dt>Édition</dt><dd>${esc(book.edition || 'Non renseignée')}</dd></div><div><dt>Format</dt><dd>${esc(book.format || 'Non renseigné')}</dd></div><div><dt>Pages</dt><dd>${book.totalPages || 'Non renseigné'}</dd></div><div><dt>Statut</dt><dd>${STATUS_LABELS[book.status]}</dd></div><div><dt>Situation</dt><dd>${SITUATION_LABELS[book.situation]}</dd></div></dl></section>
-        <section class="card card-pad"><div class="section-heading"><h2>Sessions</h2><button class="text-link" type="button" data-action="manual-session" data-book-id="${attr(id)}">Ajouter une session passée</button></div>${sessions.length ? `<div class="history-list">${sessions.map(session => `<div class="history-item"><span class="history-item__icon">◷</span><div class="history-item__content"><strong>${Math.round(session.durationSeconds/60)} min · p. ${session.startPage} à ${session.endPage}</strong><span class="small muted">${formatDate(session.startedAt)}${session.manual ? ' · ajoutée manuellement' : ''}</span></div><button class="text-link small" type="button" data-action="edit-session" data-id="${attr(session.id)}">Modifier</button></div>`).join('')}</div>` : `<p class="small muted">Aucune session enregistrée.</p>`}</section>
-        <section class="card card-pad"><div class="section-heading"><h2>Traces</h2><button class="text-link" type="button" data-action="quick-trace" data-book-id="${attr(id)}">Ajouter</button></div>${traces.length ? traces.map(trace => `<article class="history-item"><span class="history-item__icon">✦</span><div class="history-item__content"><strong>${esc(trace.text)}</strong><span class="small muted">${trace.page ? `p. ${trace.page} · ` : ''}${VISIBILITY_LABELS[trace.privacy] || 'Privé'}</span></div></article>`).join('') : '<p class="small muted">Aucune Trace pour ce livre.</p>'}</section>
+        <section class="card card-pad"><div class="section-heading"><h2>Édition et progression</h2><button class="text-link" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div><dl class="metadata-list"><div><dt>Éditeur</dt><dd>${esc(book.publisher || 'Non renseigné')}</dd></div><div><dt>Édition</dt><dd>${esc(book.edition || 'Non renseignée')}</dd></div>${audio ? `<div><dt>Support</dt><dd>Livre audio</dd></div><div><dt>Durée</dt><dd>${book.durationMinutes || 'Non renseignée'} min</dd></div><div><dt>Narration</dt><dd>${esc(book.narrator || 'Non renseignée')}</dd></div><div><dt>Plateforme</dt><dd>${esc(book.audioPlatform || 'Non renseignée')}</dd></div>` : `<div><dt>Format</dt><dd>${esc(book.format || (book.mediaType === 'ebook' ? 'Livre numérique' : 'Non renseigné'))}</dd></div><div><dt>Pages</dt><dd>${book.totalPages || 'Non renseigné'}</dd></div>`}<div><dt>Statut</dt><dd>${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</dd></div>${!wishlist ? `<div><dt>Situation</dt><dd>${SITUATION_LABELS[book.situation]}</dd></div>` : ''}</dl></section>
+        <section class="card card-pad"><div class="section-heading"><h2>Sessions</h2><button class="text-link" type="button" data-action="manual-session" data-book-id="${attr(id)}">Ajouter une session passée</button></div>${sessions.length ? `<div class="history-list">${sessions.map(session => `<div class="history-item"><span class="history-item__icon">◷</span><div class="history-item__content"><strong>${Math.round(session.durationSeconds/60)} min · ${audio ? 'min.' : 'p.'} ${session.startPage} à ${session.endPage}</strong><span class="small muted">${formatDate(session.startedAt)}${session.manual ? ' · ajoutée manuellement' : ''}</span></div><button class="text-link small" type="button" data-action="edit-session" data-id="${attr(session.id)}">Modifier</button></div>`).join('')}</div>` : `<p class="small muted">Aucune session enregistrée.</p>`}</section>
+        <section class="card card-pad"><div class="section-heading"><h2>Traces</h2><button class="text-link" type="button" data-action="quick-trace" data-book-id="${attr(id)}">Ajouter</button></div>${traces.length ? traces.map(trace => `<article class="history-item"><span class="history-item__icon">✦</span><div class="history-item__content"><strong>${esc(trace.text)}</strong><span class="small muted">${trace.page ? `${audio ? 'min.' : 'p.'} ${trace.page} · ` : ''}${VISIBILITY_LABELS[trace.privacy] || 'Privé'}</span></div></article>`).join('') : '<p class="small muted">Aucune Trace pour ce livre.</p>'}</section>
         <section class="card card-pad"><div class="section-heading"><h2>Lexique</h2><button class="text-link" type="button" data-action="add-lexicon" data-book-id="${attr(id)}">Ajouter</button></div>${lexicon.length ? lexicon.map(item => `<article class="history-item"><span class="history-item__icon">Aa</span><div class="history-item__content"><strong>${esc(item.word)}</strong><span class="small muted">${esc(item.definition)}</span></div></article>`).join('') : '<p class="small muted">Aucune entrée associée.</p>'}</section>
       </div><div class="danger-zone section-block"><h2>Retirer ce livre</h2><p class="small">La suppression retire aussi ses sessions et ses Traces locales. Une confirmation est obligatoire.</p><button class="button button--danger" type="button" data-action="delete-book" data-id="${attr(id)}">Supprimer le livre</button></div>`;
   }
@@ -428,10 +487,11 @@
     const profile = store.getProfile(), settings = store.getSettings(), stats = store.getStats();
     let adn = store.getBooks().filter(book => book.isADN).sort((a,b) => (a.adnOrder ?? 99) - (b.adnOrder ?? 99)).slice(0,3);
     if (adn.length < 3) adn = adn.concat(store.getBooks().filter(book => !adn.some(item => item.id === book.id)).slice(0, 3 - adn.length));
-    const progress = store.getGoalProgress();
+    const progress = store.getGoalProgress(), badges = store.getBadges();
     return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main"><span class="profile-avatar">${esc(initials(profile.name))}</span><div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button></section>
       <section class="section-block"><div class="section-heading"><div><p class="eyebrow">Trois livres, une ligne</p><h2>ADN du lecteur</h2></div><button class="text-link" type="button" data-action="edit-adn">Modifier</button></div><div class="adn-row">${adn.map(book => `<div class="adn-book">${cover(book)}<strong>${esc(book.title)}</strong></div>`).join('')}</div></section>
       <section class="section-block"><h2>Statistiques</h2><div class="stats-grid"><div class="card stat-card"><strong>${stats.booksRead}</strong><span>livres lus</span></div><div class="card stat-card"><strong>${Math.floor(stats.totalMinutes/60)} h ${stats.totalMinutes%60}</strong><span>temps de lecture</span></div><div class="card stat-card"><strong>${stats.streak}</strong><span>jours de série</span></div><div class="card stat-card"><strong>${stats.totalTraces}</strong><span>Traces et lexique</span></div><div class="card stat-card"><strong>${stats.booksTransmitted}</strong><span>prêtés ou donnés</span></div><div class="card stat-card"><strong>${progress.week.value}/${progress.week.target}</strong><span>objectif semaine</span></div><div class="card stat-card"><strong>${progress.month.value}/${progress.month.target}</strong><span>objectif mois</span></div><div class="card stat-card"><strong>${progress.year.value}/${progress.year.target}</strong><span>objectif année</span></div></div></section>
+      <section class="section-block" aria-labelledby="badges-title"><div class="section-heading"><div><p class="eyebrow">Progression personnelle</p><h2 id="badges-title">Carnet de badges</h2><p class="small muted">Des jalons privés, sans classement avec les autres lecteurs.</p></div></div><div class="personal-records"><span><strong>${formatDuration(badges.records.longestSessionSeconds)}</strong><small>plus longue session</small></span><span><strong>${badges.records.longestStreakDays} jour${badges.records.longestStreakDays > 1 ? 's' : ''}</strong><small>plus longue série</small></span><span><strong>${badges.records.booksInBestMonth} livre${badges.records.booksInBestMonth > 1 ? 's' : ''}</strong><small>meilleur mois de lecture</small></span></div><div class="badge-grid">${badges.items.map(badge => `<article class="reading-badge ${badge.unlockedAt ? 'is-unlocked' : 'is-locked'}"><span class="reading-badge__icon" aria-hidden="true">${esc(badge.icon)}</span><div><h3>${esc(badge.name)}</h3><p>${esc(badge.description)}</p>${badge.unlockedAt ? `<small>Débloqué le ${formatDate(badge.unlockedAt)}</small>` : '<small>À découvrir sur votre sentier</small>'}</div></article>`).join('')}</div></section>
       <section class="section-block"><h2>Compte et préférences</h2><div class="settings-list">
         <details class="setting-card"><summary>Informations du compte</summary><div class="setting-card__body"><p><strong>${esc(profile.email)}</strong></p><p class="small muted">Compte sécurisé et session persistante gérés par Supabase.</p><button class="button button--secondary button--small" type="button" data-action="simulated-password">Changer le mot de passe</button></div></details>
         <details class="setting-card"><summary>Confidentialité et visibilité</summary><div class="setting-card__body"><form class="form-grid" data-form="privacy"><fieldset><legend>Visibilité du profil</legend><label class="checkbox-row"><input type="radio" name="profileVisibility" value="private" ${profile.visibility === 'private' ? 'checked' : ''}><span><strong>Privé</strong><br><span class="muted">Vos détails sont visibles uniquement par vos amis. Recommandé et sélectionné par défaut.</span></span></label><label class="checkbox-row"><input type="radio" name="profileVisibility" value="public" ${profile.visibility === 'public' ? 'checked' : ''}><span><strong>Public</strong><br><span class="muted">Toute la communauté peut consulter le profil.</span></span></label></fieldset><label class="field">Visibilité par défaut des publications<select name="defaultVisibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
@@ -498,14 +558,15 @@
 
   function openTraceDialog(bookId = null) {
     const book = store.getBookById(bookId) || store.getCurrentBook();
-    openDialog({ title: 'Laisser une Trace', eyebrow: 'Privée par défaut', body: `<form class="form-grid" data-form="trace"><input type="hidden" name="bookId" value="${attr(book?.id || '')}"><label class="field">Livre<select name="bookIdSelect">${store.getBooks().map(item => `<option value="${attr(item.id)}" ${item.id === book?.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><label class="field">Page facultative<input type="number" min="0" max="${book?.totalPages || 99999}" name="page" value="${book?.currentPage || ''}"></label><label class="field">Votre Trace<textarea id="trace-dialog-text" name="text" required maxlength="1200" placeholder="Une idée, une émotion, une citation…"></textarea></label><div class="button-row"><button class="button button--secondary" type="button" data-action="dictate-dialog-trace">Dicter</button><button class="button button--primary" type="submit">Enregistrer en privé</button></div><p class="small muted">Le partage reste un choix séparé et explicite.</p></form>` });
+    const audio = book?.mediaType === 'audio';
+    openDialog({ title: 'Laisser une Trace', eyebrow: 'Privée par défaut', body: `<form class="form-grid" data-form="trace"><input type="hidden" name="bookId" value="${attr(book?.id || '')}"><label class="field">Livre<select name="bookIdSelect">${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${item.id === book?.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><label class="field">${audio ? 'Minute' : 'Page'} facultative<input type="number" min="0" max="${audio ? (book?.durationMinutes || 99999) : (book?.totalPages || 99999)}" name="page" value="${audio ? (book?.currentMinute || '') : (book?.currentPage || '')}"></label><label class="field">Votre Trace<textarea id="trace-dialog-text" name="text" required maxlength="1200" placeholder="Une idée, une émotion, une citation…"></textarea></label><div class="button-row"><button class="button button--secondary" type="button" data-action="dictate-dialog-trace">Dicter</button><button class="button button--primary" type="submit">Enregistrer en privé</button></div><p class="small muted">Le partage reste un choix séparé et explicite.</p></form>` });
   }
 
   function openManualSessionDialog(bookId = null, sessionId = null) {
     const session = sessionId ? store.getSessions().find(item => item.id === sessionId) : null;
     const book = store.getBookById(bookId || session?.bookId) || store.getCurrentBook() || store.getBooks()[0];
-    const date = session ? store.localDateKey(session.startedAt) : store.localDateKey();
-    openDialog({ title: session ? 'Modifier la session passée' : 'Ajouter une session passée', eyebrow: 'Historique local', body: `<form class="form-grid" data-form="manual-session"><input type="hidden" name="sessionId" value="${attr(session?.id || '')}"><label class="field">Livre<select name="bookId">${store.getBooks().map(item => `<option value="${attr(item.id)}" ${item.id === book?.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><label class="field">Date<input type="date" name="date" required value="${date}"></label><div class="field-row"><label class="field">Durée (minutes)<input type="number" min="1" max="1440" name="duration" required value="${session ? Math.max(1,Math.round(session.durationSeconds/60)) : 30}"></label><label class="field">Ou horaires (facultatif)<span class="field-row"><input type="time" name="startTime"><input type="time" name="endTime"></span></label></div><div class="field-row"><label class="field">Page de départ<input type="number" min="0" name="startPage" value="${session?.startPage ?? book?.currentPage ?? 0}"></label><label class="field">Page d’arrivée<input type="number" min="0" name="endPage" value="${session?.endPage ?? book?.currentPage ?? 0}"></label></div><label class="field">Note facultative<textarea name="note">${esc(session?.note || '')}</textarea></label><div class="button-row"><button class="button button--primary" type="submit">${session ? 'Enregistrer les modifications' : 'Ajouter la session'}</button>${session ? `<button class="button button--danger" type="button" data-action="delete-session" data-id="${attr(session.id)}">Supprimer</button>` : ''}</div></form>` });
+    const date = session ? store.localDateKey(session.startedAt) : store.localDateKey(), audio = book?.mediaType === 'audio', position = audio ? book?.currentMinute : book?.currentPage;
+    openDialog({ title: session ? 'Modifier la session passée' : 'Ajouter une session passée', eyebrow: 'Historique local', body: `<form class="form-grid" data-form="manual-session"><input type="hidden" name="sessionId" value="${attr(session?.id || '')}"><label class="field">Livre<select name="bookId">${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${item.id === book?.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><label class="field">Date<input type="date" name="date" required value="${date}"></label><div class="field-row"><label class="field">Durée (minutes)<input type="number" min="1" max="1440" name="duration" required value="${session ? Math.max(1,Math.round(session.durationSeconds/60)) : 30}"></label><label class="field">Ou horaires (facultatif)<span class="field-row"><input type="time" name="startTime"><input type="time" name="endTime"></span></label></div><div class="field-row"><label class="field">${audio ? 'Minute de départ' : 'Page de départ'}<input type="number" min="0" name="startPage" value="${session?.startPage ?? position ?? 0}"></label><label class="field">${audio ? 'Minute d’arrivée' : 'Page d’arrivée'}<input type="number" min="0" name="endPage" value="${session?.endPage ?? position ?? 0}"></label></div><label class="field">Note facultative<textarea name="note">${esc(session?.note || '')}</textarea></label><div class="button-row"><button class="button button--primary" type="submit">${session ? 'Enregistrer les modifications' : 'Ajouter la session'}</button>${session ? `<button class="button button--danger" type="button" data-action="delete-session" data-id="${attr(session.id)}">Supprimer</button>` : ''}</div></form>` });
   }
 
   function openBookDialog(book = null) {
@@ -526,7 +587,7 @@
       <section class="isbn-lookup-card section-block" aria-labelledby="isbn-lookup-title"><h3 id="isbn-lookup-title">Rechercher avec le code ISBN</h3><p class="small muted">Le numéro se trouve généralement près du code-barres au dos du livre.</p><form class="isbn-lookup-form" data-form="isbn-lookup"><label class="field" for="book-isbn-lookup"><span class="sr-only">ISBN-10 ou ISBN-13</span><input id="book-isbn-lookup" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="Ex. 9782070360024" value="${attr(book?.isbn || '')}" required></label><button class="button button--secondary" type="submit">Rechercher l’ISBN</button></form></section>
       <div id="book-lookup-results" aria-live="polite"></div>
       <hr class="section-block"><p class="eyebrow">Saisie manuelle ou correction</p>
-      <form class="form-grid" data-form="book"><input type="hidden" name="id" value="${attr(book?.id || '')}"><input type="hidden" name="coverUrl" id="book-cover-value" value="${attr(book?.coverUrl || '')}"><input type="hidden" name="coverSource" id="book-cover-source" value="${attr(ui.pendingCoverKind)}"><div class="field-row"><label class="field">Titre<input id="book-title-field" name="title" required value="${attr(book?.title || '')}" placeholder="Titre du livre"></label><label class="field">Auteur(s)<input id="book-authors-field" name="authors" required value="${attr(book?.authors.join(', ') || '')}" placeholder="Prénom Nom, autre auteur"></label></div><div class="field-row"><label class="field">ISBN<input id="book-isbn-field" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" value="${attr(book?.isbn || '')}" placeholder="ISBN-10 ou ISBN-13"></label><label class="field">Date de publication<input id="book-published-field" name="publishedDate" value="${attr(book?.publishedDate || '')}" placeholder="Ex. 2024"></label></div><div class="field-row"><label class="field">Éditeur<input id="book-publisher-field" name="publisher" value="${attr(book?.publisher || '')}"></label><label class="field">Édition<input id="book-edition-field" name="edition" value="${attr(book?.edition || '')}"></label></div><div class="field-row"><label class="field">Format<input id="book-format-field" name="format" value="${attr(book?.format || 'Broché')}"></label><label class="field">Nombre de pages<input id="book-pages-field" type="number" min="0" name="totalPages" value="${book?.totalPages || ''}"></label></div><label class="field">Résumé<textarea id="book-description-field" name="description">${esc(book?.description || '')}</textarea></label><div class="field-row"><label class="field">Statut<select name="status">${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${book?.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Situation<select name="situation">${Object.entries(SITUATION_LABELS).map(([value,label]) => `<option value="${value}" ${book?.situation === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><div class="field-row"><label class="field">Page atteinte<input type="number" min="0" name="currentPage" value="${book?.currentPage || 0}"></label><label class="checkbox-row"><input type="checkbox" name="historicalBeforeJoin" ${book?.historicalBeforeJoin ? 'checked' : ''}> Lu avant mon inscription (sans date annuelle)</label></div><p class="small muted">Vous pouvez toujours compléter ou corriger les informations avant l’ajout.</p><button class="button button--primary" type="submit">${editing ? 'Enregistrer le livre' : 'Ajouter à ma bibliothèque'}</button></form>` });
+      <form class="form-grid" data-form="book"><input type="hidden" name="id" value="${attr(book?.id || '')}"><input type="hidden" name="coverUrl" id="book-cover-value" value="${attr(book?.coverUrl || '')}"><input type="hidden" name="coverSource" id="book-cover-source" value="${attr(ui.pendingCoverKind)}"><div class="field-row"><label class="field">Destination<select name="libraryState"><option value="library" ${book?.libraryState !== 'wishlist' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${book?.libraryState === 'wishlist' ? 'selected' : ''}>Ma wishlist</option></select></label><label class="field">Support<select name="mediaType" data-change="book-media"><option value="print" ${book?.mediaType !== 'ebook' && book?.mediaType !== 'audio' ? 'selected' : ''}>Livre papier</option><option value="ebook" ${book?.mediaType === 'ebook' ? 'selected' : ''}>Livre numérique</option><option value="audio" ${book?.mediaType === 'audio' ? 'selected' : ''}>Livre audio</option></select></label></div><div class="field-row"><label class="field">Titre<input id="book-title-field" name="title" required value="${attr(book?.title || '')}" placeholder="Titre du livre"></label><label class="field">Auteur(s)<input id="book-authors-field" name="authors" required value="${attr(book?.authors.join(', ') || '')}" placeholder="Prénom Nom, autre auteur"></label></div><div class="field-row"><label class="field">ISBN<input id="book-isbn-field" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" value="${attr(book?.isbn || '')}" placeholder="ISBN-10 ou ISBN-13"></label><label class="field">Date de publication<input id="book-published-field" name="publishedDate" value="${attr(book?.publishedDate || '')}" placeholder="Ex. 2024"></label></div><div class="field-row"><label class="field">Éditeur<input id="book-publisher-field" name="publisher" value="${attr(book?.publisher || '')}"></label><label class="field">Édition<input id="book-edition-field" name="edition" value="${attr(book?.edition || '')}"></label></div><div class="field-row" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}><label class="field">Format<input id="book-format-field" name="format" value="${attr(book?.format || 'Broché')}"></label><label class="field">Nombre de pages<input id="book-pages-field" type="number" min="0" name="totalPages" value="${book?.totalPages || ''}"></label></div><fieldset class="audio-book-fields" data-audio-fields ${book?.mediaType === 'audio' ? '' : 'hidden'}><legend>Informations du livre audio</legend><div class="field-row"><label class="field">Durée totale (minutes)<input type="number" min="0" name="durationMinutes" value="${book?.durationMinutes || ''}"></label><label class="field">Minute atteinte<input type="number" min="0" name="currentMinute" value="${book?.currentMinute || 0}"></label></div><div class="field-row"><label class="field">Narrateur ou narratrice<input name="narrator" value="${attr(book?.narrator || '')}"></label><label class="field">Plateforme ou source<input name="audioPlatform" value="${attr(book?.audioPlatform || '')}" placeholder="Audible, CD, bibliothèque…"></label></div></fieldset><label class="field">Résumé<textarea id="book-description-field" name="description">${esc(book?.description || '')}</textarea></label><div class="field-row"><label class="field">Statut<select name="status">${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${book?.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Situation<select name="situation">${Object.entries(SITUATION_LABELS).map(([value,label]) => `<option value="${value}" ${book?.situation === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><div class="field-row"><label class="field" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}>Page atteinte<input type="number" min="0" name="currentPage" value="${book?.currentPage || 0}"></label><label class="checkbox-row"><input type="checkbox" name="historicalBeforeJoin" ${book?.historicalBeforeJoin ? 'checked' : ''}> Lu avant mon inscription (sans date annuelle)</label></div><p class="small muted">Vous pouvez toujours compléter ou corriger les informations avant l’ajout.</p><button class="button button--primary" type="submit">${editing ? 'Enregistrer le livre' : 'Ajouter à BOO-P'}</button></form>` });
   }
 
   function renderBookLookupResults(suggestions, message = '') {
@@ -541,7 +602,23 @@
 
   function openLexiconDialog(entry = null, bookId = null) {
     const book = store.getBookById(bookId || entry?.bookId);
-    openDialog({ title: entry ? 'Modifier l’entrée' : 'Ajouter au lexique', eyebrow: 'Mémoire personnelle', body: `<form class="form-grid" data-form="lexicon"><input type="hidden" name="id" value="${attr(entry?.id || '')}"><label class="field">Mot ou expression<input name="word" required value="${attr(entry?.word || '')}"></label><label class="field">Définition ou explication personnelle<textarea name="definition" required>${esc(entry?.definition || '')}</textarea></label><label class="field">Livre facultatif<select name="bookId"><option value="">Sans livre</option>${store.getBooks().map(item => `<option value="${attr(item.id)}" ${(entry?.bookId || book?.id) === item.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><div class="field-row"><label class="field">Auteur<input name="author" value="${attr(entry?.author || book?.authors.join(', ') || '')}"></label><label class="field">Page<input type="number" min="0" name="page" value="${entry?.page || ''}"></label></div><label class="field">Note ou citation<textarea name="note">${esc(entry?.note || '')}</textarea></label><button class="button button--primary" type="submit">Enregistrer</button></form>` });
+    openDialog({ title: entry ? 'Modifier l’entrée' : 'Ajouter au lexique', eyebrow: 'Comprendre puis mémoriser', body: `<form class="form-grid" data-form="lexicon"><input type="hidden" name="id" value="${attr(entry?.id || '')}"><input type="hidden" name="sourceLabel" value="${attr(entry?.sourceLabel || '')}"><input type="hidden" name="sourceUrl" value="${attr(entry?.sourceUrl || '')}"><div class="field-row"><label class="field">Type<select name="kind"><option value="word" ${entry?.kind !== 'expression' && entry?.kind !== 'citation' ? 'selected' : ''}>Mot</option><option value="expression" ${entry?.kind === 'expression' ? 'selected' : ''}>Expression</option><option value="citation" ${entry?.kind === 'citation' ? 'selected' : ''}>Citation</option></select></label><label class="field">Mot, expression ou citation<input name="word" required value="${attr(entry?.word || '')}"></label></div><button class="button button--sage" type="button" data-action="dictionary-lookup">Chercher une explication</button><div class="dictionary-result small" id="dictionary-result" role="status" aria-live="polite">${entry?.sourceLabel ? `Source actuelle : ${esc(entry.sourceLabel)}. Vous pouvez toujours corriger le texte.` : 'Pour un mot, BOO-P consulte le Wiktionnaire. Pour une expression ou une citation, la recherche est élargie.'}</div><label class="field">Définition ou explication modifiable<textarea name="definition" required>${esc(entry?.definition || '')}</textarea></label><label class="field">Livre facultatif<select name="bookId"><option value="">Sans livre</option>${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${(entry?.bookId || book?.id) === item.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><div class="field-row"><label class="field">Auteur<input name="author" value="${attr(entry?.author || book?.authors.join(', ') || '')}"></label><label class="field">${book?.mediaType === 'audio' ? 'Minute' : 'Page'}<input type="number" min="0" name="page" value="${entry?.page || ''}"></label></div><label class="field">Contexte ou note personnelle<textarea name="note">${esc(entry?.note || '')}</textarea></label><p class="small muted">Après l’enregistrement, cette entrée rejoint la Mémoire active avec des révisions J+1, J+3, J+5 et J+30.</p><button class="button button--primary" type="submit">Enregistrer et apprendre</button></form>` });
+  }
+
+  async function lookupDictionary(button) {
+    const form = button.closest('form'), term = form?.elements.word?.value, kind = form?.elements.kind?.value;
+    const result = document.getElementById('dictionary-result');
+    if (!form || !result) return;
+    button.disabled = true; button.setAttribute('aria-busy', 'true'); result.textContent = 'Recherche de l’explication…';
+    try {
+      const found = await window.BT.dictionary.lookup(term, kind);
+      form.elements.definition.value = found.definition;
+      form.elements.sourceLabel.value = found.sourceLabel;
+      form.elements.sourceUrl.value = found.sourceUrl;
+      result.innerHTML = `Proposition issue de <a href="${attr(found.sourceUrl)}" target="_blank" rel="noopener">${esc(found.sourceLabel)}</a>. Relisez-la et adaptez-la au contexte du livre avant d’enregistrer.`;
+      form.elements.definition.focus();
+    } catch (error) { result.textContent = error.message || 'Aucune explication trouvée. Saisissez la vôtre.'; }
+    finally { button.disabled = false; button.removeAttribute('aria-busy'); }
   }
 
   function openGoalDialog(period) {
@@ -563,7 +640,8 @@
 
   function openFinishSessionDialog() {
     const session = store.getActiveSession(), book = store.getBookById(session.bookId);
-    openDialog({ title: 'Bilan de la session', eyebrow: 'Confirmer avant de clôturer', body: `<form class="form-grid" data-form="finish-session"><label class="field">Page atteinte<input type="number" name="endPage" min="0" max="${book.totalPages || 99999}" value="${session.endPage}"></label><label class="field">Note de session<textarea name="note">${esc(session.note || '')}</textarea></label><fieldset><legend>Rituel de fin · appréciation facultative</legend><div class="rating-row">${[1,2,3,4,5].map(value => `<button class="rating-button" type="button" data-action="select-rating" data-value="${value}" aria-pressed="false" aria-label="${value} sur 5">🔖</button>`).join('')}</div><input type="hidden" name="rating" id="finish-rating"><p class="small muted" id="rating-description">Choisissez un signet si cette lecture se termine.</p></fieldset><label class="field">Trace ou bilan facultatif<textarea name="traceText">${esc(session.traceDraft || '')}</textarea></label><label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(book.totalPages) && book.totalPages ? 'checked' : ''}> Marquer le livre comme Lu</label><label class="checkbox-row"><input type="checkbox" name="share"> Partager explicitement ce bilan dans le fil public</label><p class="small muted">Sans partage, le bilan reste privé.</p><button class="button button--primary" type="submit">Clôturer et enregistrer</button></form>` });
+    const audio = book.mediaType === 'audio', total = audio ? book.durationMinutes : book.totalPages;
+    openDialog({ title: 'Bilan de la session', eyebrow: 'Confirmer avant de clôturer', body: `<form class="form-grid" data-form="finish-session"><label class="field">${audio ? 'Minute atteinte' : 'Page atteinte'}<input type="number" name="endPage" min="0" max="${total || 99999}" value="${session.endPage}"></label><label class="field">Note de session<textarea name="note">${esc(session.note || '')}</textarea></label><fieldset><legend>Rituel de fin · appréciation facultative</legend><div class="rating-row">${[1,2,3,4,5].map(value => `<button class="rating-button" type="button" data-action="select-rating" data-value="${value}" aria-pressed="false" aria-label="${value} sur 5">🔖</button>`).join('')}</div><input type="hidden" name="rating" id="finish-rating"><p class="small muted" id="rating-description">Choisissez un signet si cette lecture se termine.</p></fieldset><label class="field">Trace ou bilan facultatif<textarea name="traceText">${esc(session.traceDraft || '')}</textarea></label><label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(total) && total ? 'checked' : ''}> Marquer le livre comme Lu</label><label class="checkbox-row"><input type="checkbox" name="share"> Partager explicitement ce bilan dans le fil public</label><p class="small muted">Sans partage, le bilan reste privé.</p><button class="button button--primary" type="submit">Clôturer et enregistrer</button></form>` });
   }
 
   async function handleClick(event) {
@@ -582,18 +660,20 @@
       case 'search-navigate': saveRecentSearch(ui.searchQuery); closeDialog(document.getElementById('search-dialog')); location.hash = trigger.dataset.route; break;
       case 'search-add-book': { const query = ui.searchQuery; closeDialog(document.getElementById('search-dialog')); openBookDialog(); setTimeout(() => { document.getElementById('book-title-field').value = query; }, 60); break; }
       case 'start-session': startSession(store.getCurrentBook()?.id); break;
-      case 'resume-session': location.hash = '#session'; break;
+      case 'resume-session': if (id) { store.focusActiveSession(id); store.resumeActiveSession(id); } location.hash = '#session'; break;
+      case 'focus-session': store.focusActiveSession(id); location.hash = '#session'; render(); break;
       case 'book-session': startSession(id); break;
-      case 'set-active': store.setActiveBook(id); showToast('Livre actif modifié'); render(); break;
-      case 'unset-active': if (store.clearActiveBook(id)) { showToast('Livre désactivé'); render(); } else showToast('Terminez d’abord la session en cours'); break;
       case 'leave-session': location.hash = '#home'; showToast('Session conservée en arrière-plan'); break;
       case 'toggle-session': { const session = store.getActiveSession(); session?.status === 'running' ? store.pauseActiveSession() : store.resumeActiveSession(); render(); break; }
       case 'finish-session': openFinishSessionDialog(); break;
       case 'quick-trace': openTraceDialog(trigger.dataset.bookId || store.getActiveSession()?.bookId); break;
+      case 'session-lexicon': openLexiconDialog(null, store.getActiveSession()?.bookId); break;
       case 'dictate-trace': startDictation(document.getElementById('session-trace-draft'), text => store.updateActiveSession({ traceDraft: text })); break;
       case 'dictate-dialog-trace': startDictation(document.getElementById('trace-dialog-text')); break;
       case 'memory-prev': changeMemory(-1); break;
       case 'memory-next': changeMemory(1); break;
+      case 'memory-recalled': reviewMemory(id, true); break;
+      case 'memory-retry': reviewMemory(id, false); break;
       case 'show-day': showDayDetail(trigger.dataset.day); break;
       case 'show-week-detail': showWeekDetail(); break;
       case 'create-post': openPostDialog(); break;
@@ -605,8 +685,8 @@
       case 'report-user': openReportDialog('utilisateur', id); break;
       case 'block-user': confirmBlock(id); break;
       case 'unblock-user': store.unblockUser(id); showToast('Utilisateur débloqué'); render(); break;
-      case 'friend': store.updateFriend(id, trigger.dataset.mode); showToast(friendToast(trigger.dataset.mode)); render(); break;
-      case 'view-user': openUserDialog(id); break;
+      case 'friend': await updateFriendRelation(id, trigger.dataset.mode); break;
+      case 'view-user': await openUserDialog(id); break;
       case 'create-club': openClubDialog(); break;
       case 'toggle-club': store.toggleClub(id); showToast('Participation au club mise à jour localement'); render(); break;
       case 'club-details': openClubDetails(id); break;
@@ -615,7 +695,10 @@
       case 'create-salon': openSalonCreateDialog(); break;
       case 'open-book': location.hash = `#book?id=${encodeURIComponent(id)}`; break;
       case 'add-book': openBookDialog(); break;
-      case 'add-recommendation': addRecommendation(id); break;
+      case 'library-view': store.saveSettings({ libraryView: trigger.dataset.view }); render(); break;
+      case 'wishlist-recommendation': addRecommendationToWishlist(id); break;
+      case 'dismiss-recommendation': dismissRecommendation(id); break;
+      case 'move-to-library': store.updateBook(id, { libraryState:'library' }); showToast('Livre ajouté à votre bibliothèque'); render(); break;
       case 'edit-book': openBookDialog(store.getBookById(id)); break;
       case 'delete-book': confirmDeleteBook(id); break;
       case 'analyze-book-cover': await analyzeBookCover(trigger); break;
@@ -626,6 +709,7 @@
       case 'add-lexicon': openLexiconDialog(null, trigger.dataset.bookId || null); break;
       case 'edit-lexicon': openLexiconDialog(store.getLexicon().find(item => item.id === id)); break;
       case 'delete-lexicon': if (confirm('Supprimer cette entrée du lexique ?')) { store.deleteLexiconWord(id); showToast('Entrée supprimée'); render(); } break;
+      case 'dictionary-lookup': await lookupDictionary(trigger); break;
       case 'edit-goal': openGoalDialog(trigger.dataset.period); break;
       case 'edit-profile': openProfileDialog(); break;
       case 'edit-adn': openAdnDialog(); break;
@@ -642,10 +726,15 @@
   function handleChange(event) {
     const control = event.target.closest('[data-change]'); if (!control) return;
     switch (control.dataset.change) {
-      case 'active-book': if (control.value) { store.setActiveBook(control.value); showToast('Livre actif modifié'); } else if (store.clearActiveBook()) showToast('Aucun livre actif'); else showToast('Terminez d’abord la session en cours'); render(); break;
+      case 'active-book': if (control.value) { store.setActiveBook(control.value); showToast('Lecture affichée modifiée'); } render(); break;
+      case 'focus-session': store.focusActiveSession(control.value); render(); break;
       case 'library-status': ui.libraryStatus = control.value; render(); break;
+      case 'book-media':
+        document.querySelector('[data-audio-fields]')?.toggleAttribute('hidden', control.value !== 'audio');
+        document.querySelectorAll('[data-page-fields]').forEach(group => group.toggleAttribute('hidden', control.value === 'audio'));
+        break;
       case 'notification-filter': ui.notificationFilter = control.value; renderNotifications(); break;
-      case 'session-page': { const book = store.getBookById(store.getActiveSession()?.bookId); const value = clamp(control.value, 0, book?.totalPages || 99999); control.value = value; store.updateActiveSession({ endPage: value }); break; }
+      case 'session-page': { const book = store.getBookById(store.getActiveSession()?.bookId); const total = book?.mediaType === 'audio' ? book?.durationMinutes : book?.totalPages; const value = clamp(control.value, 0, total || 99999); control.value = value; store.updateActiveSession({ endPage: value }); break; }
       case 'cover-file': void readCoverFile(control.files?.[0]); break;
       case 'post-photo': previewPostPhoto(control.files?.[0]); break;
       case 'salon-pages': store.updateSalon(control.dataset.id, { sharePages: control.checked }); showToast(control.checked ? 'Progression partagée avec votre accord' : 'Progression en pages masquée'); break;
@@ -654,12 +743,17 @@
 
   function handleInput(event) {
     const control = event.target;
-    if (control.dataset.change === 'session-page') { const book = store.getBookById(store.getActiveSession()?.bookId); const value = clamp(control.value, 0, book?.totalPages || 99999); store.updateActiveSession({ endPage:value }); return; }
+    if (control.dataset.change === 'session-page') { const book = store.getBookById(store.getActiveSession()?.bookId); const total = book?.mediaType === 'audio' ? book?.durationMinutes : book?.totalPages; const value = clamp(control.value, 0, total || 99999); store.updateActiveSession({ endPage:value }); return; }
     if (control.id === 'global-search') { ui.searchQuery = control.value; renderSearchResults(control.value); return; }
     const type = control.dataset.input; if (!type) return;
     if (type === 'session-note') { store.updateActiveSession({ note: control.value }); return; }
     if (type === 'session-trace') { store.updateActiveSession({ traceDraft: control.value }); return; }
-    const mappings = { 'library-search':['libraryQuery','library-search'], 'friend-search':['friendQuery','friend-search'], 'lexicon-search':['lexiconQuery','lexicon-search'] };
+    if (type === 'friend-search') {
+      ui.friendQuery = control.value; const position = control.selectionStart; render();
+      const replacement = document.getElementById('friend-search'); replacement?.focus(); replacement?.setSelectionRange(position, position);
+      clearTimeout(ui.friendSearchTimer); ui.friendSearchTimer = setTimeout(() => refreshReaders(ui.friendQuery), 280); return;
+    }
+    const mappings = { 'library-search':['libraryQuery','library-search'], 'lexicon-search':['lexiconQuery','lexicon-search'] };
     if (mappings[type]) {
       const [key,id] = mappings[type]; ui[key] = control.value; const position = control.selectionStart; render();
       const replacement = document.getElementById(id); replacement?.focus(); replacement?.setSelectionRange(position, position);
@@ -682,18 +776,20 @@
   }
 
   function startSession(bookId) {
-    const existing = store.getActiveSession();
-    if (existing && existing.bookId !== bookId) {
-      openDialog({ title:'Une session est déjà ouverte', eyebrow:'Choisissez avant de continuer', body:`<p>La session actuelle doit être terminée avant d’en démarrer une avec un autre livre.</p><div class="button-row"><a class="button button--primary" href="#session" data-action="close-dialog">Reprendre la session</a><button class="button button--secondary" type="button" data-action="close-dialog">Annuler</button></div>` });
-      return;
-    }
-    if (!existing) store.startActiveSession(bookId);
+    if (!bookId) return;
+    store.startActiveSession(bookId);
     location.hash = '#session';
   }
 
   function changeMemory(direction) {
     const items = getMemoryItems(); ui.memoryIndex = (ui.memoryIndex + direction + items.length) % items.length;
     store.saveSettings({ memoryIndex: ui.memoryIndex }); render();
+  }
+  function reviewMemory(id, recalled) {
+    const updated = store.reviewLexiconWord(id, recalled);
+    if (!updated) return;
+    showToast(recalled ? 'Bien joué · la prochaine révision est programmée' : 'Cette entrée reviendra demain');
+    render();
   }
   function showDayDetail(key) {
     const day = store.getGoalProgress().week.days.find(item => item.key === key);
@@ -727,6 +823,30 @@
     }
   }
 
+  async function refreshReaders(query = ui.friendQuery, { quiet = false } = {}) {
+    if (!window.BT.community?.searchReaders) return;
+    ui.friendSearchBusy = true;
+    if (ui.route === 'community' && ui.communityTab === 'friends') render();
+    try {
+      const users = await window.BT.community.searchReaders(query);
+      ui.friendResults = users;
+      store.mergeRemoteUsers(users);
+    } catch (error) { if (!quiet) showToast(error.message || 'La recherche de lecteurs ne répond pas'); }
+    finally { ui.friendSearchBusy = false; if (ui.route === 'community' && ui.communityTab === 'friends') render(); }
+  }
+
+  async function updateFriendRelation(userId, mode) {
+    const user = store.getCommunity().users.find(item => item.id === userId);
+    if (!user) return;
+    if (!user.isRemote) { store.updateFriend(userId, mode); showToast(`${friendToast(mode)} · exemple fictif`); render(); return; }
+    try {
+      await window.BT.community.updateFriend(userId, mode);
+      store.updateFriend(userId, mode);
+      await refreshReaders(ui.friendQuery, { quiet:true });
+      showToast(friendToast(mode).replace(' localement',''));
+    } catch (error) { showToast(error.message || 'La demande d’amitié ne peut pas être mise à jour'); }
+  }
+
   async function togglePostEncouragement(id) {
     const post = store.getCommunity().posts.find(item => item.id === id);
     if (!post) return;
@@ -740,12 +860,18 @@
     } catch (error) { showToast(error.message || 'Encouragement non enregistré'); }
   }
 
-  function addRecommendation(id) {
+  function addRecommendationToWishlist(id) {
     const suggestion = RECOMMENDATIONS.find(item => item.id === id);
     if (!suggestion) return;
-    if (store.getBooks().some(book => normalize(book.title) === normalize(suggestion.title))) { showToast('Ce livre est déjà dans votre bibliothèque'); return; }
-    const book = store.addBook({ ...suggestion, id:undefined, situation:'possede', currentPage:0, description:suggestion.reason });
-    showToast(`« ${book.title} » ajouté à votre bibliothèque`); render();
+    if (store.getBooks().some(book => normalize(book.title) === normalize(suggestion.title))) { showToast('Ce livre est déjà enregistré dans BOO-P'); return; }
+    const book = store.addBook({ ...suggestion, id:undefined, libraryState:'wishlist', situation:'possede', currentPage:0, description:suggestion.reason });
+    showToast(`« ${book.title} » ajouté à votre wishlist`); render();
+  }
+
+  function dismissRecommendation(id) {
+    const settings = store.getSettings();
+    settings.dismissedRecommendationIds = [...new Set([...(settings.dismissedRecommendationIds || []), id])];
+    store.saveSettings(settings); showToast('Cette suggestion ne sera plus affichée'); render();
   }
 
   function previewPostPhoto(file) {
@@ -908,7 +1034,8 @@
       const start = new Date(`${data.get('date')}T${startTime}:00`), end = new Date(`${data.get('date')}T${endTime}:00`);
       if (end > start) duration = Math.round((end - start) / 60000);
     }
-    const startPage = clamp(data.get('startPage'), 0, book.totalPages || 99999), endPage = clamp(data.get('endPage'), 0, book.totalPages || 99999);
+    const positionMax = book.mediaType === 'audio' ? book.durationMinutes : book.totalPages;
+    const startPage = clamp(data.get('startPage'), 0, positionMax || 99999), endPage = clamp(data.get('endPage'), 0, positionMax || 99999);
     const record = { id: data.get('sessionId') || undefined, bookId: book.id, startedAt: new Date(`${data.get('date')}T${startTime || '12:00'}:00`).toISOString(), durationSeconds: duration * 60, startPage, endPage, note: data.get('note'), manual: true };
     data.get('sessionId') ? store.updateSession(data.get('sessionId'), record) : store.saveSession(record);
     closeDialog(); showToast(data.get('sessionId') ? 'Session mise à jour' : 'Session passée ajoutée'); render();
@@ -921,6 +1048,7 @@
 
   function submitBook(form, data) {
     const id = data.get('id'), totalPages = Math.max(0, Number(data.get('totalPages')) || 0), currentPage = clamp(data.get('currentPage'), 0, totalPages || 99999);
+    const durationMinutes = Math.max(0, Number(data.get('durationMinutes')) || 0), currentMinute = clamp(data.get('currentMinute'), 0, durationMinutes || 99999);
     const rawISBN = String(data.get('isbn') || '').trim();
     const isbn = window.BT.bookLookup.normalizeISBN(rawISBN);
     if (rawISBN && !window.BT.bookLookup.isValidISBN(isbn)) {
@@ -928,15 +1056,16 @@
       document.getElementById('book-isbn-field')?.focus();
       return;
     }
-    const record = { title: data.get('title').trim(), authors: data.get('authors').split(',').map(item => item.trim()).filter(Boolean), isbn, publishedDate: data.get('publishedDate').trim(), publisher: data.get('publisher').trim(), edition: data.get('edition').trim(), format: data.get('format').trim(), totalPages, currentPage, description: data.get('description').trim(), status: data.get('status'), situation: data.get('situation'), historicalBeforeJoin: data.get('historicalBeforeJoin') === 'on', coverUrl: data.get('coverUrl') || '', coverColor: gradientFor(`${data.get('title')}${data.get('authors')}`), customCover: data.get('coverSource') === 'custom' };
+    const mediaType = data.get('mediaType');
+    const record = { title: data.get('title').trim(), authors: data.get('authors').split(',').map(item => item.trim()).filter(Boolean), isbn, publishedDate: data.get('publishedDate').trim(), publisher: data.get('publisher').trim(), edition: data.get('edition').trim(), format: mediaType === 'audio' ? '' : data.get('format').trim(), mediaType, durationMinutes, currentMinute, narrator:data.get('narrator')?.trim() || '', audioPlatform:data.get('audioPlatform')?.trim() || '', libraryState:data.get('libraryState'), totalPages:mediaType === 'audio' ? 0 : totalPages, currentPage:mediaType === 'audio' ? 0 : currentPage, description: data.get('description').trim(), status: data.get('status'), situation: data.get('situation'), historicalBeforeJoin: data.get('historicalBeforeJoin') === 'on', coverUrl: data.get('coverUrl') || '', coverColor: gradientFor(`${data.get('title')}${data.get('authors')}`), customCover: data.get('coverSource') === 'custom' };
     const book = id ? store.updateBook(id, record) : store.addBook(record);
     if (!id && book.status === 'en-cours') store.setActiveBook(book.id);
-    ui.pendingCover = ''; ui.pendingCoverFile = null; ui.pendingCoverKind = ''; closeDialog(); showToast(id ? 'Livre mis à jour' : 'Livre ajouté à la bibliothèque'); location.hash = `#book?id=${encodeURIComponent(book.id)}`; render();
+    ui.pendingCover = ''; ui.pendingCoverFile = null; ui.pendingCoverKind = ''; closeDialog(); showToast(id ? 'Livre mis à jour' : `Livre ajouté à ${book.libraryState === 'wishlist' ? 'la wishlist' : 'la bibliothèque'}`); location.hash = `#book?id=${encodeURIComponent(book.id)}`; render();
   }
 
   function submitLexicon(form, data) {
     const id = data.get('id');
-    store.addLexiconWord({ id: id || undefined, word: data.get('word'), definition: data.get('definition'), bookId: data.get('bookId') || null, author: data.get('author'), page: data.get('page'), note: data.get('note') });
+    store.addLexiconWord({ id: id || undefined, kind:data.get('kind'), word: data.get('word'), definition: data.get('definition'), sourceLabel:data.get('sourceLabel'), sourceUrl:data.get('sourceUrl'), bookId: data.get('bookId') || null, author: data.get('author'), page: data.get('page'), note: data.get('note') });
     closeDialog(); showToast(id ? 'Entrée mise à jour' : 'Entrée ajoutée au lexique'); render();
   }
 
@@ -950,7 +1079,7 @@
 
   async function submitProfile(form, data) {
     store.saveProfile({ name: data.get('name').trim(), handle: data.get('handle').trim(), title: data.get('title').trim(), bio: data.get('bio').trim(), interests: data.get('interests').split(',').map(item => item.trim()).filter(Boolean).slice(0,12) });
-    try { await window.BT.auth.updateProfile({ displayName:data.get('name').trim(), interests:store.getProfile().interests }); }
+    try { await window.BT.auth.updateProfile({ displayName:data.get('name').trim(), handle:data.get('handle').trim(), profileTitle:data.get('title').trim(), bio:data.get('bio').trim(), interests:store.getProfile().interests }); }
     catch (error) { showToast(error.message || 'Profil conservé localement ; synchronisation différée'); return; }
     closeDialog(); showToast('Profil mis à jour'); render();
   }
@@ -965,7 +1094,8 @@
   async function submitFinishSession(form, data) {
     const session = store.getActiveSession(), book = store.getBookById(session.bookId);
     const traceText = String(data.get('traceText') || '').trim(), share = data.get('share') === 'on';
-    store.finishActiveSession({ endPage: clamp(data.get('endPage'), 0, book.totalPages || 99999), note: data.get('note'), rating: data.get('rating'), traceText, markRead: data.get('markRead') === 'on', share });
+    const total = book.mediaType === 'audio' ? book.durationMinutes : book.totalPages;
+    store.finishActiveSession({ endPage: clamp(data.get('endPage'), 0, total || 99999), note: data.get('note'), rating: data.get('rating'), traceText, markRead: data.get('markRead') === 'on', share });
     if (share && traceText) {
       try { const post = await window.BT.community.createPost({ type:'trace', bookTitle:book.title, text:traceText, visibility:'public' }); if (post) store.addPost(post); }
       catch (error) { showToast(error.message || 'Session enregistrée, mais partage non envoyé'); }
@@ -1074,9 +1204,15 @@
     const user = store.getCommunity().users.find(item => item.id === userId); if (!user) return;
     if (confirm(`Bloquer ${user.name} ? Ses publications seront masquées dans ce prototype local.`)) { store.blockUser(userId); showToast('Utilisateur bloqué'); render(); }
   }
-  function openUserDialog(userId) {
+  async function openUserDialog(userId) {
     const user = store.getCommunity().users.find(item => item.id === userId); if (!user) return;
-    openDialog({ title:user.name, eyebrow:user.profileVisibility === 'private' ? 'Profil privé' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2><p class="muted">${user.profileVisibility === 'private' ? 'Les détails sont réservés aux amis.' : esc(user.bio)}</p></div></div><p class="small muted">L’aperçu minimal — photo, pseudonyme et ajout — reste visible pour permettre une demande d’amitié.</p>${friendAction(user)}` });
+    let details = null;
+    if (user.isRemote) {
+      try { details = await window.BT.community.getReaderProfile(userId); }
+      catch (error) { showToast(error.message || 'Ce profil ne peut pas être ouvert'); }
+    } else details = { bio:user.bio, interests:[] };
+    const locked = user.profileVisibility === 'private' && !details;
+    openDialog({ title:user.name, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2><p class="muted">${esc(user.handle || '')}</p></div></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'Ce lecteur n’a pas encore rédigé de biographie.')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<p class="small muted">L’adresse e-mail et les lectures privées ne sont jamais affichées dans la recherche.</p>${friendAction(user)}` });
   }
   function openClubDialog() {
     openDialog({ title:'Créer un club', eyebrow:'Club enregistré dans BOO-P', body:`<form class="form-grid" data-form="club"><label class="field">Nom<input name="name" required maxlength="80"></label><label class="field">Description<textarea name="description" required maxlength="1200"></textarea></label><label class="field">Couverture<select name="color"><option value="#6f927c">Sauge proposée</option><option value="#cf873d">Ocre proposée</option></select><span class="field-help">Deux couvertures graphiques sont proposées pour ce prototype.</span></label><div class="field-row"><label class="field">Visibilité<select name="visibility"><option value="private">Privé</option><option value="public">Public</option></select></label><label class="field">Accès public<select name="access"><option value="approval">Sur approbation</option><option value="open">Accès libre</option></select></label></div><label class="field">Livre de ma bibliothèque<select name="bookTitle"><option value="">À choisir plus tard</option>${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Ou un autre livre<input name="customBookTitle" maxlength="240" placeholder="Titre absent de ma bibliothèque"><span class="field-help">BOO-P vous proposera de l’ajouter automatiquement à votre bibliothèque.</span></label><p class="small muted">Le club est enregistré dans la base ; invitations, adhésions et présence en direct restent simulées.</p><button class="button button--primary" type="submit">Créer le club</button></form>` });
@@ -1122,9 +1258,10 @@
   document.addEventListener('DOMContentLoaded', async () => {
     try {
       const user = await window.BT.auth.ready();
-      if (!user) { location.replace('index.html?auth=login&reason=protected'); return; }
-      store.useUser?.(user.id);
-      const completedRemotely = Boolean(user.profile?.onboarding_completed);
+      const localPreview = ['localhost','127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('preview');
+      if (!user && !localPreview) { location.replace('index.html?auth=login&reason=protected'); return; }
+      store.useUser?.(user?.id || 'local-preview');
+      const completedRemotely = localPreview || Boolean(user.profile?.onboarding_completed);
       if (completedRemotely && !store.isOnboardingComplete()) store.saveOnboarding({ completed:true, version:5, restoredFromProfile:true, completedAt:new Date().toISOString() });
       if (!completedRemotely && !store.isOnboardingComplete()) { location.replace('onboarding.html'); return; }
       init();

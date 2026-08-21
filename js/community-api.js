@@ -7,6 +7,7 @@ BT.community = (() => {
   const BUCKET = 'community-media';
   const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
   const MAX_EDGE = 1920;
+  const signedUrlCache = new Map();
 
   const extensionFromType = type => ({
     'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp',
@@ -108,8 +109,11 @@ BT.community = (() => {
 
   async function signedPhotoUrl(path) {
     if (!path) return null;
+    const cached = signedUrlCache.get(path);
+    if (cached && cached.expiresAt > Date.now()) return cached.url;
     const { data, error } = await client().storage.from(BUCKET).createSignedUrl(path, 3600);
     if (error) { console.warn('Photo BOO-P indisponible', error); return null; }
+    signedUrlCache.set(path, { url:data.signedUrl, expiresAt:Date.now() + 55 * 60000 });
     return data.signedUrl;
   }
 
@@ -161,7 +165,7 @@ BT.community = (() => {
 
     if (photo) {
       photoPath = `${user.id}/${postId}/${crypto.randomUUID()}.${extensionFromType(photo.type) || 'jpg'}`;
-      const upload = await api.storage.from(BUCKET).upload(photoPath, photo, { contentType:photo.type, cacheControl:'3600', upsert:false });
+      const upload = await api.storage.from(BUCKET).upload(photoPath, photo, { contentType:photo.type, cacheControl:'86400', upsert:false });
       if (upload.error) throw friendly(upload.error, 'La photo ne peut pas être envoyée.');
     }
 
@@ -212,5 +216,60 @@ BT.community = (() => {
     return data;
   }
 
-  return { listPosts, createPost, createComment, toggleEncouragement, createClub, compressPhoto, maxUploadBytes:MAX_UPLOAD_BYTES };
+  async function searchReaders(query = '') {
+    await window.BT.auth.ready();
+    const user = currentUser(), api = client(), clean = String(query || '').trim().slice(0, 80);
+    const base = () => api.from('profile_directory').select('user_id, handle, display_name, profile_visibility').neq('user_id', user.id).limit(30);
+    const searches = clean
+      ? [base().ilike('display_name', `%${clean.replace(/[%_]/g, '')}%`), base().ilike('handle', `%${clean.toLowerCase().replace(/[^a-z0-9_.-]/g, '')}%`)]
+      : [base().order('display_name')];
+    const results = await Promise.all(searches);
+    const failed = results.find(result => result.error);
+    if (failed) throw friendly(failed.error, 'La recherche de lecteurs ne peut pas être chargée.');
+
+    const directory = new Map();
+    results.flatMap(result => result.data || []).forEach(row => directory.set(row.user_id, row));
+    const relationResult = await api.from('friendships')
+      .select('id, requester_id, addressee_id, status, created_at, updated_at')
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+    if (relationResult.error) throw friendly(relationResult.error, 'Les demandes d’amitié ne peuvent pas être chargées.');
+    const relationByUser = new Map();
+    (relationResult.data || []).forEach(relation => {
+      const otherId = relation.requester_id === user.id ? relation.addressee_id : relation.requester_id;
+      relationByUser.set(otherId, relation);
+    });
+    return [...directory.values()].map(row => {
+      const relation = relationByUser.get(row.user_id);
+      const friendState = !relation ? 'none' : relation.status === 'accepted' ? 'friend' : relation.requester_id === user.id ? 'sent' : 'received';
+      return { id:row.user_id, name:row.display_name, handle:`@${row.handle}`, initials:String(row.display_name || 'B').split(/\s+/).map(part => part[0]).slice(0,2).join('').toUpperCase(), bio:'', profileVisibility:row.profile_visibility, friendState, isRemote:true, friendshipId:relation?.id || null };
+    }).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  }
+
+  async function updateFriend(userId, action) {
+    await window.BT.auth.ready();
+    const user = currentUser(), api = client();
+    const current = await api.from('friendships')
+      .select('id, requester_id, addressee_id, status')
+      .or(`and(requester_id.eq.${user.id},addressee_id.eq.${userId}),and(requester_id.eq.${userId},addressee_id.eq.${user.id})`)
+      .maybeSingle();
+    if (current.error) throw friendly(current.error, 'La relation d’amitié ne peut pas être chargée.');
+    let result;
+    if (action === 'send') result = await api.from('friendships').insert({ requester_id:user.id, addressee_id:userId, status:'pending' });
+    else if (action === 'accept' && current.data) result = await api.from('friendships').update({ status:'accepted', updated_at:new Date().toISOString() }).eq('id', current.data.id);
+    else if (['cancel','refuse','remove'].includes(action) && current.data) result = await api.from('friendships').delete().eq('id', current.data.id);
+    else return;
+    if (result.error) throw friendly(result.error, 'La demande d’amitié ne peut pas être mise à jour.');
+  }
+
+  async function getReaderProfile(userId) {
+    await window.BT.auth.ready();
+    const { data, error } = await client().from('profile_shared_details')
+      .select('profile_title, bio, interests, profile_visibility, updated_at')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw friendly(error, 'Ce profil ne peut pas être ouvert.');
+    return data || null;
+  }
+
+  return { listPosts, createPost, createComment, toggleEncouragement, createClub, searchReaders, updateFriend, getReaderProfile, compressPhoto, maxUploadBytes:MAX_UPLOAD_BYTES };
 })();

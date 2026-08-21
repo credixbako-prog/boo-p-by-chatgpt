@@ -42,6 +42,13 @@ BT.auth = (function () {
     return value;
   }
 
+  function normalizeHandle(value, userId = '') {
+    const base = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^@+/, '').replace(/[^a-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 22);
+    const safe = base.length >= 3 ? base : 'lecteur';
+    const suffix = String(userId).replace(/-/g, '').slice(0, 6);
+    return (suffix && safe.endsWith(`-${suffix}`) ? safe : `${safe}-${suffix}`).slice(0, 30);
+  }
+
   function setPersistence(persistent) {
     localStorage.removeItem(PERSISTENCE_KEY);
     sessionStorage.removeItem(PERSISTENCE_KEY);
@@ -122,7 +129,9 @@ BT.auth = (function () {
 
     if (existing.error) throw friendlyError(existing.error, 'Le profil BOO-P ne peut pas être chargé.');
     if (existing.data) {
-      currentProfile = existing.data;
+      const directory = await ensureDirectory(existing.data, user);
+      const shared = await ensureSharedDetails(existing.data, user);
+      currentProfile = { ...existing.data, ...shared, handle:directory?.handle || '' };
       return currentProfile;
     }
 
@@ -134,8 +143,29 @@ BT.auth = (function () {
       .single();
 
     if (created.error) throw friendlyError(created.error, 'Le profil BOO-P ne peut pas être créé.');
-    currentProfile = created.data;
+    const directory = await ensureDirectory(created.data, user);
+    const shared = await ensureSharedDetails(created.data, user);
+    currentProfile = { ...created.data, ...shared, handle:directory?.handle || '' };
     return currentProfile;
+  }
+
+  async function ensureDirectory(profile, user) {
+    const existing = await client.from('profile_directory').select('user_id, handle, display_name, profile_visibility').eq('user_id', user.id).maybeSingle();
+    if (existing.error) throw friendlyError(existing.error, 'L’annuaire BOO-P ne peut pas être chargé.');
+    if (existing.data) return existing.data;
+    const handle = normalizeHandle(user.user_metadata?.full_name || profile.display_name, user.id);
+    const created = await client.from('profile_directory').insert({ user_id:user.id, handle, display_name:profile.display_name, profile_visibility:profile.profile_visibility || 'private' }).select().single();
+    if (created.error) throw friendlyError(created.error, 'L’annuaire BOO-P ne peut pas être créé.');
+    return created.data;
+  }
+
+  async function ensureSharedDetails(profile, user) {
+    const existing = await client.from('profile_shared_details').select('profile_title, bio, interests, profile_visibility').eq('user_id', user.id).maybeSingle();
+    if (existing.error) throw friendlyError(existing.error, 'Les détails du profil BOO-P ne peuvent pas être chargés.');
+    if (existing.data) return existing.data;
+    const created = await client.from('profile_shared_details').insert({ user_id:user.id, interests:profile.interests || [], profile_visibility:profile.profile_visibility || 'private' }).select('profile_title, bio, interests, profile_visibility').single();
+    if (created.error) throw friendlyError(created.error, 'Les détails du profil BOO-P ne peuvent pas être créés.');
+    return created.data;
   }
 
   async function initialize() {
@@ -257,8 +287,13 @@ BT.auth = (function () {
 
     const { data, error } = await client.from('profiles').update(allowed).eq('user_id', user.id).select().single();
     if (error) throw friendlyError(error, 'Le profil BOO-P ne peut pas être mis à jour.');
-    currentProfile = data;
-    return { ...data };
+    const handle = updates.handle !== undefined ? normalizeHandle(updates.handle, user.id) : (currentProfile?.handle || normalizeHandle(data.display_name, user.id));
+    const directory = await client.from('profile_directory').upsert({ user_id:user.id, handle, display_name:data.display_name, profile_visibility:data.profile_visibility, updated_at:new Date().toISOString() }, { onConflict:'user_id' }).select().single();
+    if (directory.error) throw friendlyError(directory.error, 'Le profil public minimal ne peut pas être mis à jour.');
+    const shared = await client.from('profile_shared_details').upsert({ user_id:user.id, profile_title:updates.profileTitle ?? currentProfile?.profile_title ?? '', bio:updates.bio ?? currentProfile?.bio ?? '', interests:data.interests || [], profile_visibility:data.profile_visibility, updated_at:new Date().toISOString() }, { onConflict:'user_id' }).select('profile_title, bio, interests, profile_visibility').single();
+    if (shared.error) throw friendlyError(shared.error, 'Les détails partageables du profil ne peuvent pas être mis à jour.');
+    currentProfile = { ...data, ...shared.data, handle:directory.data.handle };
+    return { ...currentProfile };
   }
 
   async function updatePassword(password) {

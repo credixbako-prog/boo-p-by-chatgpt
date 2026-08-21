@@ -14,7 +14,7 @@ BT.store = (() => {
   let STATE_KEY = LEGACY_STATE_KEY;
   let ONBOARDING_KEY = LEGACY_ONBOARDING_KEY;
   let activeUserId = null;
-  const SCHEMA_VERSION = 5;
+  const SCHEMA_VERSION = 7;
   const listeners = new Set();
 
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -26,6 +26,15 @@ BT.store = (() => {
   };
   const daysAgo = count => new Date(Date.now() - count * 86400000).toISOString();
   const minutesAgo = count => new Date(Date.now() - count * 60000).toISOString();
+  const REVIEW_OFFSETS = [1, 3, 5, 30];
+  function makeReviewSchedule(createdAt) {
+    const origin = Number.isNaN(new Date(createdAt).getTime()) ? Date.now() : new Date(createdAt).getTime();
+    return REVIEW_OFFSETS.map(day => ({ day, dueAt:new Date(origin + day * 86400000).toISOString(), completedAt:null, attempts:0 }));
+  }
+  function normalizeLexiconEntry(item = {}) {
+    const createdAt = item.createdAt || item.updatedAt || nowISO();
+    return { ...item, kind:['word','expression','citation'].includes(item.kind) ? item.kind : 'word', createdAt, updatedAt:item.updatedAt || createdAt, reviewSchedule:Array.isArray(item.reviewSchedule) && item.reviewSchedule.length ? item.reviewSchedule : makeReviewSchedule(createdAt), reviewSuccesses:Math.max(0, Number(item.reviewSuccesses) || 0), reviewAttempts:Math.max(0, Number(item.reviewAttempts) || 0) };
+  }
   const DEFAULT_BOOK_COVERS = {
     'book-etranger':'https://covers.openlibrary.org/b/isbn/9782070360024-L.jpg',
     'book-peste':'https://covers.openlibrary.org/b/isbn/9782070360420-L.jpg',
@@ -51,14 +60,20 @@ BT.store = (() => {
     const totalPages = Math.max(0, Number(data.totalPages) || 0);
     const currentPage = Math.min(totalPages || Number.MAX_SAFE_INTEGER, Math.max(0, Number(data.currentPage) || 0));
     const statuses = ['a-lire', 'en-cours', 'en-pause', 'lu', 'abandonne'];
+    const mediaTypes = ['print', 'ebook', 'audio'];
     const migratedStatus = data.status === 'transmis' ? 'lu' : data.status;
+    const mediaType = mediaTypes.includes(data.mediaType) ? data.mediaType : (/audio/i.test(data.format || '') ? 'audio' : /num|ebook|epub|kindle/i.test(data.format || '') ? 'ebook' : 'print');
+    const durationMinutes = Math.max(0, Number(data.durationMinutes) || 0);
+    const currentMinute = Math.min(durationMinutes || Number.MAX_SAFE_INTEGER, Math.max(0, Number(data.currentMinute) || 0));
     return {
       id: data.id || uid('book'), title: String(data.title || 'Sans titre'),
       authors: Array.isArray(data.authors) ? data.authors : [data.author || 'Auteur inconnu'].filter(Boolean),
       isbn: data.isbn || '', publishedDate: data.publishedDate || '',
-      publisher: data.publisher || '', edition: data.edition || '', format: data.format || 'Broché',
+      publisher: data.publisher || '', edition: data.edition || '', format: data.format || (mediaType === 'audio' ? 'Livre audio' : mediaType === 'ebook' ? 'Livre numérique' : 'Broché'),
+      mediaType, durationMinutes, currentMinute, narrator: data.narrator || '', audioPlatform: data.audioPlatform || '', playbackSpeed: Math.max(.5, Math.min(3, Number(data.playbackSpeed) || 1)),
       totalPages, currentPage, description: data.description || '',
       status: statuses.includes(migratedStatus) ? migratedStatus : 'a-lire',
+      libraryState: data.libraryState === 'wishlist' ? 'wishlist' : 'library',
       situation: data.situation || (data.status === 'transmis' ? 'donne' : 'possede'),
       coverColor: data.coverColor || 'linear-gradient(145deg,#17324d,#6f927c)', coverUrl: data.coverUrl || DEFAULT_BOOK_COVERS[data.id] || '',
       addedAt: data.addedAt || nowISO(), startedAt: data.startedAt || null, completedAt: data.completedAt || null,
@@ -123,7 +138,7 @@ BT.store = (() => {
       sessions: [
         { id: 'session-demo-1', bookId: 'book-etranger', startedAt: daysAgo(1), endedAt: daysAgo(1), durationSeconds: 1560, startPage: 65, endPage: 78, note: 'Lecture du soir.', manual: false },
         { id: 'session-demo-2', bookId: 'book-dune', startedAt: daysAgo(3), endedAt: daysAgo(3), durationSeconds: 2100, startPage: 94, endPage: 112, note: '', manual: false }
-      ], activeSession: null,
+      ], activeSession: null, activeSessions: [], focusedSessionId: null,
       traces: [
         { id: 'trace-demo-1', bookId: 'book-etranger', text: 'L’indifférence de Meursault laisse un espace étrange au lecteur.', page: 72, privacy: 'private', createdAt: daysAgo(1), type: 'trace' },
         { id: 'trace-demo-2', bookId: 'book-dune', text: 'Le désert impose son propre rythme à toutes les décisions.', page: 108, privacy: 'private', createdAt: daysAgo(3), type: 'trace' }
@@ -145,7 +160,8 @@ BT.store = (() => {
         { id: 'notif-3', type: 'salon', title: 'Salon demain', text: 'Lecture calme du jeudi commence demain à 20 h.', date: daysAgo(1), read: true, route: '#community?tab=salons' },
         { id: 'notif-4', type: 'goal', title: 'Régularité', text: 'Vous avez atteint votre objectif quotidien.', date: daysAgo(2), read: true, route: '#home' }
       ],
-      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0 },
+      badges: { unlocked: {} },
+      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, dismissedRecommendationIds: [], libraryView: 'shelf' },
       outbox: [], timeline: [], meta: { initializedAt: nowISO(), updatedAt: nowISO(), simulated: true }
     };
   }
@@ -178,8 +194,12 @@ BT.store = (() => {
     state.profile = { ...base.profile, ...(state.profile || {}), visibility: state.profile?.visibility || 'private' };
     state.books = (state.books || []).map(makeBook);
     state.sessions = Array.isArray(state.sessions) ? state.sessions : [];
+    state.activeSessions = Array.isArray(state.activeSessions) ? state.activeSessions : [];
+    if (state.activeSession && !state.activeSessions.some(session => session.id === state.activeSession.id)) state.activeSessions.push(state.activeSession);
+    state.activeSession = null;
+    state.focusedSessionId = state.activeSessions.some(session => session.id === state.focusedSessionId) ? state.focusedSessionId : (state.activeSessions[0]?.id || null);
     state.traces = Array.isArray(state.traces) ? state.traces : [];
-    state.lexicon = Array.isArray(state.lexicon) ? state.lexicon : [];
+    state.lexicon = (Array.isArray(state.lexicon) ? state.lexicon : []).map(normalizeLexiconEntry);
     state.goals = { ...base.goals, ...(state.goals || {}), week: { ...base.goals.week, ...(state.goals?.week || {}) }, month: { ...base.goals.month, ...(state.goals?.month || {}) }, year: { ...base.goals.year, ...(state.goals?.year || {}) }, celebrated: state.goals?.celebrated || {} };
     const savedCommunity = state.community || {};
     state.community = { ...base.community, ...savedCommunity };
@@ -192,7 +212,8 @@ BT.store = (() => {
     const savedPostIds = new Set(normalizedPosts.map(post => post.id));
     state.community.posts = normalizedPosts.concat(base.community.posts.filter(post => !savedPostIds.has(post.id)));
     state.notifications = Array.isArray(state.notifications) ? state.notifications : base.notifications;
-    state.settings = { ...base.settings, ...(state.settings || {}), notifications: { ...base.settings.notifications, ...(state.settings?.notifications || {}) }, blockedUsers: state.settings?.blockedUsers || [], recentSearches: state.settings?.recentSearches || [] };
+    state.badges = { ...base.badges, ...(state.badges || {}), unlocked: state.badges?.unlocked || {} };
+    state.settings = { ...base.settings, ...(state.settings || {}), notifications: { ...base.settings.notifications, ...(state.settings?.notifications || {}) }, blockedUsers: state.settings?.blockedUsers || [], recentSearches: state.settings?.recentSearches || [], dismissedRecommendationIds: state.settings?.dismissedRecommendationIds || [] };
     state.outbox = Array.isArray(state.outbox) ? state.outbox : [];
     state.timeline = Array.isArray(state.timeline) ? state.timeline : [];
     state.meta = { ...base.meta, ...(state.meta || {}) };
@@ -244,7 +265,7 @@ BT.store = (() => {
 
   function getBooks() { return clone(state.books); }
   function getBookById(id) { const book = state.books.find(item => item.id === id); return book ? clone(book) : null; }
-  function addBook(book) { const record = makeBook(book); if (record.status === 'lu' && !record.completedAt && !record.historicalBeforeJoin) record.completedAt = nowISO(); if (record.status === 'en-cours' && !record.startedAt) record.startedAt = nowISO(); state.books.push(record); if (!state.activeBookId && record.status === 'en-cours') state.activeBookId = record.id; addTimelineEvent('book-added', record.id, `« ${record.title} » ajouté à la bibliothèque`); commit({ queue: 'book.create' }); return clone(record); }
+  function addBook(book) { const record = makeBook(book); if (record.status === 'lu' && !record.completedAt && !record.historicalBeforeJoin) record.completedAt = nowISO(); if (record.status === 'en-cours' && !record.startedAt) record.startedAt = nowISO(); state.books.push(record); if (!state.activeBookId && record.status === 'en-cours') state.activeBookId = record.id; addTimelineEvent(record.libraryState === 'wishlist' ? 'wishlist-added' : 'book-added', record.id, `« ${record.title} » ajouté ${record.libraryState === 'wishlist' ? 'à la wishlist' : 'à la bibliothèque'}`); commit({ queue: 'book.create' }); return clone(record); }
   function updateBook(id, updates) {
     const index = state.books.findIndex(book => book.id === id); if (index < 0) return null;
     const previous = state.books[index]; const next = makeBook({ ...previous, ...updates, id });
@@ -254,11 +275,11 @@ BT.store = (() => {
     if (updates.situation && updates.situation !== previous.situation) addTimelineEvent(`situation-${updates.situation}`, id, `« ${next.title} » : ${situationLabel(updates.situation)}`);
     state.books[index] = next; commit({ queue: 'book.update' }); return clone(next);
   }
-  function deleteBook(id) { state.books = state.books.filter(book => book.id !== id); state.sessions = state.sessions.filter(session => session.bookId !== id); state.traces = state.traces.filter(trace => trace.bookId !== id); state.lexicon = state.lexicon.map(item => item.bookId === id ? { ...item, bookId: null } : item); if (state.activeBookId === id) state.activeBookId = state.books.find(book => book.status === 'en-cours')?.id || null; commit({ queue: 'book.delete' }); }
-  function getCurrentBook() { const active = getBookById(state.activeBookId); return active?.status === 'en-cours' ? active : null; }
-  function setActiveBook(id) { const book = state.books.find(item => item.id === id); if (!book) return null; state.activeBookId = id; book.lastUsedAt = nowISO(); if (book.status !== 'en-cours') { book.status = 'en-cours'; book.startedAt = nowISO(); } commit(); return clone(book); }
+  function deleteBook(id) { state.books = state.books.filter(book => book.id !== id); state.sessions = state.sessions.filter(session => session.bookId !== id); state.activeSessions = state.activeSessions.filter(session => session.bookId !== id); state.traces = state.traces.filter(trace => trace.bookId !== id); state.lexicon = state.lexicon.map(item => item.bookId === id ? { ...item, bookId: null } : item); if (state.activeBookId === id) state.activeBookId = state.books.find(book => book.status === 'en-cours' && book.libraryState === 'library')?.id || null; if (!state.activeSessions.some(session => session.id === state.focusedSessionId)) state.focusedSessionId = state.activeSessions[0]?.id || null; commit({ queue: 'book.delete' }); }
+  function getCurrentBook() { const session = getActiveSession(); const sessionBook = session && state.books.find(book => book.id === session.bookId && book.status === 'en-cours' && book.libraryState === 'library'); if (sessionBook) return clone(sessionBook); const active = state.books.filter(book => book.status === 'en-cours' && book.libraryState === 'library').sort((a, b) => new Date(b.lastUsedAt || b.startedAt || b.addedAt) - new Date(a.lastUsedAt || a.startedAt || a.addedAt))[0]; return active ? clone(active) : null; }
+  function setActiveBook(id) { const book = state.books.find(item => item.id === id && item.libraryState === 'library'); if (!book) return null; state.activeBookId = id; book.lastUsedAt = nowISO(); if (book.status !== 'en-cours') { book.status = 'en-cours'; book.startedAt = nowISO(); } commit(); return clone(book); }
   function setCurrentBook(id) { return setActiveBook(id); }
-  function clearActiveBook(id = null) { if (!state.activeBookId || (id && state.activeBookId !== id) || state.activeSession) return false; state.activeBookId = null; commit(); return true; }
+  function clearActiveBook(id = null) { if (!state.activeBookId || (id && state.activeBookId !== id) || state.activeSessions.length) return false; state.activeBookId = null; commit(); return true; }
   function completeBook(id) { const book = getBookById(id); return book ? updateBook(id, { status: 'lu', currentPage: book.totalPages, completedAt: nowISO() }) : null; }
 
   function getSessions() { return clone(state.sessions); }
@@ -266,7 +287,7 @@ BT.store = (() => {
   function saveSession(session) {
     const record = { id: session.id || uid('session'), manual: Boolean(session.manual), startedAt: session.startedAt || nowISO(), endedAt: session.endedAt || nowISO(), durationSeconds: Math.max(0, Number(session.durationSeconds ?? session.duration) || 0), startPage: Math.max(0, Number(session.startPage) || 0), endPage: Math.max(0, Number(session.endPage) || 0), note: session.note || '', bookId: session.bookId };
     const index = state.sessions.findIndex(item => item.id === record.id); if (index >= 0) state.sessions[index] = record; else state.sessions.push(record);
-    const book = state.books.find(item => item.id === record.bookId); if (book) { book.currentPage = Math.min(book.totalPages || Number.MAX_SAFE_INTEGER, record.endPage); book.lastUsedAt = record.endedAt; if (book.totalPages && book.currentPage >= book.totalPages) { book.status = 'lu'; book.completedAt ||= record.endedAt; } }
+    const book = state.books.find(item => item.id === record.bookId); if (book) { if (book.mediaType === 'audio') book.currentMinute = Math.min(book.durationMinutes || Number.MAX_SAFE_INTEGER, record.endPage); else book.currentPage = Math.min(book.totalPages || Number.MAX_SAFE_INTEGER, record.endPage); book.lastUsedAt = record.endedAt; const completed = book.mediaType === 'audio' ? (book.durationMinutes && book.currentMinute >= book.durationMinutes) : (book.totalPages && book.currentPage >= book.totalPages); if (completed) { book.status = 'lu'; book.completedAt ||= record.endedAt; } }
     addTimelineEvent(record.manual ? 'manual-session' : 'session', record.bookId, `${Math.max(1, Math.round(record.durationSeconds / 60))} min de lecture`); commit({ queue: 'session.save' }); return clone(record);
   }
   function updateSession(id, updates) { const existing = state.sessions.find(item => item.id === id); return existing ? saveSession({ ...existing, ...updates, id }) : null; }
@@ -274,25 +295,30 @@ BT.store = (() => {
   function getTodaySessions() { const today = localDateKey(); return getSessions().filter(session => localDateKey(session.startedAt) === today); }
   function getTodayReadingTime() { return getTodaySessions().reduce((sum, session) => sum + (session.durationSeconds || 0), 0); }
 
-  function getActiveSession() { return state.activeSession ? clone(state.activeSession) : null; }
-  function activeDuration(session = state.activeSession, timestamp = Date.now()) { if (!session) return 0; const running = session.status === 'running' ? Math.max(0, Math.floor((timestamp - new Date(session.resumedAt).getTime()) / 1000)) : 0; return Math.max(0, Number(session.accumulatedSeconds) || 0) + running; }
-  function startActiveSession(bookId) { if (state.activeSession) return getActiveSession(); const book = state.books.find(item => item.id === bookId); if (!book) return null; setActiveBook(bookId); const timestamp = nowISO(); state.activeSession = { id: uid('active'), bookId, startedAt: timestamp, resumedAt: timestamp, lastSeenAt: timestamp, accumulatedSeconds: 0, status: 'running', startPage: book.currentPage, endPage: book.currentPage, note: '', traceDraft: '' }; commit(); return getActiveSession(); }
+  function getActiveSessions() { return clone(state.activeSessions.slice().sort((a, b) => new Date(b.lastSeenAt || b.startedAt) - new Date(a.lastSeenAt || a.startedAt))); }
+  function findActiveSession(id = null) { return state.activeSessions.find(session => session.id === (id || state.focusedSessionId)) || state.activeSessions.find(session => session.status === 'running') || state.activeSessions[0] || null; }
+  function getActiveSession(id = null) { const session = findActiveSession(id); return session ? clone(session) : null; }
+  function getActiveSessionForBook(bookId) { const session = state.activeSessions.find(item => item.bookId === bookId); return session ? clone(session) : null; }
+  function focusActiveSession(id) { if (!state.activeSessions.some(session => session.id === id)) return null; state.focusedSessionId = id; commit(); return getActiveSession(id); }
+  function activeDuration(session = findActiveSession(), timestamp = Date.now()) { if (!session) return 0; const running = session.status === 'running' ? Math.max(0, Math.floor((timestamp - new Date(session.resumedAt).getTime()) / 1000)) : 0; return Math.max(0, Number(session.accumulatedSeconds) || 0) + running; }
+  function pauseOtherRunningSessions(exceptId) { state.activeSessions.forEach(session => { if (session.id !== exceptId && session.status === 'running') { session.accumulatedSeconds = activeDuration(session); session.status = 'paused'; session.pausedAt = nowISO(); session.lastSeenAt = session.pausedAt; } }); }
+  function startActiveSession(bookId) { const existing = state.activeSessions.find(session => session.bookId === bookId); if (existing) { state.focusedSessionId = existing.id; if (existing.status !== 'running') { pauseOtherRunningSessions(existing.id); existing.status = 'running'; existing.resumedAt = nowISO(); existing.lastSeenAt = existing.resumedAt; } commit(); return getActiveSession(existing.id); } const book = state.books.find(item => item.id === bookId && item.libraryState === 'library'); if (!book) return null; setActiveBook(bookId); const timestamp = nowISO(), position = book.mediaType === 'audio' ? book.currentMinute : book.currentPage; const session = { id: uid('active'), bookId, startedAt: timestamp, resumedAt: timestamp, lastSeenAt: timestamp, accumulatedSeconds: 0, status: 'running', startPage: position, endPage: position, note: '', traceDraft: '' }; pauseOtherRunningSessions(session.id); state.activeSessions.push(session); state.focusedSessionId = session.id; commit(); return getActiveSession(session.id); }
   function recoverActiveSession() {
-    const session = state.activeSession; if (!session || session.status !== 'running') return getActiveSession();
+    const session = findActiveSession(); if (!session || session.status !== 'running') return getActiveSession();
     const timestamp = Date.now(); const lastSeen = new Date(session.lastSeenAt || session.resumedAt).getTime();
     if (timestamp - lastSeen > 1800000) { const beforeBackground = Math.max(0, Math.floor((lastSeen - new Date(session.resumedAt).getTime()) / 1000)); session.accumulatedSeconds = (Number(session.accumulatedSeconds) || 0) + beforeBackground + 1800; session.status = 'paused'; session.pausedAt = new Date(lastSeen + 1800000).toISOString(); session.autoPaused = true; addNotification({ type: 'session', title: 'Session mise en pause', text: 'Après 30 minutes en arrière-plan, votre session a été mise en pause automatiquement.', route: '#session' }, false); commit(); }
     return getActiveSession();
   }
-  function heartbeatActiveSession() { if (state.activeSession?.status === 'running') { state.activeSession.lastSeenAt = nowISO(); writeJSON(STATE_KEY, state); } }
-  function updateActiveSession(updates) { if (!state.activeSession) return null; state.activeSession = { ...state.activeSession, ...updates, lastSeenAt: nowISO() }; commit(); return getActiveSession(); }
-  function pauseActiveSession() { const session = state.activeSession; if (!session || session.status !== 'running') return getActiveSession(); session.accumulatedSeconds = activeDuration(session); session.status = 'paused'; session.pausedAt = nowISO(); session.lastSeenAt = nowISO(); commit(); return getActiveSession(); }
-  function resumeActiveSession() { const session = state.activeSession; if (!session || session.status === 'running') return getActiveSession(); session.status = 'running'; session.resumedAt = nowISO(); session.lastSeenAt = session.resumedAt; session.autoPaused = false; commit(); return getActiveSession(); }
-  function finishActiveSession(summary = {}) {
-    const session = state.activeSession; if (!session) return null; const durationSeconds = activeDuration(session);
+  function heartbeatActiveSession() { const session = state.activeSessions.find(item => item.status === 'running'); if (session) { session.lastSeenAt = nowISO(); writeJSON(STATE_KEY, state); } }
+  function updateActiveSession(updates, id = null) { const session = findActiveSession(id); if (!session) return null; Object.assign(session, updates, { lastSeenAt: nowISO() }); state.focusedSessionId = session.id; commit(); return getActiveSession(session.id); }
+  function pauseActiveSession(id = null) { const session = findActiveSession(id); if (!session || session.status !== 'running') return getActiveSession(id); session.accumulatedSeconds = activeDuration(session); session.status = 'paused'; session.pausedAt = nowISO(); session.lastSeenAt = nowISO(); commit(); return getActiveSession(session.id); }
+  function resumeActiveSession(id = null) { const session = findActiveSession(id); if (!session || session.status === 'running') return getActiveSession(id); pauseOtherRunningSessions(session.id); state.focusedSessionId = session.id; session.status = 'running'; session.resumedAt = nowISO(); session.lastSeenAt = session.resumedAt; session.autoPaused = false; commit(); return getActiveSession(session.id); }
+  function finishActiveSession(summary = {}, id = null) {
+    const session = findActiveSession(id); if (!session) return null; const durationSeconds = activeDuration(session);
     const saved = saveSession({ id: uid('session'), bookId: session.bookId, startedAt: session.startedAt, endedAt: nowISO(), durationSeconds, startPage: session.startPage, endPage: summary.endPage ?? session.endPage, note: summary.note ?? session.note });
     if (summary.traceText) saveTrace({ bookId: session.bookId, sessionId: saved.id, text: summary.traceText, page: summary.endPage ?? session.endPage, privacy: summary.share ? 'public' : 'private' });
     if (summary.rating || summary.markRead) updateBook(session.bookId, { rating: Number(summary.rating) || getBookById(session.bookId)?.rating, status: summary.markRead ? 'lu' : getBookById(session.bookId)?.status, completedAt: summary.markRead ? nowISO() : getBookById(session.bookId)?.completedAt });
-    state.activeSession = null; commit(); return saved;
+    state.activeSessions = state.activeSessions.filter(item => item.id !== session.id); state.focusedSessionId = state.activeSessions[0]?.id || null; commit(); return saved;
   }
 
   function getTraces(bookId) { return clone(bookId ? state.traces.filter(trace => trace.bookId === bookId) : state.traces); }
@@ -300,12 +326,35 @@ BT.store = (() => {
   function saveTrace(trace) { const record = { id: trace.id || uid('trace'), bookId: trace.bookId || null, sessionId: trace.sessionId || null, text: String(trace.text || '').trim(), page: Math.max(0, Number(trace.page) || 0), privacy: trace.privacy || 'private', type: trace.type || 'trace', source: trace.source || 'personnel', createdAt: trace.createdAt || nowISO(), updatedAt: nowISO() }; const index = state.traces.findIndex(item => item.id === record.id); if (index >= 0) state.traces[index] = record; else state.traces.unshift(record); addTimelineEvent('trace', record.bookId, 'Nouvelle Trace personnelle'); commit({ queue: 'trace.save' }); return clone(record); }
   function deleteTrace(id) { state.traces = state.traces.filter(trace => trace.id !== id); commit({ queue: 'trace.delete' }); }
   function getLexicon() { return clone(state.lexicon.slice().sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))); }
-  function addLexiconWord(entry) { const book = state.books.find(item => item.id === entry.bookId); const record = { id: entry.id || uid('lex'), word: String(entry.word || '').trim(), definition: String(entry.definition || '').trim(), bookId: entry.bookId || null, bookTitle: entry.bookTitle || book?.title || '', author: entry.author || book?.authors?.join(', ') || '', page: Math.max(0, Number(entry.page) || 0) || null, note: entry.note || '', createdAt: entry.createdAt || nowISO(), updatedAt: nowISO() }; const index = state.lexicon.findIndex(item => item.id === record.id); if (index >= 0) state.lexicon[index] = record; else state.lexicon.unshift(record); addTimelineEvent('lexicon', record.bookId, `« ${record.word} » ajouté au lexique`); commit({ queue: 'lexicon.save' }); return clone(record); }
+  function addLexiconWord(entry) { const book = state.books.find(item => item.id === entry.bookId); const createdAt = entry.createdAt || nowISO(); const existing = state.lexicon.find(item => item.id === entry.id); const record = normalizeLexiconEntry({ id: entry.id || uid('lex'), word: String(entry.word || '').trim(), kind: ['word','expression','citation'].includes(entry.kind) ? entry.kind : 'word', definition: String(entry.definition || '').trim(), sourceLabel: entry.sourceLabel || '', sourceUrl: entry.sourceUrl || '', bookId: entry.bookId || null, bookTitle: entry.bookTitle || book?.title || '', author: entry.author || book?.authors?.join(', ') || '', page: Math.max(0, Number(entry.page) || 0) || null, note: entry.note || '', createdAt:existing?.createdAt || createdAt, updatedAt:nowISO(), reviewSchedule:entry.reviewSchedule || existing?.reviewSchedule || makeReviewSchedule(createdAt), reviewSuccesses:existing?.reviewSuccesses || 0, reviewAttempts:existing?.reviewAttempts || 0, lastReviewedAt:existing?.lastReviewedAt || null }); const index = state.lexicon.findIndex(item => item.id === record.id); if (index >= 0) state.lexicon[index] = record; else state.lexicon.unshift(record); addTimelineEvent('lexicon', record.bookId, `« ${record.word} » ajouté au lexique`); commit({ queue: 'lexicon.save' }); return clone(record); }
+  function reviewLexiconWord(id, recalled = true) {
+    const entry = state.lexicon.find(item => item.id === id); if (!entry) return null;
+    entry.reviewSchedule = Array.isArray(entry.reviewSchedule) && entry.reviewSchedule.length ? entry.reviewSchedule : makeReviewSchedule(entry.createdAt);
+    const now = new Date(), nowValue = now.getTime();
+    let stage = entry.reviewSchedule.find(item => !item.completedAt && new Date(item.dueAt).getTime() <= nowValue) || entry.reviewSchedule.find(item => !item.completedAt);
+    if (!stage) {
+      const randomDays = 7 + Math.floor(Math.random() * 24);
+      stage = { day:`aléatoire-${entry.reviewSchedule.length + 1}`, dueAt:new Date(nowValue + randomDays * 86400000).toISOString(), completedAt:null, attempts:0, random:true };
+      entry.reviewSchedule.push(stage);
+    }
+    entry.reviewAttempts = Math.max(0, Number(entry.reviewAttempts) || 0) + 1;
+    stage.attempts = Math.max(0, Number(stage.attempts) || 0) + 1;
+    if (recalled) {
+      stage.completedAt = now.toISOString();
+      entry.reviewSuccesses = Math.max(0, Number(entry.reviewSuccesses) || 0) + 1;
+      if (!entry.reviewSchedule.some(item => !item.completedAt)) {
+        const randomDays = 7 + Math.floor(Math.random() * 24);
+        entry.reviewSchedule.push({ day:`aléatoire-${entry.reviewSchedule.length + 1}`, dueAt:new Date(nowValue + randomDays * 86400000).toISOString(), completedAt:null, attempts:0, random:true });
+      }
+    } else stage.dueAt = new Date(nowValue + 86400000).toISOString();
+    entry.lastReviewedAt = now.toISOString(); entry.updatedAt = now.toISOString();
+    commit({ queue:'lexicon.review' }); return clone(entry);
+  }
   function deleteLexiconWord(id) { state.lexicon = state.lexicon.filter(item => item.id !== id); commit({ queue: 'lexicon.delete' }); }
 
   function weekStart(date = new Date()) { const result = new Date(date); const day = result.getDay() || 7; result.setHours(0, 0, 0, 0); result.setDate(result.getDate() - day + 1); return result; }
   function currentPeriodKeys() { const current = new Date(); return { week: localDateKey(weekStart(current)), month: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`, year: String(current.getFullYear()) }; }
-  function sessionMinutesByDay() { const map = {}; state.sessions.forEach(session => { const key = localDateKey(session.startedAt); map[key] = (map[key] || 0) + (Number(session.durationSeconds) || 0) / 60; }); if (state.activeSession) map[localDateKey()] = (map[localDateKey()] || 0) + activeDuration() / 60; return map; }
+  function sessionMinutesByDay() { const map = {}; state.sessions.forEach(session => { const key = localDateKey(session.startedAt); map[key] = (map[key] || 0) + (Number(session.durationSeconds) || 0) / 60; }); state.activeSessions.forEach(session => { map[localDateKey()] = (map[localDateKey()] || 0) + activeDuration(session) / 60; }); return map; }
   function getGoalProgress() {
     const keys = currentPeriodKeys(), minutes = sessionMinutesByDay(), start = weekStart();
     const weekDays = Array.from({ length: 7 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); const key = localDateKey(date), value = Math.round(minutes[key] || 0); return { key, label: ['L','M','M','J','V','S','D'][index], minutes: value, target: state.goals.week.dailyMinutes, reached: value >= state.goals.week.dailyMinutes, today: key === localDateKey() }; });
@@ -325,6 +374,7 @@ BT.store = (() => {
   function addComment(postId, text, parentId = null) { const post = state.community.posts.find(item => item.id === postId); if (!post || !String(text).trim()) return null; const comment = { id: uid(parentId ? 'reply' : 'comment'), authorName: state.profile.name, text: String(text).trim(), date: nowISO(), replies: [] }; if (parentId) { const parent = post.comments.find(item => item.id === parentId); if (!parent) return null; parent.replies ||= []; parent.replies.push(comment); } else post.comments.push(comment); commit({ queue: 'community.comment' }); return clone(comment); }
   function addPost(post) { const record = { id: post.id || uid('post'), remoteId: post.remoteId || null, authorId: post.authorId || 'me', authorName: post.authorName || state.profile.name, initials: post.initials || state.profile.name.split(/\s+/).map(item => item[0]).slice(0, 2).join('').toUpperCase(), type: post.type || 'trace', date: post.date || nowISO(), bookTitle: post.bookTitle || '', text: String(post.text || '').trim(), visibility: post.visibility || state.settings.defaultPostVisibility, photoData: post.photoData || null, photoPath: post.photoPath || null, photoUrl: post.photoUrl || null, isRemote: Boolean(post.isRemote), encouraged: Boolean(post.encouraged), encouragements: Number(post.encouragements) || 0, comments: Array.isArray(post.comments) ? post.comments : [] }; const existing = state.community.posts.findIndex(item => item.id === record.id || (record.remoteId && item.remoteId === record.remoteId)); if (existing >= 0) state.community.posts[existing] = { ...state.community.posts[existing], ...record }; else state.community.posts.unshift(record); commit({ queue: 'community.post' }); return clone(record); }
   function mergeRemotePosts(posts) { if (!Array.isArray(posts)) return getCommunity(); posts.forEach(post => addPost({ ...post, isRemote:true })); return getCommunity(); }
+  function mergeRemoteUsers(users) { if (!Array.isArray(users)) return getCommunity(); users.forEach(user => { const index = state.community.users.findIndex(item => item.id === user.id); const record = { ...user, isRemote:true }; if (index >= 0) state.community.users[index] = { ...state.community.users[index], ...record }; else state.community.users.push(record); }); commit(); return getCommunity(); }
   function updateFriend(userId, action) { const user = state.community.users.find(item => item.id === userId); if (!user) return null; user.friendState = ({ send: 'sent', cancel: 'none', accept: 'friend', refuse: 'none', remove: 'none' })[action] || user.friendState; commit({ queue: `friend.${action}` }); return clone(user); }
   function blockUser(userId) { if (!state.settings.blockedUsers.includes(userId)) state.settings.blockedUsers.push(userId); state.community.posts = state.community.posts.filter(post => post.authorId !== userId); const user = state.community.users.find(item => item.id === userId); if (user) user.friendState = 'blocked'; commit({ queue: 'user.block' }); }
   function unblockUser(userId) { state.settings.blockedUsers = state.settings.blockedUsers.filter(id => id !== userId); const user = state.community.users.find(item => item.id === userId); if (user?.friendState === 'blocked') user.friendState = 'none'; commit({ queue: 'user.unblock' }); }
@@ -340,7 +390,38 @@ BT.store = (() => {
   function markNotification(id, read = true) { const item = state.notifications.find(notification => notification.id === id); if (item) item.read = read; commit(); }
   function markAllNotifications() { state.notifications.forEach(notification => { notification.read = true; }); commit(); }
   function getTimeline() { const events = [...state.timeline]; state.books.forEach(book => { const date = book.completedAt || book.startedAt; if (date) events.push({ id: `book-event-${book.id}`, type: book.completedAt ? 'status-lu' : 'status-en-cours', bookId: book.id, label: `« ${book.title} » ${book.completedAt ? 'terminé' : 'commencé'}`, date }); }); state.sessions.forEach(session => { const book = state.books.find(item => item.id === session.bookId); events.push({ id: `timeline-${session.id}`, type: 'session', bookId: session.bookId, label: `${Math.max(1, Math.round(session.durationSeconds / 60))} min avec « ${book?.title || 'un livre'} »`, date: session.startedAt }); }); return clone(events.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 80)); }
-  function getStats() { const totalSeconds = state.sessions.reduce((sum, session) => sum + (Number(session.durationSeconds) || 0), 0) + activeDuration(); const readDates = new Set(state.sessions.map(session => localDateKey(session.startedAt))); let streak = 0; const cursor = new Date(); if (!readDates.has(localDateKey(cursor))) cursor.setDate(cursor.getDate() - 1); while (readDates.has(localDateKey(cursor))) { streak += 1; cursor.setDate(cursor.getDate() - 1); } const progress = getGoalProgress(); return { totalBooks: state.books.length, booksRead: state.books.filter(book => book.status === 'lu').length, booksInProgress: state.books.filter(book => book.status === 'en-cours').length, booksToRead: state.books.filter(book => book.status === 'a-lire').length, booksTransmitted: state.books.filter(book => ['prete','donne'].includes(book.situation)).length, totalHours: Math.floor(totalSeconds / 3600), totalMinutes: Math.round(totalSeconds / 60), totalSessions: state.sessions.length, totalTraces: state.traces.length + state.lexicon.length, streak, booksReadThisYear: progress.year.value, dailyGoalMinutes: state.goals.week.dailyMinutes, todayReadingMinutes: Math.round(getTodayReadingTime() / 60) }; }
+  function getStats() { const libraryBooks = state.books.filter(book => book.libraryState === 'library'); const totalSeconds = state.sessions.reduce((sum, session) => sum + (Number(session.durationSeconds) || 0), 0) + state.activeSessions.reduce((sum, session) => sum + activeDuration(session), 0); const readDates = new Set(state.sessions.map(session => localDateKey(session.startedAt))); let streak = 0; const cursor = new Date(); if (!readDates.has(localDateKey(cursor))) cursor.setDate(cursor.getDate() - 1); while (readDates.has(localDateKey(cursor))) { streak += 1; cursor.setDate(cursor.getDate() - 1); } const progress = getGoalProgress(); return { totalBooks: libraryBooks.length, wishlistBooks: state.books.filter(book => book.libraryState === 'wishlist').length, booksRead: libraryBooks.filter(book => book.status === 'lu').length, booksInProgress: libraryBooks.filter(book => book.status === 'en-cours').length, booksToRead: libraryBooks.filter(book => book.status === 'a-lire').length, booksTransmitted: libraryBooks.filter(book => ['prete','donne'].includes(book.situation)).length, totalHours: Math.floor(totalSeconds / 3600), totalMinutes: Math.round(totalSeconds / 60), totalSessions: state.sessions.length, totalTraces: state.traces.length + state.lexicon.length, streak, booksReadThisYear: progress.year.value, dailyGoalMinutes: state.goals.week.dailyMinutes, todayReadingMinutes: Math.round(getTodayReadingTime() / 60) }; }
+
+  function getBadges() {
+    const progress = getGoalProgress(), libraryBooks = state.books.filter(book => book.libraryState === 'library');
+    const longestSeconds = Math.max(
+      state.sessions.reduce((max, session) => Math.max(max, Number(session.durationSeconds) || 0), 0),
+      state.activeSessions.reduce((max, session) => Math.max(max, activeDuration(session)), 0)
+    );
+    const mediaCount = new Set(libraryBooks.map(book => book.mediaType)).size;
+    const readingDays = [...new Set(state.sessions.map(session => localDateKey(session.startedAt)))].sort();
+    let longestStreak = 0, runningStreak = 0, previousDay = null;
+    readingDays.forEach(key => { const day = new Date(`${key}T12:00:00`); runningStreak = previousDay && Math.round((day - previousDay) / 86400000) === 1 ? runningStreak + 1 : 1; longestStreak = Math.max(longestStreak, runningStreak); previousDay = day; });
+    const completedByMonth = {};
+    libraryBooks.filter(book => book.status === 'lu' && book.completedAt).forEach(book => { const key = String(book.completedAt).slice(0, 7); completedByMonth[key] = (completedByMonth[key] || 0) + 1; });
+    const booksInBestMonth = Math.max(0, ...Object.values(completedByMonth));
+    const definitions = [
+      { id:'first-step', icon:'✦', name:'Premier pas', description:'Première session de lecture terminée.', unlocked:state.sessions.length >= 1 },
+      { id:'between-pages', icon:'Ⅱ', name:'Entre deux pages', description:'Deux lectures En cours en parallèle.', unlocked:libraryBooks.filter(book => book.status === 'en-cours').length >= 2 },
+      { id:'words-path', icon:'Aa', name:'Mot après mot', description:'Dix entrées comprises et ajoutées au lexique.', unlocked:state.lexicon.length >= 10 },
+      { id:'deep-trace', icon:'✎', name:'Trace profonde', description:'Un livre Lu accompagné d’une Trace personnelle.', unlocked:libraryBooks.some(book => book.status === 'lu' && state.traces.some(trace => trace.bookId === book.id)) },
+      { id:'open-curiosity', icon:'◈', name:'Curiosité ouverte', description:'Papier, ebook et audio réunis dans le sentier.', unlocked:mediaCount >= 3 },
+      { id:'long-reading', icon:'◷', name:'Le temps suspendu', description:'Une session personnelle d’au moins une heure.', unlocked:longestSeconds >= 3600 },
+      { id:'goal-day', icon:'1', name:'Journée accomplie', description:'Objectif de lecture du jour atteint.', unlocked:progress.week.todayMinutes >= progress.week.dailyTarget },
+      { id:'goal-week', icon:'7', name:'Semaine accomplie', description:'Objectif principal de la semaine atteint.', unlocked:progress.week.value >= progress.week.target },
+      { id:'goal-month', icon:'M', name:'Mois accompli', description:'Objectif principal du mois atteint.', unlocked:progress.month.value >= progress.month.target },
+      { id:'goal-year', icon:'A', name:'Année accomplie', description:'Objectif principal de l’année atteint.', unlocked:progress.year.value >= progress.year.target }
+    ];
+    let changed = false;
+    definitions.forEach(badge => { if (badge.unlocked && !state.badges.unlocked[badge.id]) { state.badges.unlocked[badge.id] = nowISO(); changed = true; } });
+    if (changed) commit();
+    return { items:clone(definitions.map(badge => ({ ...badge, unlockedAt:state.badges.unlocked[badge.id] || null }))), records:{ longestSessionSeconds:longestSeconds, longestStreakDays:longestStreak, booksInBestMonth } };
+  }
 
   function exportData() { return clone(state); }
   function flushOutbox() { if (typeof navigator !== 'undefined' && navigator.onLine && state.outbox.length) { state.outbox = []; commit(); } }
@@ -352,11 +433,11 @@ BT.store = (() => {
     getState, subscribe, useUser, getOnboarding, saveOnboarding, isOnboardingComplete, getProfile, saveProfile, getSettings, saveSettings,
     getBooks, getBookById, addBook, updateBook, deleteBook, getCurrentBook, setActiveBook, setCurrentBook, clearActiveBook, completeBook,
     getSessions, getSessionsForBook, saveSession, updateSession, deleteSession, getTodaySessions, getTodayReadingTime,
-    getActiveSession, startActiveSession, recoverActiveSession, heartbeatActiveSession, activeDuration, updateActiveSession, pauseActiveSession, resumeActiveSession, finishActiveSession,
-    getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, deleteLexiconWord,
+    getActiveSession, getActiveSessions, getActiveSessionForBook, focusActiveSession, startActiveSession, recoverActiveSession, heartbeatActiveSession, activeDuration, updateActiveSession, pauseActiveSession, resumeActiveSession, finishActiveSession,
+    getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, reviewLexiconWord, deleteLexiconWord,
     getGoal, saveGoal, getGoalProgress, updateGoal, markGoalCelebrated, isGoalCelebrated,
-    getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, updateFriend, blockUser, unblockUser, addGroup, getGroups, toggleClub, updateSalon, addSalon, addSalonMessage,
-    getNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getStats, exportData, flushOutbox, clearAll, loadDemoData,
+    getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, mergeRemoteUsers, updateFriend, blockUser, unblockUser, addGroup, getGroups, toggleClub, updateSalon, addSalon, addSalonMessage,
+    getNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getStats, getBadges, exportData, flushOutbox, clearAll, loadDemoData,
     statusLabel, situationLabel, localDateKey
   };
 })();
