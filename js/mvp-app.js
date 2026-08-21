@@ -10,7 +10,8 @@
     openComments: new Set(), friendQuery: '', lexiconQuery: '', timer: null, heartbeat: null,
     lastFocus: null, pendingCover: '', pendingCoverFile: null, pendingCoverKind: '', bookSuggestions: [],
     pendingPostPhotoUrl: '', searchQuery: '', communityLoaded: false,
-    friendResults: [], friendSearchBusy: false, friendSearchTimer: null
+    friendResults: [], friendSearchBusy: false, friendSearchTimer: null,
+    notificationUnsubscribe: null
   };
 
   const NAV = [
@@ -88,9 +89,14 @@
     if (!location.hash) location.hash = '#home'; else render();
     refreshCommunity({ quiet:true });
     refreshReaders('', { quiet:true });
+    if (user && window.BT.notifications) {
+      store.replaceNotifications([]);
+      refreshNotifications({ quiet:true }).then(startNotificationSubscription);
+    }
     ui.timer = window.setInterval(tickSessionClock, 1000);
     ui.heartbeat = window.setInterval(() => store.heartbeatActiveSession(), 10000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); render(); } });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); refreshNotifications({ quiet:true }); render(); } });
+    window.addEventListener('pagehide', () => ui.notificationUnsubscribe?.(), { once:true });
   }
 
   function bindGlobalEvents() {
@@ -495,7 +501,7 @@
       <section class="section-block"><h2>Compte et préférences</h2><div class="settings-list">
         <details class="setting-card"><summary>Informations du compte</summary><div class="setting-card__body"><p><strong>${esc(profile.email)}</strong></p><p class="small muted">Compte sécurisé et session persistante gérés par Supabase.</p><button class="button button--secondary button--small" type="button" data-action="simulated-password">Changer le mot de passe</button></div></details>
         <details class="setting-card"><summary>Confidentialité et visibilité</summary><div class="setting-card__body"><form class="form-grid" data-form="privacy"><fieldset><legend>Visibilité du profil</legend><label class="checkbox-row"><input type="radio" name="profileVisibility" value="private" ${profile.visibility === 'private' ? 'checked' : ''}><span><strong>Privé</strong><br><span class="muted">Vos détails sont visibles uniquement par vos amis. Recommandé et sélectionné par défaut.</span></span></label><label class="checkbox-row"><input type="radio" name="profileVisibility" value="public" ${profile.visibility === 'public' ? 'checked' : ''}><span><strong>Public</strong><br><span class="muted">Toute la communauté peut consulter le profil.</span></span></label></fieldset><label class="field">Visibilité par défaut des publications<select name="defaultVisibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
-        <details class="setting-card"><summary>Préférences de notifications</summary><div class="setting-card__body"><form class="form-grid" data-form="notification-settings">${Object.entries({ friends:'Amitiés', encouragements:'Encouragements', traces:'Traces et réponses', clubs:'Clubs', salons:'Salons', goals:'Objectifs' }).map(([key,label]) => `<label class="checkbox-row"><input type="checkbox" name="${key}" ${settings.notifications[key] ? 'checked' : ''}> ${label}</label>`).join('')}<label class="checkbox-row"><input type="checkbox" name="remote" ${settings.notifications.remote ? 'checked' : ''} disabled> Notifications distantes <span class="simulated-badge">backend requis</span></label><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
+        <details class="setting-card"><summary>Préférences de notifications</summary><div class="setting-card__body"><form class="form-grid" data-form="notification-settings">${Object.entries({ friends:'Amitiés', encouragements:'Encouragements', traces:'Traces et réponses', clubs:'Clubs', salons:'Salons', goals:'Objectifs' }).map(([key,label]) => `<label class="checkbox-row"><input type="checkbox" name="${key}" ${settings.notifications[key] ? 'checked' : ''}> ${label}</label>`).join('')}<label class="checkbox-row"><input type="checkbox" name="remote" ${settings.notifications.remote ? 'checked' : ''} disabled> Notifications système du téléphone <span class="simulated-badge">prochaine étape</span></label><p class="small muted">Les notifications dans BOO-P sont synchronisées en temps réel. Les alertes sur l’écran verrouillé seront activées séparément.</p><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
         <details class="setting-card"><summary>Utilisateurs bloqués</summary><div class="setting-card__body">${settings.blockedUsers.length ? settings.blockedUsers.map(id => { const user = store.getCommunity().users.find(item => item.id === id); return `<div class="history-item"><div class="history-item__content"><strong>${esc(user?.name || 'Utilisateur')}</strong></div><button class="text-link small" type="button" data-action="unblock-user" data-id="${attr(id)}">Débloquer</button></div>`; }).join('') : '<p class="small muted">Aucun utilisateur bloqué.</p>'}</div></details>
         <details class="setting-card"><summary>Données et aide</summary><div class="setting-card__body"><div class="button-row"><button class="button button--secondary button--small" type="button" data-action="export-data">Exporter mes données</button><button class="button button--secondary button--small" type="button" data-action="help">Aide et signalement</button></div><p class="small muted">L’export est un fichier JSON local. Aucun rapport PDF premium n’est généré dans cette phase.</p></div></details>
       </div></section><section class="danger-zone section-block"><h2>Fin de session et compte</h2><div class="button-row"><button class="button button--secondary" type="button" data-action="logout">Se déconnecter</button><button class="button button--danger" type="button" data-action="delete-account">Supprimer le compte local</button></div></section>`;
@@ -548,12 +554,12 @@
 
   function openNotifications() {
     const dialog = document.getElementById('notifications-dialog'); ui.lastFocus = document.activeElement;
-    renderNotifications(); if (!dialog.open) dialog.showModal();
+    renderNotifications(); refreshNotifications({ quiet:true }); if (!dialog.open) dialog.showModal();
   }
   function renderNotifications() {
     const all = store.getNotifications();
     const items = ui.notificationFilter === 'unread' ? all.filter(item => !item.read) : ui.notificationFilter === 'social' ? all.filter(item => ['friend','trace','encouragement'].includes(item.type)) : all;
-    document.getElementById('notifications-body').innerHTML = `<div class="toolbar"><label class="sr-only" for="notification-filter">Filtrer</label><select id="notification-filter" data-change="notification-filter"><option value="all" ${ui.notificationFilter === 'all' ? 'selected' : ''}>Toutes</option><option value="unread" ${ui.notificationFilter === 'unread' ? 'selected' : ''}>Non lues</option><option value="social" ${ui.notificationFilter === 'social' ? 'selected' : ''}>Communauté</option></select><button class="button button--ghost button--small" type="button" data-action="mark-all-notifications">Tout marquer comme lu</button></div><p class="small muted">Notifications dans l’application. Les notifications distantes nécessitent le backend et les apps mobiles.</p>${items.length ? items.map(item => `<article class="notification-item ${item.read ? '' : 'is-unread'}">${item.read ? '<span class="notification-dot" style="opacity:.2"></span>' : '<span class="notification-dot"></span>'}<div class="card-content"><strong>${esc(item.title)}</strong><p class="small">${esc(item.text)}</p><span class="micro muted">${relativeDate(item.date)}</span><div class="card-actions"><button class="text-link small" type="button" data-action="open-notification" data-id="${attr(item.id)}" data-route="${attr(item.route)}">Ouvrir</button>${!item.read ? `<button class="text-link small" type="button" data-action="mark-notification" data-id="${attr(item.id)}">Marquer comme lue</button>` : ''}</div></div></article>`).join('') : `<div class="empty-state"><h3>Tout est calme</h3><p>Aucune notification dans ce filtre.</p></div>`}`;
+    document.getElementById('notifications-body').innerHTML = `<div class="toolbar"><label class="sr-only" for="notification-filter">Filtrer</label><select id="notification-filter" data-change="notification-filter"><option value="all" ${ui.notificationFilter === 'all' ? 'selected' : ''}>Toutes</option><option value="unread" ${ui.notificationFilter === 'unread' ? 'selected' : ''}>Non lues</option><option value="social" ${ui.notificationFilter === 'social' ? 'selected' : ''}>Communauté</option></select><button class="button button--ghost button--small" type="button" data-action="mark-all-notifications">Tout marquer comme lu</button></div><p class="small muted">Demandes d’amis, Traces et encouragements sont synchronisés avec votre compte BOO-P.</p>${items.length ? items.map(item => `<article class="notification-item ${item.read ? '' : 'is-unread'}">${item.read ? '<span class="notification-dot" style="opacity:.2"></span>' : '<span class="notification-dot"></span>'}<div class="card-content"><strong>${esc(item.title)}</strong><p class="small">${esc(item.text)}</p><span class="micro muted">${relativeDate(item.date)}</span><div class="card-actions"><button class="text-link small" type="button" data-action="open-notification" data-id="${attr(item.id)}" data-route="${attr(item.route)}">Ouvrir</button>${!item.read ? `<button class="text-link small" type="button" data-action="mark-notification" data-id="${attr(item.id)}">Marquer comme lue</button>` : ''}</div></div></article>`).join('') : `<div class="empty-state"><h3>Tout est calme</h3><p>Aucune notification dans ce filtre.</p></div>`}`;
   }
 
   function openTraceDialog(bookId = null) {
@@ -653,9 +659,9 @@
       case 'close-search': closeDialog(document.getElementById('search-dialog')); break;
       case 'open-notifications': openNotifications(); break;
       case 'close-notifications': closeDialog(document.getElementById('notifications-dialog')); break;
-      case 'mark-all-notifications': store.markAllNotifications(); renderNotifications(); updateHeader(); showToast('Toutes les notifications sont lues'); break;
-      case 'mark-notification': store.markNotification(id); renderNotifications(); updateHeader(); break;
-      case 'open-notification': store.markNotification(id); closeDialog(document.getElementById('notifications-dialog')); location.hash = trigger.dataset.route || '#home'; break;
+      case 'mark-all-notifications': await markAllNotificationsRead(); break;
+      case 'mark-notification': await markNotificationRead(id); break;
+      case 'open-notification': await markNotificationRead(id); closeDialog(document.getElementById('notifications-dialog')); location.hash = trigger.dataset.route || '#home'; break;
       case 'recent-search': ui.searchQuery = trigger.dataset.query || ''; document.getElementById('global-search').value = ui.searchQuery; renderSearchResults(ui.searchQuery); break;
       case 'search-navigate': saveRecentSearch(ui.searchQuery); closeDialog(document.getElementById('search-dialog')); location.hash = trigger.dataset.route; break;
       case 'search-add-book': { const query = ui.searchQuery; closeDialog(document.getElementById('search-dialog')); openBookDialog(); setTimeout(() => { document.getElementById('book-title-field').value = query; }, 60); break; }
@@ -833,6 +839,56 @@
       store.mergeRemoteUsers(users);
     } catch (error) { if (!quiet) showToast(error.message || 'La recherche de lecteurs ne répond pas'); }
     finally { ui.friendSearchBusy = false; if (ui.route === 'community' && ui.communityTab === 'friends') render(); }
+  }
+
+  function notificationPreferenceKey(type) {
+    return ({ friend:'friends', trace:'traces', encouragement:'encouragements', club:'clubs', salon:'salons', goal:'goals' })[type] || null;
+  }
+
+  async function refreshNotifications({ quiet = false } = {}) {
+    if (!window.BT.notifications || !window.BT.auth?.isAuthenticated?.()) return;
+    try {
+      const preferences = store.getSettings().notifications;
+      const notifications = (await window.BT.notifications.list()).filter(item => {
+        const key = notificationPreferenceKey(item.type);
+        return !key || preferences[key] !== false;
+      });
+      store.replaceNotifications(notifications);
+      updateHeader();
+      if (document.getElementById('notifications-dialog')?.open) renderNotifications();
+    } catch (error) {
+      if (!quiet) showToast(error.message || 'Les notifications ne peuvent pas être actualisées');
+    }
+  }
+
+  function startNotificationSubscription() {
+    if (!window.BT.notifications || !window.BT.auth?.isAuthenticated?.()) return;
+    try {
+      ui.notificationUnsubscribe = window.BT.notifications.subscribe(payload => {
+        refreshNotifications({ quiet:true });
+        if (payload?.eventType === 'INSERT') {
+          const title = payload.new?.title || 'Nouvelle notification BOO-P';
+          document.getElementById('live-region').textContent = title;
+          if (document.visibilityState === 'visible') showToast(title);
+        }
+      });
+    } catch (error) {
+      console.warn('BOO-P realtime notifications unavailable', error);
+    }
+  }
+
+  async function markNotificationRead(id) {
+    store.markNotification(id);
+    renderNotifications(); updateHeader();
+    try { await window.BT.notifications?.markRead?.(id); }
+    catch (error) { await refreshNotifications({ quiet:true }); showToast(error.message || 'Lecture non synchronisée'); }
+  }
+
+  async function markAllNotificationsRead() {
+    store.markAllNotifications();
+    renderNotifications(); updateHeader();
+    try { await window.BT.notifications?.markAllRead?.(); showToast('Toutes les notifications sont lues'); }
+    catch (error) { await refreshNotifications({ quiet:true }); showToast(error.message || 'Lecture non synchronisée'); }
   }
 
   async function updateFriendRelation(userId, mode) {
@@ -1122,10 +1178,10 @@
     showToast('Confidentialité enregistrée'); render();
   }
 
-  function submitNotificationSettings(form, data) {
+  async function submitNotificationSettings(form, data) {
     const keys = ['friends','encouragements','traces','clubs','salons','goals'];
     const notifications = Object.fromEntries(keys.map(key => [key, data.get(key) === 'on']));
-    notifications.remote = false; store.saveSettings({ notifications }); showToast('Préférences de notifications enregistrées');
+    notifications.remote = false; store.saveSettings({ notifications }); await refreshNotifications({ quiet:true }); showToast('Préférences de notifications enregistrées');
   }
 
   async function submitPost(form, data) {

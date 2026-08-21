@@ -85,7 +85,7 @@
 
   <dialog class="app-dialog app-dialog--notifications" id="notifications-dialog" aria-labelledby="notifications-title">
     <div class="dialog-head">
-      <div><p class="eyebrow">Centre local</p><h2 id="notifications-title">Notifications</h2></div>
+      <div><p class="eyebrow">Centre en temps réel</p><h2 id="notifications-title">Notifications</h2></div>
       <button class="icon-button" type="button" data-action="close-notifications" aria-label="Fermer">×</button>
     </div>
     <div class="dialog-body" id="notifications-body"></div>
@@ -94,12 +94,13 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="sr-only" id="live-region" role="status" aria-live="polite"></div>
 
-  <script src="js/store.js?v=20260821-3"></script>
+  <script src="js/store.js?v=20260821-4"></script>
   <script src="js/community-api.js?v=20260821-3"></script>
+  <script src="js/notifications-api.js?v=20260821-4"></script>
   <script src="js/speech.js?v=20260820-2"></script>
   <script src="js/book-lookup.js?v=20260821-3"></script>
   <script src="js/dictionary.js?v=20260821-3"></script>
-  <script src="js/mvp-app.js?v=20260821-3"></script>
+  <script src="js/mvp-app.js?v=20260821-4"></script>
   <script src="js/pwa.js?v=20260820-1"></script>
 </body>
 </html>

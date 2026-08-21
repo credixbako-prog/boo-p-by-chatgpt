@@ -98,6 +98,29 @@ test('Supabase: photos compressées et couche communautaire chargée', async () 
   await access(path.join(root, 'assets/community/boo-p-reading-moments-sprite-v1.png'));
 });
 
+test('Supabase: notifications sociales privées et temps réel', async () => {
+  const [html, api, app, store, migration, actorIndex, worker] = await Promise.all([
+    read('app.html'), read('js/notifications-api.js'), read('js/mvp-app.js'), read('js/store.js'),
+    read('supabase/migrations/202608210003_realtime_social_notifications.sql'),
+    read('supabase/migrations/202608210004_index_notification_actors.sql'), read('service-worker.js')
+  ]);
+  assert.match(html, /js\/notifications-api\.js/);
+  assert.match(api, /from\('notifications'\)/);
+  assert.match(api, /postgres_changes/);
+  assert.match(api, /recipient_id=eq\./);
+  assert.match(app, /refreshNotifications/);
+  assert.match(app, /markAllNotificationsRead/);
+  assert.match(store, /replaceNotifications/);
+  assert.match(migration, /alter table public\.notifications enable row level security/);
+  assert.match(migration, /notifications_select_own/);
+  assert.match(migration, /boopp_notify_friendship/);
+  assert.match(migration, /boopp_notify_trace/);
+  assert.match(migration, /boopp_notify_encouragement/);
+  assert.match(migration, /supabase_realtime add table public\.notifications/);
+  assert.match(actorIndex, /notifications_actor_idx/);
+  assert.match(worker, /js\/notifications-api\.js/);
+});
+
 test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles', async () => {
   const [html, app, lookup, store] = await Promise.all([
     read('app.html'), read('js/mvp-app.js'), read('js/book-lookup.js'), read('js/store.js')
@@ -170,7 +193,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v5/);
+  assert.match(worker, /boo-p-webapp-v6/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /\['script', 'style', 'worker'\]/);

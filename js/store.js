@@ -154,12 +154,7 @@ BT.store = (() => {
         year: { targetBooks: 12, bookIds: [], floorProgress: 0, history: [{ label: String(year - 1), result: '9/10 livres' }] }, celebrated: {}
       },
       community: demoCommunity(),
-      notifications: [
-        { id: 'notif-1', type: 'friend', title: 'Demande d’amitié', text: 'Inès Martin souhaite rejoindre vos amis.', date: minutesAgo(18), read: false, route: '#community?tab=friends' },
-        { id: 'notif-2', type: 'trace', title: 'Nouvelle Trace', text: 'Clara a répondu à votre Trace sur L’Étranger.', date: minutesAgo(48), read: false, route: '#community?tab=public' },
-        { id: 'notif-3', type: 'salon', title: 'Salon demain', text: 'Lecture calme du jeudi commence demain à 20 h.', date: daysAgo(1), read: true, route: '#community?tab=salons' },
-        { id: 'notif-4', type: 'goal', title: 'Régularité', text: 'Vous avez atteint votre objectif quotidien.', date: daysAgo(2), read: true, route: '#home' }
-      ],
+      notifications: [],
       badges: { unlocked: {} },
       settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, dismissedRecommendationIds: [], libraryView: 'shelf' },
       outbox: [], timeline: [], meta: { initializedAt: nowISO(), updatedAt: nowISO(), simulated: true }
@@ -386,8 +381,9 @@ BT.store = (() => {
   function addSalonMessage(salonId, text) { const salon = state.community.salons.find(item => item.id === salonId); if (!salon || !String(text).trim()) return null; const message = { id: uid('message'), authorName: state.profile.name, text: String(text).trim(), date: nowISO() }; salon.messages.push(message); commit({ queue: 'salon.message' }); return clone(message); }
 
   function getNotifications() { return clone(state.notifications.slice().sort((a, b) => new Date(b.date) - new Date(a.date))); }
+  function replaceNotifications(notifications) { state.notifications = Array.isArray(notifications) ? notifications.map(item => ({ id:String(item.id), type:item.type || 'info', title:item.title || 'Information', text:item.text || '', date:item.date || nowISO(), read:Boolean(item.read), route:item.route || '#home', actorName:item.actorName || '', remote:Boolean(item.remote) })) : []; commit(); return getNotifications(); }
   function addNotification(notification, shouldCommit = true) { state.notifications.unshift({ id: notification.id || uid('notif'), type: notification.type || 'info', title: notification.title || 'Information', text: notification.text || '', date: notification.date || nowISO(), read: Boolean(notification.read), route: notification.route || '#home' }); if (shouldCommit) commit(); }
-  function markNotification(id, read = true) { const item = state.notifications.find(notification => notification.id === id); if (item) item.read = read; commit(); }
+  function markNotification(id, read = true) { const item = state.notifications.find(notification => String(notification.id) === String(id)); if (item) item.read = read; commit(); }
   function markAllNotifications() { state.notifications.forEach(notification => { notification.read = true; }); commit(); }
   function getTimeline() { const events = [...state.timeline]; state.books.forEach(book => { const date = book.completedAt || book.startedAt; if (date) events.push({ id: `book-event-${book.id}`, type: book.completedAt ? 'status-lu' : 'status-en-cours', bookId: book.id, label: `« ${book.title} » ${book.completedAt ? 'terminé' : 'commencé'}`, date }); }); state.sessions.forEach(session => { const book = state.books.find(item => item.id === session.bookId); events.push({ id: `timeline-${session.id}`, type: 'session', bookId: session.bookId, label: `${Math.max(1, Math.round(session.durationSeconds / 60))} min avec « ${book?.title || 'un livre'} »`, date: session.startedAt }); }); return clone(events.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 80)); }
   function getStats() { const libraryBooks = state.books.filter(book => book.libraryState === 'library'); const totalSeconds = state.sessions.reduce((sum, session) => sum + (Number(session.durationSeconds) || 0), 0) + state.activeSessions.reduce((sum, session) => sum + activeDuration(session), 0); const readDates = new Set(state.sessions.map(session => localDateKey(session.startedAt))); let streak = 0; const cursor = new Date(); if (!readDates.has(localDateKey(cursor))) cursor.setDate(cursor.getDate() - 1); while (readDates.has(localDateKey(cursor))) { streak += 1; cursor.setDate(cursor.getDate() - 1); } const progress = getGoalProgress(); return { totalBooks: libraryBooks.length, wishlistBooks: state.books.filter(book => book.libraryState === 'wishlist').length, booksRead: libraryBooks.filter(book => book.status === 'lu').length, booksInProgress: libraryBooks.filter(book => book.status === 'en-cours').length, booksToRead: libraryBooks.filter(book => book.status === 'a-lire').length, booksTransmitted: libraryBooks.filter(book => ['prete','donne'].includes(book.situation)).length, totalHours: Math.floor(totalSeconds / 3600), totalMinutes: Math.round(totalSeconds / 60), totalSessions: state.sessions.length, totalTraces: state.traces.length + state.lexicon.length, streak, booksReadThisYear: progress.year.value, dailyGoalMinutes: state.goals.week.dailyMinutes, todayReadingMinutes: Math.round(getTodayReadingTime() / 60) }; }
@@ -437,7 +433,7 @@ BT.store = (() => {
     getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, reviewLexiconWord, deleteLexiconWord,
     getGoal, saveGoal, getGoalProgress, updateGoal, markGoalCelebrated, isGoalCelebrated,
     getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, mergeRemoteUsers, updateFriend, blockUser, unblockUser, addGroup, getGroups, toggleClub, updateSalon, addSalon, addSalonMessage,
-    getNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getStats, getBadges, exportData, flushOutbox, clearAll, loadDemoData,
+    getNotifications, replaceNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getStats, getBadges, exportData, flushOutbox, clearAll, loadDemoData,
     statusLabel, situationLabel, localDateKey
   };
 })();
