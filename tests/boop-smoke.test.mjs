@@ -78,8 +78,11 @@ test('profil: annuaire réel, amitiés et carnet de badges privés', async () =>
   assert.match(api, /friendships/);
   assert.match(api, /profile_shared_details/);
   assert.match(auth, /ensureDirectory/);
-  assert.match(app, /Carnet de badges/);
   assert.match(app, /plus longue session/);
+  assert.match(app, /Dernier badge/);
+  assert.match(app, /data-action="open-badges"/);
+  assert.match(app, /Tous les badges/);
+  assert.match(app, /À acquérir/);
   assert.match(app, /Profil privé · verrouillé avant acceptation/);
   assert.match(app, /Voir l’aperçu/);
 });
@@ -136,6 +139,7 @@ test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles
   ]);
   assert.match(html, /js\/book-lookup\.js/);
   assert.match(app, /data-form="isbn-lookup"/);
+  assert.match(app, /data-form="book-search"/);
   assert.match(app, /id="book-isbn-field"/);
   assert.match(app, /id="book-genre-field"/);
   assert.match(app, /data-action="analyze-book-cover"/);
@@ -144,14 +148,18 @@ test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles
   assert.doesNotMatch(app, /case 'recognize-cover'/);
   assert.match(lookup, /www\.googleapis\.com\/books\/v1\/volumes/);
   assert.match(lookup, /openlibrary\.org\/api\/books/);
+  assert.match(lookup, /openlibrary\.org\/search\.json/);
   assert.match(lookup, /openlibrary\.org\$\{workKey\}\.json/);
   assert.match(lookup, /info\.categories/);
   assert.match(lookup, /work\?\.subjects/);
   assert.match(lookup, /tesseract\.js@7\.0\.0/);
   assert.match(lookup, /BarcodeDetector/);
+  assert.match(lookup, /@zxing\/browser@0\.2\.1/);
+  assert.match(lookup, /BrowserMultiFormatReader/);
   assert.match(lookup, /COVER_TARGET_BYTES = 360 \* 1024/);
   assert.match(store, /isbn: data\.isbn/);
   await access(path.join(root, 'tests/fixtures/book-cover-ocr.svg'));
+  await access(path.join(root, 'tests/fixtures/book-cover-title-ocr.svg'));
 });
 
 test('ajout de livre: validation ISBN-10 et ISBN-13', async () => {
@@ -163,6 +171,8 @@ test('ajout de livre: validation ISBN-10 et ISBN-13', async () => {
   assert.equal(lookup.isValidISBN('9782070360024'), true);
   assert.equal(lookup.isValidISBN('2070360024'), true);
   assert.equal(lookup.isValidISBN('9782070360023'), false);
+  assert.equal(Array.from(lookup.isbnVariants('2070360024')).join(','), '2070360024,9782070360024');
+  assert.equal(Array.from(lookup.isbnVariants('9782070360024')).join(','), '9782070360024,2070360024');
 });
 
 test('modèle local: plusieurs sessions, un seul chrono et rappels persistants', async () => {
@@ -209,7 +219,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v7/);
+  assert.match(worker, /boo-p-webapp-v8/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /\['script', 'style', 'worker'\]/);

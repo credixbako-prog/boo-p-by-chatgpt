@@ -256,6 +256,15 @@ label { font-size: 12px; font-weight: 600; }
 .personal-records span { display: grid; gap: 2px; padding: 13px; border-radius: 14px; background: var(--boo-paper-2); }
 .personal-records strong { font: 600 1.2rem var(--boo-display); }
 .personal-records small { color: var(--boo-muted); }
+.latest-badge-card { display: grid; grid-template-columns: 76px minmax(0,1fr); max-width: 650px; align-items: center; gap: 15px; padding: 14px 16px; border: 1px solid color-mix(in srgb,var(--boo-ochre) 42%,var(--boo-line)); border-radius: 20px; background: linear-gradient(135deg,color-mix(in srgb,var(--boo-ochre) 8%,var(--boo-paper)),var(--boo-paper)); }
+.latest-badge-card__medal { position: relative; display: grid; width: 68px; height: 68px; place-items: center; border-radius: 50%; background: conic-gradient(var(--boo-ochre) 0 34%,#e9bd73 34% 63%,var(--boo-sage) 63% 86%,var(--boo-navy) 86% 100%); box-shadow: 0 8px 22px color-mix(in srgb,var(--boo-ochre) 24%,transparent); }
+.latest-badge-card__medal::before { position: absolute; width: 52px; height: 52px; border: 3px solid var(--boo-paper); border-radius: 50%; background: var(--boo-navy); content: ''; }
+.latest-badge-card__medal span { position: relative; z-index: 1; color: #fff; font: 700 20px var(--boo-display); }
+.latest-badge-card h3 { margin: 5px 0 2px; font-size: 1.05rem; }
+.latest-badge-card p { margin: 0 0 3px; color: var(--boo-muted); font-size: 11px; }
+.latest-badge-card small { color: var(--boo-muted); font-size: 9px; }
+.latest-badge-card--empty { border-style: dashed; }
+.section-heading--compact { align-items: end; }
 .badge-grid { display: grid; gap: 10px; }
 .reading-badge { display: flex; align-items: center; gap: 12px; min-height: 92px; padding: 13px; border: 1px solid var(--boo-line); border-radius: 16px; background: var(--boo-paper); }
 .reading-badge__icon { display: grid; width: 48px; height: 48px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--boo-paper-2); color: var(--boo-muted); font: 700 18px var(--boo-display); }
@@ -436,6 +445,10 @@ label { font-size: 12px; font-weight: 600; }
 }
 
 @media (max-width: 400px) {
+  .latest-badge-card { grid-template-columns: 60px minmax(0,1fr); gap: 11px; padding: 12px; }
+  .latest-badge-card__medal { width: 56px; height: 56px; }
+  .latest-badge-card__medal::before { width: 42px; height: 42px; }
+  .latest-badge-card__medal span { font-size: 17px; }
   .goal-mini { flex-direction: column; text-align: center; padding: 10px 5px; }
   .goal-mini .progress-ring { width: 46px; height: 46px; }
   .goal-mini .progress-ring::before { width: 35px; height: 35px; }
