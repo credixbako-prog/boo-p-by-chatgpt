@@ -14,7 +14,7 @@ BT.store = (() => {
   let STATE_KEY = LEGACY_STATE_KEY;
   let ONBOARDING_KEY = LEGACY_ONBOARDING_KEY;
   let activeUserId = null;
-  const SCHEMA_VERSION = 7;
+  const SCHEMA_VERSION = 8;
   const listeners = new Set();
 
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -43,6 +43,10 @@ BT.store = (() => {
     'book-sisyphe':'https://covers.openlibrary.org/b/isbn/9782070322886-L.jpg',
     'book-origines':'https://covers.openlibrary.org/b/isbn/9782070117505-L.jpg'
   };
+  const DEFAULT_BOOK_GENRES = {
+    'book-etranger':'Romans', 'book-peste':'Romans', 'book-dune':'Science-fiction',
+    'book-1984':'Science-fiction', 'book-sisyphe':'Philosophie', 'book-origines':'Histoire'
+  };
 
   function readJSON(key, fallback = null) {
     try {
@@ -65,13 +69,15 @@ BT.store = (() => {
     const mediaType = mediaTypes.includes(data.mediaType) ? data.mediaType : (/audio/i.test(data.format || '') ? 'audio' : /num|ebook|epub|kindle/i.test(data.format || '') ? 'ebook' : 'print');
     const durationMinutes = Math.max(0, Number(data.durationMinutes) || 0);
     const currentMinute = Math.min(durationMinutes || Number.MAX_SAFE_INTEGER, Math.max(0, Number(data.currentMinute) || 0));
+    const genreValues = Array.isArray(data.genres) && data.genres.length ? data.genres : [data.genre || DEFAULT_BOOK_GENRES[data.id]];
+    const genres = [...new Set(genreValues.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 8);
     return {
       id: data.id || uid('book'), title: String(data.title || 'Sans titre'),
       authors: Array.isArray(data.authors) ? data.authors : [data.author || 'Auteur inconnu'].filter(Boolean),
       isbn: data.isbn || '', publishedDate: data.publishedDate || '',
       publisher: data.publisher || '', edition: data.edition || '', format: data.format || (mediaType === 'audio' ? 'Livre audio' : mediaType === 'ebook' ? 'Livre numérique' : 'Broché'),
       mediaType, durationMinutes, currentMinute, narrator: data.narrator || '', audioPlatform: data.audioPlatform || '', playbackSpeed: Math.max(.5, Math.min(3, Number(data.playbackSpeed) || 1)),
-      totalPages, currentPage, description: data.description || '',
+      totalPages, currentPage, description: data.description || '', genre: genres[0] || '', genres,
       status: statuses.includes(migratedStatus) ? migratedStatus : 'a-lire',
       libraryState: data.libraryState === 'wishlist' ? 'wishlist' : 'library',
       situation: data.situation || (data.status === 'transmis' ? 'donne' : 'possede'),
@@ -87,12 +93,12 @@ BT.store = (() => {
   function demoBooks() {
     const year = new Date().getFullYear();
     return [
-      makeBook({ id: 'book-etranger', title: 'L’Étranger', author: 'Albert Camus', publisher: 'Gallimard', edition: 'Folio', format: 'Poche', totalPages: 185, currentPage: 78, status: 'en-cours', description: 'À Alger, Meursault traverse les événements avec une étrange distance au monde.', coverColor: 'linear-gradient(145deg,#14243a,#59718d)', startedAt: daysAgo(12), lastUsedAt: minutesAgo(48) }),
-      makeBook({ id: 'book-peste', title: 'La Peste', author: 'Albert Camus', publisher: 'Gallimard', edition: 'Folio', format: 'Poche', totalPages: 308, currentPage: 308, status: 'lu', description: 'La ville d’Oran se ferme sur elle-même face à une épidémie.', coverColor: 'linear-gradient(145deg,#29483c,#86aa93)', completedAt: `${year}-07-18T19:10:00.000Z`, rating: 4 }),
-      makeBook({ id: 'book-dune', title: 'Dune', author: 'Frank Herbert', publisher: 'Robert Laffont', edition: 'Ailleurs et Demain', totalPages: 688, currentPage: 112, status: 'en-cours', situation: 'emprunte', description: 'Sur Arrakis, le destin de Paul Atréides se noue autour de l’Épice.', coverColor: 'linear-gradient(145deg,#6f3f1e,#d49442)', startedAt: daysAgo(26), lastUsedAt: daysAgo(3) }),
-      makeBook({ id: 'book-1984', title: '1984', author: 'George Orwell', publisher: 'Gallimard', edition: 'Du monde entier', format: 'Poche', totalPages: 328, currentPage: 328, status: 'lu', situation: 'donne', description: 'Winston Smith tente de préserver une pensée libre sous le regard de Big Brother.', coverColor: 'linear-gradient(145deg,#5e191c,#c35b4b)', completedAt: `${year}-03-12T20:00:00.000Z`, rating: 5 }),
-      makeBook({ id: 'book-sisyphe', title: 'Le Mythe de Sisyphe', author: 'Albert Camus', publisher: 'Gallimard', edition: 'Folio essais', totalPages: 192, status: 'a-lire', description: 'Un essai sur l’absurde, la révolte et la liberté.', coverColor: 'linear-gradient(145deg,#25211e,#9c6a36)' }),
-      makeBook({ id: 'book-origines', title: 'Les Origines du totalitarisme', author: 'Hannah Arendt', publisher: 'Gallimard', edition: 'Quarto', format: 'Relié', totalPages: 832, currentPage: 214, status: 'en-pause', situation: 'prete', description: 'Une enquête majeure sur l’antisémitisme, l’impérialisme et le totalitarisme.', coverColor: 'linear-gradient(145deg,#1d3135,#66888a)', startedAt: daysAgo(80) })
+      makeBook({ id: 'book-etranger', title: 'L’Étranger', author: 'Albert Camus', genre:'Romans', publisher: 'Gallimard', edition: 'Folio', format: 'Poche', totalPages: 185, currentPage: 78, status: 'en-cours', description: 'À Alger, Meursault traverse les événements avec une étrange distance au monde.', coverColor: 'linear-gradient(145deg,#14243a,#59718d)', startedAt: daysAgo(12), lastUsedAt: minutesAgo(48) }),
+      makeBook({ id: 'book-peste', title: 'La Peste', author: 'Albert Camus', genre:'Romans', publisher: 'Gallimard', edition: 'Folio', format: 'Poche', totalPages: 308, currentPage: 308, status: 'lu', description: 'La ville d’Oran se ferme sur elle-même face à une épidémie.', coverColor: 'linear-gradient(145deg,#29483c,#86aa93)', completedAt: `${year}-07-18T19:10:00.000Z`, rating: 4 }),
+      makeBook({ id: 'book-dune', title: 'Dune', author: 'Frank Herbert', genre:'Science-fiction', publisher: 'Robert Laffont', edition: 'Ailleurs et Demain', totalPages: 688, currentPage: 112, status: 'en-cours', situation: 'emprunte', description: 'Sur Arrakis, le destin de Paul Atréides se noue autour de l’Épice.', coverColor: 'linear-gradient(145deg,#6f3f1e,#d49442)', startedAt: daysAgo(26), lastUsedAt: daysAgo(3) }),
+      makeBook({ id: 'book-1984', title: '1984', author: 'George Orwell', genre:'Science-fiction', publisher: 'Gallimard', edition: 'Du monde entier', format: 'Poche', totalPages: 328, currentPage: 328, status: 'lu', situation: 'donne', description: 'Winston Smith tente de préserver une pensée libre sous le regard de Big Brother.', coverColor: 'linear-gradient(145deg,#5e191c,#c35b4b)', completedAt: `${year}-03-12T20:00:00.000Z`, rating: 5 }),
+      makeBook({ id: 'book-sisyphe', title: 'Le Mythe de Sisyphe', author: 'Albert Camus', genre:'Philosophie', publisher: 'Gallimard', edition: 'Folio essais', totalPages: 192, status: 'a-lire', description: 'Un essai sur l’absurde, la révolte et la liberté.', coverColor: 'linear-gradient(145deg,#25211e,#9c6a36)' }),
+      makeBook({ id: 'book-origines', title: 'Les Origines du totalitarisme', author: 'Hannah Arendt', genre:'Histoire', publisher: 'Gallimard', edition: 'Quarto', format: 'Relié', totalPages: 832, currentPage: 214, status: 'en-pause', situation: 'prete', description: 'Une enquête majeure sur l’antisémitisme, l’impérialisme et le totalitarisme.', coverColor: 'linear-gradient(145deg,#1d3135,#66888a)', startedAt: daysAgo(80) })
     ];
   }
 
@@ -156,7 +162,7 @@ BT.store = (() => {
       community: demoCommunity(),
       notifications: [],
       badges: { unlocked: {} },
-      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, dismissedRecommendationIds: [], libraryView: 'shelf' },
+      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', collapsedLibraryGenres: [] },
       outbox: [], timeline: [], meta: { initializedAt: nowISO(), updatedAt: nowISO(), simulated: true }
     };
   }
@@ -208,7 +214,7 @@ BT.store = (() => {
     state.community.posts = normalizedPosts.concat(base.community.posts.filter(post => !savedPostIds.has(post.id)));
     state.notifications = Array.isArray(state.notifications) ? state.notifications : base.notifications;
     state.badges = { ...base.badges, ...(state.badges || {}), unlocked: state.badges?.unlocked || {} };
-    state.settings = { ...base.settings, ...(state.settings || {}), notifications: { ...base.settings.notifications, ...(state.settings?.notifications || {}) }, blockedUsers: state.settings?.blockedUsers || [], recentSearches: state.settings?.recentSearches || [], dismissedRecommendationIds: state.settings?.dismissedRecommendationIds || [] };
+    state.settings = { ...base.settings, ...(state.settings || {}), notifications: { ...base.settings.notifications, ...(state.settings?.notifications || {}) }, blockedUsers: state.settings?.blockedUsers || [], recentSearches: state.settings?.recentSearches || [], dismissedRecommendationIds: state.settings?.dismissedRecommendationIds || [], collapsedLibraryGenres:state.settings?.collapsedLibraryGenres || [] };
     state.outbox = Array.isArray(state.outbox) ? state.outbox : [];
     state.timeline = Array.isArray(state.timeline) ? state.timeline : [];
     state.meta = { ...base.meta, ...(state.meta || {}) };

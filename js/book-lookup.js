@@ -56,11 +56,32 @@
     return String(value || '').replace(/^http:/, 'https:').replace('&edge=curl', '');
   }
 
+  function normalizeGenre(value) {
+    const original = String(value?.name || value || '').replace(/\s+/g, ' ').trim();
+    const clean = original.toLowerCase();
+    const mappings = [
+      [/science.?fiction|sci.?fi/, 'Science-fiction'], [/fantasy|fantastique/, 'Fantasy et fantastique'],
+      [/mystery|detective|crime|thriller|policier/, 'Policier et thriller'], [/romance|love stories/, 'Romance'],
+      [/poetry|poésie/, 'Poésie'], [/philosoph/, 'Philosophie'], [/history|histoire/, 'Histoire'],
+      [/biograph|autobiograph|memoir/, 'Biographies et mémoires'], [/religion|spiritual|bible/, 'Religion et spiritualité'],
+      [/comic|graphic novel|bande dessinée|manga/, 'Bande dessinée et manga'], [/juvenile|young adult|children|jeunesse/, 'Jeunesse'],
+      [/social science|sociolog|psycholog/, 'Sciences humaines'], [/science|technology|computer/, 'Sciences et technologies'],
+      [/travel|voyage/, 'Voyage'], [/self.help|personal growth|développement personnel/, 'Développement personnel'],
+      [/business|economics|économie/, 'Économie et société'], [/fiction|roman|literature/, 'Romans']
+    ];
+    return mappings.find(([pattern]) => pattern.test(clean))?.[1] || original.split(/[\/;,]/)[0].trim();
+  }
+
+  function normalizeGenres(values = []) {
+    return [...new Set((Array.isArray(values) ? values : [values]).map(normalizeGenre).filter(Boolean))].slice(0, 8);
+  }
+
   function mapGoogleVolume(item) {
     const info = item?.volumeInfo || {};
     const identifiers = Array.isArray(info.industryIdentifiers) ? info.industryIdentifiers : [];
     const isbn13 = identifiers.find(identifier => identifier.type === 'ISBN_13')?.identifier;
     const isbn10 = identifiers.find(identifier => identifier.type === 'ISBN_10')?.identifier;
+    const genres = normalizeGenres(info.categories || []);
     return {
       source: 'Google Books', sourceId: item?.id || '',
       isbn: normalizeISBN(isbn13 || isbn10 || ''),
@@ -70,7 +91,7 @@
       publishedDate: String(info.publishedDate || '').trim(),
       edition: '', format: info.printType === 'MAGAZINE' ? 'Magazine' : 'Livre',
       totalPages: Math.max(0, Number(info.pageCount) || 0),
-      description: String(info.description || '').trim(),
+      description: String(info.description || '').trim(), genre:genres[0] || '', genres,
       coverUrl: secureCoverUrl(info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || '')
     };
   }
@@ -79,13 +100,14 @@
     const authors = Array.isArray(item?.authors) ? item.authors.map(author => author?.name).filter(Boolean) : [];
     const publishers = Array.isArray(item?.publishers) ? item.publishers.map(publisher => publisher?.name).filter(Boolean) : [];
     const coverUrl = item?.cover?.large || item?.cover?.medium || item?.cover?.small || '';
+    const genres = normalizeGenres(item?.subjects || []);
     return {
       source: 'Open Library', sourceId: item?.key || '', isbn: normalizeISBN(isbn),
       workKey: item?.works?.[0]?.key || '',
       title: String(item?.title || '').trim(), authors,
       publisher: publishers[0] || '', publishedDate: String(item?.publish_date || '').trim(),
       edition: '', format: 'Livre', totalPages: Math.max(0, Number(item?.number_of_pages) || 0),
-      description: '', coverUrl: secureCoverUrl(coverUrl)
+      description: '', genre:genres[0] || '', genres, coverUrl: secureCoverUrl(coverUrl)
     };
   }
 
@@ -134,10 +156,12 @@
       if (!workKey) return { ...item, coverUrl };
       const work = await fetchJSON(`https://openlibrary.org${workKey}.json`);
       const workCover = work?.covers?.find(value => Number(value) > 0);
+      const workGenres = normalizeGenres(work?.subjects || []);
       return {
         ...item,
         workKey,
         description: openLibraryDescription(work?.description) || item.description,
+        genre:item.genre || workGenres[0] || '', genres:item.genres?.length ? item.genres : workGenres,
         coverUrl: coverUrl || (workCover ? `https://covers.openlibrary.org/b/id/${workCover}-L.jpg` : '')
       };
     } catch { return { ...item, workKey, coverUrl }; }
@@ -164,6 +188,8 @@
           publishedDate: item.publishedDate || fallback.publishedDate,
           totalPages: item.totalPages || fallback.totalPages,
           description: item.description || fallback.description,
+          genre:item.genre || fallback.genre,
+          genres:item.genres?.length ? item.genres : fallback.genres,
           coverUrl: item.coverUrl || fallback.coverUrl
         }));
         return enrichDescriptions(google);
@@ -191,6 +217,8 @@
           description: closest.description || item.description,
           publisher: item.publisher || closest.publisher,
           totalPages: item.totalPages || closest.totalPages,
+          genre:item.genre || closest.genre,
+          genres:item.genres?.length ? item.genres : closest.genres,
           coverUrl: item.coverUrl || closest.coverUrl
         } : item;
       } catch { return item; }

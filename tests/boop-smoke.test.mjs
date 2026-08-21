@@ -36,15 +36,24 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.match(app, /data-action="wishlist-recommendation"/);
   assert.match(app, /data-action="dismiss-recommendation"/);
   assert.match(app, /class="bookcase"/);
+  assert.match(app, /class="genre-shelf"/);
+  assert.match(app, /class="physical-shelf"/);
+  assert.match(app, /class="book-spine"/);
+  assert.match(app, /data-change="library-sort"/);
   assert.match(app, /Suggestions BOO-P · prototype local/);
   assert.match(store, /post-10/);
   assert.match(store, /activeSessions/);
   assert.match(store, /pauseOtherRunningSessions/);
   assert.match(store, /libraryState/);
   assert.match(store, /mediaType/);
+  assert.match(store, /collapsedLibraryGenres/);
+  assert.match(store, /genre: genres\[0\]/);
   assert.match(css, /\.memory-list \{ display: grid; gap:/);
+  assert.match(css, /\.book-spine span/);
+  assert.match(css, /writing-mode: vertical-rl/);
   assert.doesNotMatch(css, /\.memory-list \{[^}]*overflow-y: auto/);
   assert.doesNotMatch(css, /\.public-feed \{[^}]*overflow-y: auto/);
+  assert.doesNotMatch(css, /\.physical-shelf \{[^}]*overflow-y: auto/);
 });
 
 test('lexique: dictionnaire, questions ciblées et répétition espacée', async () => {
@@ -128,6 +137,7 @@ test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles
   assert.match(html, /js\/book-lookup\.js/);
   assert.match(app, /data-form="isbn-lookup"/);
   assert.match(app, /id="book-isbn-field"/);
+  assert.match(app, /id="book-genre-field"/);
   assert.match(app, /data-action="analyze-book-cover"/);
   assert.match(app, /Saisie manuelle ou correction/);
   assert.doesNotMatch(app, /reconnaissance de couverture est simulée/i);
@@ -135,6 +145,8 @@ test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles
   assert.match(lookup, /www\.googleapis\.com\/books\/v1\/volumes/);
   assert.match(lookup, /openlibrary\.org\/api\/books/);
   assert.match(lookup, /openlibrary\.org\$\{workKey\}\.json/);
+  assert.match(lookup, /info\.categories/);
+  assert.match(lookup, /work\?\.subjects/);
   assert.match(lookup, /tesseract\.js@7\.0\.0/);
   assert.match(lookup, /BarcodeDetector/);
   assert.match(lookup, /COVER_TARGET_BYTES = 360 \* 1024/);
@@ -177,6 +189,10 @@ test('modèle local: plusieurs sessions, un seul chrono et rappels persistants',
   const reviewed = store.reviewLexiconWord('lex-1', true);
   assert.ok(reviewed.reviewSchedule[0].completedAt);
   assert.equal(reviewed.reviewSchedule.find(stage => !stage.completedAt).day, 3);
+  const shelved = store.addBook({ title:'Un essai rangé', author:'Lectrice test', genre:'Essais' });
+  assert.equal(shelved.genre, 'Essais');
+  store.saveSettings({ collapsedLibraryGenres:['essais'] });
+  assert.equal(store.getSettings().collapsedLibraryGenres.join(','), 'essais');
   assert.match(memory.get('boop_mvp_v5'), /reviewSuccesses/);
 });
 
@@ -193,7 +209,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v6/);
+  assert.match(worker, /boo-p-webapp-v7/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /\['script', 'style', 'worker'\]/);
