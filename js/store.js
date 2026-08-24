@@ -14,7 +14,7 @@ BT.store = (() => {
   let STATE_KEY = LEGACY_STATE_KEY;
   let ONBOARDING_KEY = LEGACY_ONBOARDING_KEY;
   let activeUserId = null;
-  const SCHEMA_VERSION = 8;
+  const SCHEMA_VERSION = 9;
   const listeners = new Set();
 
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -155,9 +155,9 @@ BT.store = (() => {
         { id: 'lex-3', word: 'Prescience', definition: 'Perception possible de futurs encore ouverts.', bookId: 'book-dune', bookTitle: 'Dune', author: 'Frank Herbert', page: 96, note: '', createdAt: daysAgo(7), updatedAt: daysAgo(7) }
       ],
       goals: {
-        week: { dailyMinutes: 20, daysTarget: 4, bookIds: [], floorProgress: 0, history: [{ label: 'Semaine précédente', result: '3/4 jours' }] },
-        month: { targetBooks: 2, bookIds: [], floorProgress: 0, history: [{ label: 'Mois précédent', result: '1/2 livre' }] },
-        year: { targetBooks: 12, bookIds: [], floorProgress: 0, history: [{ label: String(year - 1), result: '9/10 livres' }] }, celebrated: {}
+        week: { dailyMinutes: 20, daysTarget: 4, bookIds: [], history: [{ label: 'Semaine précédente', result: '3/4 jours' }] },
+        month: { targetBooks: 2, bookIds: [], history: [{ label: 'Mois précédent', result: '1/2 livre' }] },
+        year: { targetBooks: 12, bookIds: [], history: [{ label: String(year - 1), result: '9/10 livres' }] }, celebrated: {}
       },
       community: demoCommunity(),
       notifications: [],
@@ -362,11 +362,19 @@ BT.store = (() => {
     const completed = state.books.filter(book => book.status === 'lu' && book.completedAt && !book.historicalBeforeJoin);
     const filterBooks = (period, goal) => completed.filter(book => { if (goal.bookIds?.length && !goal.bookIds.includes(book.id)) return false; const date = new Date(book.completedAt); return period === 'month' ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === keys.month : String(date.getFullYear()) === keys.year; });
     const daysReached = weekDays.filter(day => day.reached).length, monthBooks = filterBooks('month', state.goals.month), yearBooks = filterBooks('year', state.goals.year);
-    return { keys, week: { days: weekDays, value: Math.max(daysReached, state.goals.week.floorProgress || 0), target: state.goals.week.daysTarget, todayMinutes: weekDays.find(day => day.today)?.minutes || 0, dailyTarget: state.goals.week.dailyMinutes }, month: { value: Math.max(monthBooks.length, state.goals.month.floorProgress || 0), target: state.goals.month.targetBooks, bookIds: monthBooks.map(book => book.id) }, year: { value: Math.max(yearBooks.length, state.goals.year.floorProgress || 0), target: state.goals.year.targetBooks, bookIds: yearBooks.map(book => book.id) } };
+    return { keys, week: { days: weekDays, value: daysReached, target: state.goals.week.daysTarget, todayMinutes: weekDays.find(day => day.today)?.minutes || 0, dailyTarget: state.goals.week.dailyMinutes }, month: { value: monthBooks.length, target: state.goals.month.targetBooks, bookIds: monthBooks.map(book => book.id) }, year: { value: yearBooks.length, target: state.goals.year.targetBooks, bookIds: yearBooks.map(book => book.id) } };
   }
   function getGoal() { const progress = getGoalProgress(); return { dailyMinutes: state.goals.week.dailyMinutes, streak: getStats().streak, streakDays: progress.week.days.map(day => day.reached), ...clone(state.goals) }; }
   function saveGoal(goal) { if (goal.dailyMinutes) state.goals.week.dailyMinutes = Number(goal.dailyMinutes); commit(); return getGoal(); }
-  function updateGoal(period, updates) { const progress = getGoalProgress()[period]; if (!state.goals[period]) return null; state.goals[period].floorProgress = Math.max(Number(state.goals[period].floorProgress) || 0, progress.value || 0); state.goals[period] = { ...state.goals[period], ...updates }; commit({ queue: 'goal.update' }); return clone(state.goals[period]); }
+  function updateGoal(period, updates) {
+    if (!state.goals[period]) return null;
+    state.goals[period] = { ...state.goals[period], ...updates };
+    delete state.goals[period].floorProgress;
+    const keys = currentPeriodKeys(), progress = getGoalProgress()[period];
+    if (progress.value < progress.target) delete state.goals.celebrated[`${period}:${keys[period]}`];
+    commit({ queue: 'goal.update' });
+    return clone(state.goals[period]);
+  }
   function markGoalCelebrated(period) { const keys = currentPeriodKeys(); state.goals.celebrated[`${period}:${keys[period]}`] = true; commit(); }
   function isGoalCelebrated(period) { const keys = currentPeriodKeys(); return Boolean(state.goals.celebrated[`${period}:${keys[period]}`]); }
 

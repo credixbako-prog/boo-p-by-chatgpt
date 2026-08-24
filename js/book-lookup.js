@@ -5,6 +5,7 @@
   const GOOGLE_BOOKS_ENDPOINT = 'https://www.googleapis.com/books/v1/volumes';
   const OPEN_LIBRARY_ENDPOINT = 'https://openlibrary.org/api/books';
   const OPEN_LIBRARY_SEARCH_ENDPOINT = 'https://openlibrary.org/search.json';
+  const ISBN_FALLBACK_FUNCTION = 'isbn-fallback';
   const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
   const ZXING_CDN = 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
   const COVER_MAX_EDGE = 1200;
@@ -62,6 +63,16 @@
     const isbn = normalizeISBN(value);
     const converted = isbn.length === 10 ? isbn10To13(isbn) : isbn13To10(isbn);
     return [...new Set([isbn, converted].filter(isValidISBN))];
+  }
+
+  function externalISBNLinks(value) {
+    const isbn = normalizeISBN(value);
+    if (!isValidISBN(isbn)) return [];
+    const encoded = encodeURIComponent(isbn);
+    return [
+      { id:'chasse-aux-livres', label:'Chasse aux Livres', url:`https://www.chasse-aux-livres.fr/search?query=${encoded}&catalog=fr` },
+      { id:'nicebooks', label:'NiceBooks', url:`https://nicebooks.com/fr/search/isbn?isbn=${encoded}` }
+    ];
   }
 
   function plainText(value) {
@@ -236,6 +247,32 @@
     return deduplicate((payload?.docs || []).map(item => mapOpenLibrarySearchDoc(item, isbn ? clean : '')));
   }
 
+  function mapFallbackBook(item, requestedISBN) {
+    const source = String(item?.source || '').trim();
+    const sourceId = String(item?.sourceId || item?.sourceUrl || '').trim();
+    const genres = normalizeGenres(item?.genres || item?.genre || []);
+    return {
+      source: source || 'Catalogue partenaire', sourceId,
+      isbn: normalizeISBN(item?.isbn || requestedISBN),
+      title: plainText(item?.title),
+      authors: Array.isArray(item?.authors) ? item.authors.map(plainText).filter(Boolean) : [],
+      publisher: plainText(item?.publisher), publishedDate: plainText(item?.publishedDate),
+      edition: plainText(item?.edition), format: plainText(item?.format) || 'Livre',
+      totalPages: Math.max(0, Number(item?.totalPages) || 0),
+      description: plainText(item?.description), descriptionSource: plainText(item?.descriptionSource),
+      genre: genres[0] || '', genres, coverUrl: secureCoverUrl(item?.coverUrl)
+    };
+  }
+
+  async function searchISBNFallback(value) {
+    const isbn = normalizeISBN(value);
+    const client = window.BT?.auth?.getClient?.();
+    if (!client?.functions?.invoke) return [];
+    const { data, error } = await client.functions.invoke(ISBN_FALLBACK_FUNCTION, { body:{ isbn } });
+    if (error) throw new Error('Le catalogue ISBN de secours est momentanément indisponible.');
+    return deduplicate((Array.isArray(data?.books) ? data.books : []).map(item => mapFallbackBook(item, isbn)));
+  }
+
   function openLibraryDescription(value) {
     const text = typeof value === 'string' ? value : String(value?.value || '');
     return text.replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim();
@@ -285,8 +322,14 @@
           results = deduplicate(fallbacks.flatMap(outcome => outcome.status === 'fulfilled' ? outcome.value : []));
         }
       }
+      let fallbackFailure = null;
+      if (!results.length) {
+        try { results = await searchISBNFallback(isbn); }
+        catch (error) { fallbackFailure = error; }
+      }
       if (results.length) return enrichDescriptions(results);
       const failure = outcomes.find(outcome => outcome.status === 'rejected')?.reason;
+      if (fallbackFailure && outcomes.every(outcome => outcome.status === 'rejected')) throw fallbackFailure;
       if (failure && outcomes.every(outcome => outcome.status === 'rejected')) throw failure;
       return [];
     })();
@@ -548,7 +591,7 @@
 
   window.BT = window.BT || {};
   window.BT.bookLookup = {
-    analyzeCover, isbnVariants, isValidISBN, lookupISBN, normalizeISBN, prepareCover, searchBooks,
-    constants: { GOOGLE_BOOKS_ENDPOINT, OPEN_LIBRARY_ENDPOINT, OPEN_LIBRARY_SEARCH_ENDPOINT, TESSERACT_CDN, ZXING_CDN, ANALYSIS_MAX_EDGE }
+    analyzeCover, externalISBNLinks, isbnVariants, isValidISBN, lookupISBN, normalizeISBN, prepareCover, searchBooks,
+    constants: { GOOGLE_BOOKS_ENDPOINT, OPEN_LIBRARY_ENDPOINT, OPEN_LIBRARY_SEARCH_ENDPOINT, ISBN_FALLBACK_FUNCTION, TESSERACT_CDN, ZXING_CDN, ANALYSIS_MAX_EDGE }
   };
 })();

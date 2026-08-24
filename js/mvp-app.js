@@ -11,7 +11,8 @@
     lastFocus: null, pendingCover: '', pendingCoverFile: null, pendingCoverKind: '', bookSuggestions: [],
     pendingPostPhotoUrl: '', searchQuery: '', communityLoaded: false,
     friendResults: [], friendSearchBusy: false, friendSearchTimer: null,
-    notificationUnsubscribe: null
+    catalogRecommendations: [], recommendationsBusy: false, currentRecommendations: [],
+    monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null
   };
 
   const NAV = [
@@ -36,10 +37,22 @@
     'Amis lisant dans un parc', 'Lecture du soir près d’une lampe'
   ];
   const RECOMMENDATIONS = [
-    { id:'rec-nausee', title:'La Nausée', authors:['Jean-Paul Sartre'], genre:'Romans', totalPages:256, status:'a-lire', coverUrl:'https://covers.openlibrary.org/b/isbn/9782070368051-L.jpg', coverColor:'linear-gradient(145deg,#3b2d28,#a56c43)', reason:'Pour prolonger une réflexion romanesque sur l’existence et le regard.' },
-    { id:'rec-tartares', title:'Le Désert des Tartares', authors:['Dino Buzzati'], genre:'Romans', totalPages:320, status:'a-lire', coverUrl:'https://covers.openlibrary.org/b/isbn/9782264032270-L.jpg', coverColor:'linear-gradient(145deg,#3c4747,#a48e65)', reason:'Un roman lent et magnétique sur l’attente, le temps et les choix.' },
-    { id:'rec-main-gauche', title:'La Main gauche de la nuit', authors:['Ursula K. Le Guin'], genre:'Science-fiction', totalPages:352, status:'a-lire', coverUrl:'https://covers.openlibrary.org/b/isbn/9782253073277-L.jpg', coverColor:'linear-gradient(145deg,#26364d,#8daab3)', reason:'Une science-fiction profondément humaine sur l’altérité et les sociétés.' },
-    { id:'rec-chambre-soi', title:'Une chambre à soi', authors:['Virginia Woolf'], genre:'Essais', totalPages:192, status:'a-lire', coverUrl:'https://covers.openlibrary.org/b/isbn/9782264060495-L.jpg', coverColor:'linear-gradient(145deg,#593c4f,#c8999a)', reason:'Un essai vif sur la création, l’indépendance et la place des voix.' }
+    { id:'rec-nausee', isbn:'9782070368051', title:'La Nausée', authors:['Jean-Paul Sartre'], genre:'Romans', totalPages:256, status:'a-lire', coverUrl:'https://covers.openlibrary.org/b/isbn/9782070368051-L.jpg', coverColor:'linear-gradient(145deg,#3b2d28,#a56c43)', reason:'Pour prolonger une réflexion romanesque sur l’existence et le regard.' },
+    { id:'rec-tartares', isbn:'9782264032270', title:'Le Désert des Tartares', authors:['Dino Buzzati'], genre:'Romans', totalPages:320, status:'a-lire', coverUrl:'https://covers.openlibrary.org/b/isbn/9782264032270-L.jpg', coverColor:'linear-gradient(145deg,#3c4747,#a48e65)', reason:'Un roman lent et magnétique sur l’attente, le temps et les choix.' },
+    { id:'rec-main-gauche', isbn:'9782253073277', title:'La Main gauche de la nuit', authors:['Ursula K. Le Guin'], genre:'Science-fiction', totalPages:352, status:'a-lire', coverUrl:'https://covers.openlibrary.org/b/isbn/9782253073277-L.jpg', coverColor:'linear-gradient(145deg,#26364d,#8daab3)', reason:'Une science-fiction profondément humaine sur l’altérité et les sociétés.' },
+    { id:'rec-chambre-soi', isbn:'9782264060495', title:'Une chambre à soi', authors:['Virginia Woolf'], genre:'Essais', totalPages:192, status:'a-lire', coverUrl:'https://covers.openlibrary.org/b/isbn/9782264060495-L.jpg', coverColor:'linear-gradient(145deg,#593c4f,#c8999a)', reason:'Un essai vif sur la création, l’indépendance et la place des voix.' },
+    { id:'rec-fahrenheit', title:'Fahrenheit 451', authors:['Ray Bradbury'], genre:'Science-fiction', totalPages:224, status:'a-lire', coverColor:'linear-gradient(145deg,#512724,#d27b45)', reason:'Une dystopie brève où les livres deviennent un espace de résistance.' },
+    { id:'rec-klara', title:'Klara et le Soleil', authors:['Kazuo Ishiguro'], genre:'Science-fiction', totalPages:384, status:'a-lire', coverColor:'linear-gradient(145deg,#6f3e2d,#e1a262)', reason:'Un regard délicat sur l’humanité, la mémoire et la technologie.' },
+    { id:'rec-hadrien', title:'Mémoires d’Hadrien', authors:['Marguerite Yourcenar'], genre:'Romans', totalPages:368, status:'a-lire', coverColor:'linear-gradient(145deg,#424443,#aa9b7d)', reason:'Une voix intérieure ample pour suivre le pouvoir, le temps et la transmission.' },
+    { id:'rec-vivre', title:'Vivre', authors:['Yu Hua'], genre:'Romans', totalPages:240, status:'a-lire', coverColor:'linear-gradient(145deg,#603323,#bc7653)', reason:'Un récit épuré sur la dignité et ce qui demeure quand tout vacille.' },
+    { id:'rec-sapiens', title:'Sapiens', authors:['Yuval Noah Harari'], genre:'Histoire', totalPages:544, status:'a-lire', coverColor:'linear-gradient(145deg,#594536,#b99765)', reason:'Une vaste synthèse pour relier histoire, sociétés et récits collectifs.' },
+    { id:'rec-annie-ernaux', title:'Les Années', authors:['Annie Ernaux'], genre:'Biographies et mémoires', totalPages:256, status:'a-lire', coverColor:'linear-gradient(145deg,#4f3e42,#b08e8e)', reason:'Une mémoire intime qui devient le portrait sensible d’une époque.' },
+    { id:'rec-bell-hooks', title:'À propos d’amour', authors:['bell hooks'], genre:'Essais', totalPages:288, status:'a-lire', coverColor:'linear-gradient(145deg,#6b3a4b,#ca8da0)', reason:'Un essai accessible pour penser le soin, les liens et la responsabilité.' },
+    { id:'rec-silence', title:'Le Silence de la mer', authors:['Vercors'], genre:'Romans', totalPages:128, status:'a-lire', coverColor:'linear-gradient(145deg,#263d4a,#7195a3)', reason:'Un texte court et dense sur la résistance, l’écoute et les non-dits.' },
+    { id:'rec-temps', title:'L’Ordre du temps', authors:['Carlo Rovelli'], genre:'Sciences et technologies', totalPages:208, status:'a-lire', coverColor:'linear-gradient(145deg,#25394b,#7896ad)', reason:'Une promenade limpide entre physique, perception et expérience du temps.' },
+    { id:'rec-prophetie', title:'La Parabole du semeur', authors:['Octavia E. Butler'], genre:'Science-fiction', totalPages:480, status:'a-lire', coverColor:'linear-gradient(145deg,#513228,#c17b50)', reason:'Une anticipation lucide sur l’adaptation, la communauté et l’espoir.' },
+    { id:'rec-poetique', title:'Une poétique de la relation', authors:['Édouard Glissant'], genre:'Essais', totalPages:256, status:'a-lire', coverColor:'linear-gradient(145deg,#24474b,#71a099)', reason:'Une pensée ouverte des identités, des langues et des mondes en relation.' },
+    { id:'rec-piranese', title:'Piranèse', authors:['Susanna Clarke'], genre:'Fantasy et fantastique', totalPages:272, status:'a-lire', coverColor:'linear-gradient(145deg,#344952,#9bb0a5)', reason:'Un labyrinthe élégant, contemplatif et porté par le pouvoir des traces.' }
   ];
 
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[char]);
@@ -475,12 +488,46 @@
     store.saveSettings({ collapsedLibraryGenres:[...collapsed] });
   }
 
-  function renderRecommendations() {
+  function recommendationProfile() {
+    const books = store.getBooks().filter(book => book.libraryState === 'library');
+    const count = values => values.reduce((map, value) => { const key = String(value || '').trim(); if (key) map.set(key, (map.get(key) || 0) + 1); return map; }, new Map());
+    const genres = count(books.flatMap(book => book.genres?.length ? book.genres : [book.genre]));
+    const authors = count(books.flatMap(book => book.authors || []));
+    const ranked = map => [...map.entries()].sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr')).map(([name]) => name);
+    return { books, genres, authors, topGenres:ranked(genres), topAuthors:ranked(authors) };
+  }
+
+  function recommendationHash(value) {
+    let hash = 17; for (const character of String(value || '')) hash = ((hash << 5) - hash + character.charCodeAt(0)) | 0;
+    return Math.abs(hash);
+  }
+
+  function recommendationCandidates() {
     const owned = new Set(store.getBooks().map(book => normalize(book.title)));
     const dismissed = new Set(store.getSettings().dismissedRecommendationIds || []);
-    const suggestions = RECOMMENDATIONS.filter(book => !owned.has(normalize(book.title)) && !dismissed.has(book.id));
-    if (!suggestions.length) return '';
-    return `<section class="section-block recommendations" aria-labelledby="recommendations-title"><div class="section-heading"><div><p class="eyebrow">Suggestions BOO-P · prototype local</p><h2 id="recommendations-title">À découvrir</h2><p class="small muted">Une sélection éditoriale générale, non premium et non personnalisée.</p></div></div><div class="recommendation-grid">${suggestions.map(book => `<article class="card recommendation-card">${cover(book)}<div><h3>${esc(book.title)}</h3><p class="small muted">${esc(book.authors.join(', '))}</p><p class="small">${esc(book.reason)}</p><div class="card-actions"><button class="button button--secondary button--small" type="button" data-action="wishlist-recommendation" data-id="${attr(book.id)}">♡ Wishlist</button><button class="button button--ghost button--small" type="button" data-action="dismiss-recommendation" data-id="${attr(book.id)}">Pas pour moi</button></div></div></article>`).join('')}</div></section>`;
+    const merged = new Map();
+    [...ui.catalogRecommendations, ...RECOMMENDATIONS].forEach(book => {
+      const key = normalize(`${book.title}|${book.authors?.[0] || ''}`);
+      if (key && !merged.has(key)) merged.set(key, book);
+    });
+    return [...merged.values()].filter(book => !owned.has(normalize(book.title)) && !dismissed.has(book.id));
+  }
+
+  function selectRecommendations(limit = 4) {
+    const profile = recommendationProfile(), settings = store.getSettings(), seed = Number(settings.recommendationRefreshSeed) || 0;
+    const suggestions = recommendationCandidates().sort((a,b) => {
+      const score = book => (profile.genres.get(book.genre) || 0) * 20 + (book.authors || []).reduce((sum, author) => sum + (profile.authors.get(author) || 0) * 12, 0) + (book.catalogResult ? 8 : 0) + ((recommendationHash(book.id) + seed * 37) % 17);
+      return score(b) - score(a);
+    }).slice(0, limit);
+    ui.currentRecommendations = suggestions;
+    return { suggestions, profile };
+  }
+
+  function renderRecommendations() {
+    const { suggestions, profile } = selectRecommendations();
+    const tastes = profile.topGenres.slice(0, 2).join(' et ');
+    const explanation = tastes ? `Sélection recalculée à partir de vos rayons ${tastes}.` : 'Sélection de départ, affinée dès que votre bibliothèque grandit.';
+    return `<section class="section-block recommendations" aria-labelledby="recommendations-title"><div class="section-heading"><div><p class="eyebrow">Suggestions BOO-P · analyse locale</p><h2 id="recommendations-title">À découvrir</h2><p class="small muted">${esc(explanation)} Un rejet ou un ajout affiche immédiatement une autre proposition.</p></div><button class="button button--secondary button--small" type="button" data-action="refresh-recommendations" ${ui.recommendationsBusy ? 'disabled aria-busy="true"' : ''}>${ui.recommendationsBusy ? 'Analyse…' : '↻ Actualiser'}</button></div>${suggestions.length ? `<div class="recommendation-grid">${suggestions.map(book => `<article class="card recommendation-card">${cover(book)}<div><h3>${esc(book.title)}</h3><p class="small muted">${esc((book.authors || []).join(', '))}</p><p class="small">${esc(book.reason)}</p><div class="card-actions"><button class="button button--secondary button--small" type="button" data-action="wishlist-recommendation" data-id="${attr(book.id)}">♡ Wishlist</button><button class="button button--ghost button--small" type="button" data-action="dismiss-recommendation" data-id="${attr(book.id)}">Pas pour moi</button></div></div></article>`).join('')}</div>` : '<div class="empty-state"><h3>Votre sélection est à jour</h3><p>Lancez une nouvelle analyse pour interroger les catalogues publics à partir de votre bibliothèque.</p></div>'}</section>`;
   }
 
   function renderTrail() {
@@ -500,7 +547,8 @@
       ${goalCard('week','Cette semaine',`${progress.week.value}/${progress.week.target} jours`,`Lire ${state.week.dailyMinutes} min par jour`,pct(progress.week.value,progress.week.target),state.week.history)}
       ${goalCard('month','Ce mois',`${progress.month.value}/${progress.month.target} livres`,'Livres terminés sur le mois civil',pct(progress.month.value,progress.month.target),state.month.history)}
       ${goalCard('year','Cette année',`${progress.year.value}/${progress.year.target} livres`,'Lectures terminées cette année',pct(progress.year.value,progress.year.target),state.year.history)}
-    </div><p class="small muted section-block">Les lectures marquées « Lu avant mon inscription » sans date de fin ne comptent pas dans l’objectif annuel. Modifier un seuil conserve la progression acquise.</p>`;
+    </div><p class="small muted section-block">Les lectures marquées « Lu avant mon inscription » sans date de fin ne comptent pas. La progression se recalcule immédiatement selon les livres sélectionnés et leur date de fin.</p>
+    <section class="card monthly-report-cta section-block" aria-labelledby="monthly-report-title"><div><p class="eyebrow">Image 1080 × 1350 · prête à publier</p><h2 id="monthly-report-title">Votre mois de lecture, en un regard</h2><p class="small muted">Livres lus, temps de lecture, mots, expressions et citations. Avant la création, vous choisissez si vos notes personnelles peuvent apparaître.</p></div><button class="button button--primary" type="button" data-action="open-monthly-report">Créer le rapport mensuel</button></section>`;
   }
 
   function goalCard(period, title, value, description, progress, history) {
@@ -639,14 +687,21 @@
       <form class="form-grid" data-form="book"><input type="hidden" name="id" value="${attr(book?.id || '')}"><input type="hidden" name="coverUrl" id="book-cover-value" value="${attr(book?.coverUrl || '')}"><input type="hidden" name="coverSource" id="book-cover-source" value="${attr(ui.pendingCoverKind)}"><div class="field-row"><label class="field">Destination<select name="libraryState"><option value="library" ${book?.libraryState !== 'wishlist' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${book?.libraryState === 'wishlist' ? 'selected' : ''}>Ma wishlist</option></select></label><label class="field">Support<select name="mediaType" data-change="book-media"><option value="print" ${book?.mediaType !== 'ebook' && book?.mediaType !== 'audio' ? 'selected' : ''}>Livre papier</option><option value="ebook" ${book?.mediaType === 'ebook' ? 'selected' : ''}>Livre numérique</option><option value="audio" ${book?.mediaType === 'audio' ? 'selected' : ''}>Livre audio</option></select></label></div><div class="field-row"><label class="field">Titre<input id="book-title-field" name="title" required value="${attr(book?.title || '')}" placeholder="Titre du livre"></label><label class="field">Auteur(s)<input id="book-authors-field" name="authors" required value="${attr(book?.authors.join(', ') || '')}" placeholder="Prénom Nom, autre auteur"></label></div><label class="field">Rayon littéraire<input id="book-genre-field" name="genre" list="book-genres" value="${attr(book?.genre || '')}" placeholder="Ex. Romans, Science-fiction…"><datalist id="book-genres"><option value="Romans"><option value="Essais"><option value="Science-fiction"><option value="Fantasy et fantastique"><option value="Policier et thriller"><option value="Philosophie"><option value="Histoire"><option value="Poésie"><option value="Biographies et mémoires"><option value="Sciences humaines"><option value="Jeunesse"><option value="Bande dessinée et manga"><option value="À classer"></datalist><span class="field-help">Proposé automatiquement par le catalogue et toujours modifiable.</span></label><div class="field-row"><label class="field">ISBN<input id="book-isbn-field" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" value="${attr(book?.isbn || '')}" placeholder="ISBN-10 ou ISBN-13"></label><label class="field">Date de publication<input id="book-published-field" name="publishedDate" value="${attr(book?.publishedDate || '')}" placeholder="Ex. 2024"></label></div><div class="field-row"><label class="field">Éditeur<input id="book-publisher-field" name="publisher" value="${attr(book?.publisher || '')}"></label><label class="field">Édition<input id="book-edition-field" name="edition" value="${attr(book?.edition || '')}"></label></div><div class="field-row" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}><label class="field">Format<input id="book-format-field" name="format" value="${attr(book?.format || 'Broché')}"></label><label class="field">Nombre de pages<input id="book-pages-field" type="number" min="0" name="totalPages" value="${book?.totalPages || ''}"></label></div><fieldset class="audio-book-fields" data-audio-fields ${book?.mediaType === 'audio' ? '' : 'hidden'}><legend>Informations du livre audio</legend><div class="field-row"><label class="field">Durée totale (minutes)<input type="number" min="0" name="durationMinutes" value="${book?.durationMinutes || ''}"></label><label class="field">Minute atteinte<input type="number" min="0" name="currentMinute" value="${book?.currentMinute || 0}"></label></div><div class="field-row"><label class="field">Narrateur ou narratrice<input name="narrator" value="${attr(book?.narrator || '')}"></label><label class="field">Plateforme ou source<input name="audioPlatform" value="${attr(book?.audioPlatform || '')}" placeholder="Audible, CD, bibliothèque…"></label></div></fieldset><label class="field">Résumé<textarea id="book-description-field" name="description">${esc(book?.description || '')}</textarea></label><div class="field-row"><label class="field">Statut<select name="status">${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${book?.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Situation<select name="situation">${Object.entries(SITUATION_LABELS).map(([value,label]) => `<option value="${value}" ${book?.situation === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><div class="field-row"><label class="field" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}>Page atteinte<input type="number" min="0" name="currentPage" value="${book?.currentPage || 0}"></label><label class="checkbox-row"><input type="checkbox" name="historicalBeforeJoin" ${book?.historicalBeforeJoin ? 'checked' : ''}> Lu avant mon inscription (sans date annuelle)</label></div><p class="small muted">Vous pouvez toujours compléter ou corriger les informations avant l’ajout.</p><button class="button button--primary" type="submit">${editing ? 'Enregistrer le livre' : 'Ajouter à BOO-P'}</button></form>` });
   }
 
-  function renderBookLookupResults(suggestions, message = '') {
+  function externalISBNFallback(isbn) {
+    const links = window.BT.bookLookup.externalISBNLinks(isbn);
+    if (!links.length) return '';
+    return `<aside class="external-isbn-search section-block" aria-label="Recherche ISBN élargie"><div><strong>Recherche élargie</strong><p class="small muted">Ces comparateurs trouvent souvent les éditions absentes des catalogues publics. La recherche ISBN est déjà préremplie.</p></div><div class="button-row">${links.map(link => `<a class="button button--secondary button--small" href="${attr(link.url)}" target="_blank" rel="noopener noreferrer">Voir sur ${esc(link.label)} ↗</a>`).join('')}</div></aside>`;
+  }
+
+  function renderBookLookupResults(suggestions, message = '', isbn = '') {
     const container = document.getElementById('book-lookup-results'); if (!container) return;
     ui.bookSuggestions = Array.isArray(suggestions) ? suggestions : [];
+    const external = externalISBNFallback(isbn);
     if (!ui.bookSuggestions.length) {
-      container.innerHTML = `<div class="book-lookup-empty section-block"><strong>Aucune édition trouvée</strong><p class="small muted">${esc(message || 'Vérifiez le numéro ou saisissez les informations manuellement ci-dessous.')}</p></div>`;
+      container.innerHTML = `<div class="book-lookup-empty section-block"><strong>Aucune édition trouvée dans Google Books ou Open Library</strong><p class="small muted">${esc(message || 'Vérifiez le numéro ou saisissez les informations manuellement ci-dessous.')}</p></div>${external}`;
       return;
     }
-    container.innerHTML = `<div class="success-panel section-block"><strong>${ui.bookSuggestions.length} édition${ui.bookSuggestions.length > 1 ? 's' : ''} trouvée${ui.bookSuggestions.length > 1 ? 's' : ''}</strong><p class="small">Choisissez la bonne édition, puis vérifiez les champs préremplis.${ui.pendingCover ? ' Votre photo restera disponible comme couverture personnalisée.' : ''}</p></div><div class="book-lookup-results section-block">${ui.bookSuggestions.map((item,index) => { const resultCover = item.coverUrl || ui.pendingCover; return `<button class="recognition-result" type="button" data-action="pick-book-result" data-index="${index}">${resultCover ? `<span class="book-cover book-cover--small"><img src="${attr(resultCover)}" alt="Couverture de ${attr(item.title)}" loading="lazy"></span>` : `<span class="book-cover book-cover--small" style="background:${gradientFor(item.title)}"><span>${esc(item.title)}</span></span>`}<span class="card-content"><strong>${esc(item.title)}</strong><span class="small muted">${esc((item.authors || []).join(', ') || 'Auteur non renseigné')}${item.publisher ? ` · ${esc(item.publisher)}` : ''}${item.totalPages ? ` · ${item.totalPages} pages` : ''}</span><span class="micro muted">${esc(item.isbn ? `ISBN ${item.isbn} · ` : '')}${esc(item.source || 'Catalogues publics')}${item.description ? ` · résumé ${esc(item.descriptionSource || 'disponible')}` : ' · résumé non fourni'}${!item.coverUrl && ui.pendingCover ? ' · votre photo' : ''}</span></span></button>`; }).join('')}</div>`;
+    container.innerHTML = `<div class="success-panel section-block"><strong>${ui.bookSuggestions.length} édition${ui.bookSuggestions.length > 1 ? 's' : ''} trouvée${ui.bookSuggestions.length > 1 ? 's' : ''}</strong><p class="small">Choisissez la bonne édition, puis vérifiez les champs préremplis.${ui.pendingCover ? ' Votre photo restera disponible comme couverture personnalisée.' : ''}</p></div><div class="book-lookup-results section-block">${ui.bookSuggestions.map((item,index) => { const resultCover = item.coverUrl || ui.pendingCover; return `<button class="recognition-result" type="button" data-action="pick-book-result" data-index="${index}">${resultCover ? `<span class="book-cover book-cover--small"><img src="${attr(resultCover)}" alt="Couverture de ${attr(item.title)}" loading="lazy"></span>` : `<span class="book-cover book-cover--small" style="background:${gradientFor(item.title)}"><span>${esc(item.title)}</span></span>`}<span class="card-content"><strong>${esc(item.title)}</strong><span class="small muted">${esc((item.authors || []).join(', ') || 'Auteur non renseigné')}${item.publisher ? ` · ${esc(item.publisher)}` : ''}${item.totalPages ? ` · ${item.totalPages} pages` : ''}</span><span class="micro muted">${esc(item.isbn ? `ISBN ${item.isbn} · ` : '')}${esc(item.source || 'Catalogues publics')}${item.description ? ` · résumé ${esc(item.descriptionSource || 'disponible')}` : ' · résumé non fourni'}${!item.coverUrl && ui.pendingCover ? ' · votre photo' : ''}</span></span></button>`; }).join('')}</div>${external}`;
   }
 
   function openLexiconDialog(entry = null, bookId = null) {
@@ -671,9 +726,54 @@
   }
 
   function openGoalDialog(period) {
-    const goals = store.getState().goals, goal = goals[period], books = store.getBooks();
+    const goals = store.getState().goals, goal = goals[period], books = store.getBooks().filter(book => book.libraryState === 'library');
     const labels = { week:'Cette semaine', month:'Ce mois', year:'Cette année' };
-    openDialog({ title: `Objectif · ${labels[period]}`, eyebrow: 'Un seul objectif principal', body: `<form class="form-grid" data-form="goal" data-period="${period}">${period === 'week' ? `<div class="field-row"><label class="field">Minutes par jour<input type="number" name="dailyMinutes" min="5" max="240" step="5" value="${goal.dailyMinutes}"></label><label class="field">Nombre de jours à atteindre<input type="number" name="daysTarget" min="1" max="7" value="${goal.daysTarget}"></label></div>` : `<label class="field">Livres à terminer<input type="number" name="targetBooks" min="1" max="100" value="${goal.targetBooks}"></label>`}<fieldset><legend>Livres concernés</legend><label class="checkbox-row"><input type="checkbox" name="allBooks" ${!goal.bookIds.length ? 'checked' : ''}> Tous les livres</label><div class="form-grid">${books.map(book => `<label class="checkbox-row"><input type="checkbox" name="bookIds" value="${attr(book.id)}" ${goal.bookIds.includes(book.id) ? 'checked' : ''}> ${esc(book.title)}</label>`).join('')}</div></fieldset><p class="small muted">Aucun objectif en pages. La progression déjà acquise sera conservée si le seuil change.</p><button class="button button--primary" type="submit">Enregistrer l’objectif</button></form>` });
+    openDialog({ title: `Objectif · ${labels[period]}`, eyebrow: 'Un seul objectif principal', body: `<form class="form-grid" data-form="goal" data-period="${period}">${period === 'week' ? `<div class="field-row"><label class="field">Minutes par jour<input type="number" name="dailyMinutes" min="5" max="240" step="5" value="${goal.dailyMinutes}"></label><label class="field">Nombre de jours à atteindre<input type="number" name="daysTarget" min="1" max="7" value="${goal.daysTarget}"></label></div>` : `<label class="field">Livres à terminer<input type="number" name="targetBooks" min="1" max="100" value="${goal.targetBooks}"></label>`}<fieldset><legend>Livres concernés</legend><label class="checkbox-row"><input type="checkbox" name="allBooks" data-change="goal-all-books" ${!goal.bookIds.length ? 'checked' : ''}> Tous les livres</label><div class="form-grid">${books.map(book => `<label class="checkbox-row"><input type="checkbox" name="bookIds" data-change="goal-book" value="${attr(book.id)}" ${goal.bookIds.includes(book.id) ? 'checked' : ''}> ${esc(book.title)}</label>`).join('')}</div></fieldset><p class="small muted">Choisir un titre désactive automatiquement « Tous les livres ». Après l’enregistrement, la progression est recalculée à partir des livres choisis.</p><button class="button button--primary" type="submit">Enregistrer l’objectif</button></form>` });
+  }
+
+  function monthlyReportOptions(selected = window.BT.monthlyReport.normalizeMonthKey()) {
+    const options = [];
+    for (let index = 0; index < 12; index += 1) {
+      const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - index);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      options.push(`<option value="${key}" ${key === selected ? 'selected' : ''}>${esc(window.BT.monthlyReport.monthLabel(key))}</option>`);
+    }
+    return options.join('');
+  }
+
+  function openMonthlyReportDialog(monthKey = window.BT.monthlyReport.normalizeMonthKey()) {
+    const includeNotes = Boolean(ui.monthlyReportData?.includePersonalNotes);
+    openDialog({ title:'Rapport mensuel', eyebrow:'Image privée créée sur cet appareil', wide:true, body:`<form class="form-grid" data-form="monthly-report"><label class="field">Mois du rapport<select name="monthKey">${monthlyReportOptions(monthKey)}</select></label><fieldset><legend>Notes personnelles</legend><label class="checkbox-row"><input type="checkbox" name="includePersonalNotes" ${includeNotes ? 'checked' : ''}> Inclure un court extrait de mes Traces et notes de session</label><p class="small muted">Si cette option reste décochée, seules les statistiques, les livres et les entrées du lexique apparaissent. Aucune donnée n’est envoyée : l’image est générée localement.</p></fieldset><div class="report-format-note"><span aria-hidden="true">▣</span><div><strong>Format portrait 4:5</strong><p class="small muted">1080 × 1350 px, adapté au fil Instagram et au partage depuis un téléphone.</p></div></div><button class="button button--primary" type="submit">Générer mon image</button></form>` });
+  }
+
+  async function submitMonthlyReport(form, data) {
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true; submit.textContent = 'Création de l’image…';
+    try {
+      ui.monthlyReportData = window.BT.monthlyReport.buildData(store.getState(), data.get('monthKey'), data.get('includePersonalNotes') === 'on');
+      ui.monthlyReportCanvas = await window.BT.monthlyReport.render(ui.monthlyReportData);
+      ui.monthlyReportCanvas.className = 'monthly-report-preview';
+      ui.monthlyReportCanvas.setAttribute('role', 'img');
+      ui.monthlyReportCanvas.setAttribute('aria-label', `Rapport de lecture de ${ui.monthlyReportData.label}`);
+      const body = document.getElementById('dialog-body');
+      body.innerHTML = `<div class="report-preview-wrap" id="monthly-report-preview-host"></div><p class="small muted">Relisez l’image avant de la publier. Le bouton Partager ouvre la feuille de partage de votre téléphone lorsque le navigateur le permet.</p><div class="button-row report-actions"><button class="button button--primary" type="button" data-action="share-monthly-report">Partager l’image</button><button class="button button--secondary" type="button" data-action="download-monthly-report">Télécharger le PNG</button><button class="button button--ghost" type="button" data-action="edit-monthly-report">Modifier les options</button></div>`;
+      document.getElementById('monthly-report-preview-host').appendChild(ui.monthlyReportCanvas);
+      showToast('Rapport mensuel prêt à être publié');
+    } catch (error) { submit.disabled = false; submit.textContent = 'Générer mon image'; showToast(error.message || 'Le rapport ne peut pas être créé sur cet appareil'); }
+  }
+
+  async function downloadMonthlyReport() {
+    if (!ui.monthlyReportCanvas || !ui.monthlyReportData) return;
+    await window.BT.monthlyReport.download(ui.monthlyReportCanvas, ui.monthlyReportData);
+    showToast('Rapport PNG téléchargé');
+  }
+
+  async function shareMonthlyReport() {
+    if (!ui.monthlyReportCanvas || !ui.monthlyReportData) return;
+    try {
+      const shared = await window.BT.monthlyReport.share(ui.monthlyReportCanvas, ui.monthlyReportData);
+      if (shared) showToast('Feuille de partage ouverte');
+      else { await downloadMonthlyReport(); showToast('Partage direct indisponible · image téléchargée'); }
+    } catch (error) { if (error?.name !== 'AbortError') showToast(error.message || 'Partage interrompu'); }
   }
 
   function openProfileDialog() {
@@ -745,6 +845,7 @@
       case 'open-book': location.hash = `#book?id=${encodeURIComponent(id)}`; break;
       case 'add-book': openBookDialog(); break;
       case 'library-view': store.saveSettings({ libraryView: trigger.dataset.view }); render(); break;
+      case 'refresh-recommendations': await refreshRecommendations(); break;
       case 'wishlist-recommendation': addRecommendationToWishlist(id); break;
       case 'dismiss-recommendation': dismissRecommendation(id); break;
       case 'move-to-library': store.updateBook(id, { libraryState:'library' }); showToast('Livre ajouté à votre bibliothèque'); render(); break;
@@ -760,6 +861,10 @@
       case 'delete-lexicon': if (confirm('Supprimer cette entrée du lexique ?')) { store.deleteLexiconWord(id); showToast('Entrée supprimée'); render(); } break;
       case 'dictionary-lookup': await lookupDictionary(trigger); break;
       case 'edit-goal': openGoalDialog(trigger.dataset.period); break;
+      case 'open-monthly-report': openMonthlyReportDialog(); break;
+      case 'download-monthly-report': await downloadMonthlyReport(); break;
+      case 'share-monthly-report': await shareMonthlyReport(); break;
+      case 'edit-monthly-report': openMonthlyReportDialog(ui.monthlyReportData?.monthKey); break;
       case 'edit-profile': openProfileDialog(); break;
       case 'edit-adn': openAdnDialog(); break;
       case 'open-badges': openBadgesDialog(); break;
@@ -780,6 +885,14 @@
       case 'focus-session': store.focusActiveSession(control.value); render(); break;
       case 'library-status': ui.libraryStatus = control.value; render(); break;
       case 'library-sort': store.saveSettings({ librarySort:control.value }); render(); break;
+      case 'goal-all-books':
+        if (control.checked) control.closest('form')?.querySelectorAll('input[name="bookIds"]').forEach(input => { input.checked = false; });
+        break;
+      case 'goal-book': {
+        const form = control.closest('form'), selected = form?.querySelectorAll('input[name="bookIds"]:checked').length || 0;
+        const allBooks = form?.querySelector('input[name="allBooks"]'); if (allBooks) allBooks.checked = selected === 0;
+        break;
+      }
       case 'book-media':
         document.querySelector('[data-audio-fields]')?.toggleAttribute('hidden', control.value !== 'audio');
         document.querySelectorAll('[data-page-fields]').forEach(group => group.toggleAttribute('hidden', control.value === 'audio'));
@@ -817,7 +930,7 @@
     const data = new FormData(form), kind = form.dataset.form;
     const handlers = {
       trace: submitTrace, 'manual-session': submitManualSession, 'isbn-lookup': submitISBNLookup, 'book-search':submitBookSearch, book: submitBook, lexicon: submitLexicon,
-      goal: submitGoal, profile: submitProfile, adn: submitAdn, 'finish-session': submitFinishSession,
+      goal: submitGoal, 'monthly-report':submitMonthlyReport, profile: submitProfile, adn: submitAdn, 'finish-session': submitFinishSession,
       comment: submitComment, privacy: submitPrivacy, 'notification-settings': submitNotificationSettings,
       post: submitPost, club: submitClub, 'salon-message': submitSalonMessage, reply: submitReply,
       salon: submitSalon,
@@ -961,18 +1074,53 @@
     } catch (error) { showToast(error.message || 'Encouragement non enregistré'); }
   }
 
+  async function refreshRecommendations() {
+    if (ui.recommendationsBusy) return;
+    ui.recommendationsBusy = true; render();
+    const profile = recommendationProfile();
+    const searches = [
+      profile.topAuthors[0] ? { query:`inauthor:"${profile.topAuthors[0]}"`, kind:'author', value:profile.topAuthors[0] } : null,
+      profile.topGenres[0] ? { query:`subject:"${profile.topGenres[0]}"`, kind:'genre', value:profile.topGenres[0] } : null,
+      profile.topAuthors[1] ? { query:`inauthor:"${profile.topAuthors[1]}"`, kind:'author', value:profile.topAuthors[1] } : null
+    ].filter(Boolean).slice(0, 2);
+    try {
+      const activeSearches = searches.length ? searches : [{ query:'subject:"Romans"', kind:'genre', value:'Romans' }];
+      const outcomes = await Promise.allSettled(activeSearches.map(search => window.BT.bookLookup.searchBooks(search.query)));
+      const owned = new Set(store.getBooks().map(book => normalize(book.title))), seen = new Set();
+      ui.catalogRecommendations = outcomes.flatMap((outcome,index) => outcome.status === 'fulfilled' ? outcome.value.map(book => ({ book, search:activeSearches[index] })) : []).filter(({ book, search }) => {
+        const key = normalize(`${book.title}|${book.authors?.[0] || ''}`);
+        const target = normalize(search.value);
+        const matches = search.kind === 'author'
+          ? (book.authors || []).some(author => normalize(author).includes(target) || target.includes(normalize(author)))
+          : [book.genre, ...(book.genres || [])].some(genre => normalize(genre).includes(target) || target.includes(normalize(genre)));
+        if (!matches || !book.title || owned.has(normalize(book.title)) || seen.has(key)) return false;
+        seen.add(key); return true;
+      }).slice(0, 12).map(({ book, search }) => ({
+        ...book,
+        id:`catalog-${book.isbn || book.sourceId || recommendationHash(`${book.title}${book.authors?.[0] || ''}`)}`,
+        status:'a-lire', coverColor:book.coverColor || gradientFor(book.title), catalogResult:true,
+        reason:search.kind === 'author' ? `Une autre piste autour de ${search.value}, déjà présent dans votre bibliothèque.` : `Proposé parce que votre bibliothèque explore souvent ${search.value}.`
+      }));
+      const settings = store.getSettings();
+      store.saveSettings({ recommendationRefreshSeed:(Number(settings.recommendationRefreshSeed) || 0) + 1 });
+      showToast(ui.catalogRecommendations.length ? 'Suggestions actualisées à partir de votre bibliothèque' : 'Sélection locale réorganisée selon votre bibliothèque');
+    } catch (error) { showToast(error.message || 'Les catalogues ne répondent pas ; la sélection locale reste disponible'); }
+    finally { ui.recommendationsBusy = false; render(); }
+  }
+
   function addRecommendationToWishlist(id) {
-    const suggestion = RECOMMENDATIONS.find(item => item.id === id);
+    const suggestion = [...ui.currentRecommendations, ...ui.catalogRecommendations, ...RECOMMENDATIONS].find(item => item.id === id);
     if (!suggestion) return;
     if (store.getBooks().some(book => normalize(book.title) === normalize(suggestion.title))) { showToast('Ce livre est déjà enregistré dans BOO-P'); return; }
     const book = store.addBook({ ...suggestion, id:undefined, libraryState:'wishlist', situation:'possede', currentPage:0, description:suggestion.reason });
-    showToast(`« ${book.title} » ajouté à votre wishlist`); render();
+    showToast(`« ${book.title} » ajouté à votre wishlist · nouvelle suggestion affichée`); render();
   }
 
   function dismissRecommendation(id) {
     const settings = store.getSettings();
     settings.dismissedRecommendationIds = [...new Set([...(settings.dismissedRecommendationIds || []), id])];
-    store.saveSettings(settings); showToast('Cette suggestion ne sera plus affichée'); render();
+    settings.recommendationRefreshSeed = (Number(settings.recommendationRefreshSeed) || 0) + 1;
+    store.saveSettings(settings); showToast('Suggestion écartée · une nouvelle proposition est affichée'); render();
   }
 
   function previewPostPhoto(file) {
@@ -1070,16 +1218,16 @@
 
   async function submitISBNLookup(form, data) {
     const button = form.querySelector('button[type="submit"]');
-    const isbn = String(data.get('isbn') || '').trim();
+    const isbn = window.BT.bookLookup.normalizeISBN(data.get('isbn'));
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
     setBookAnalysisStatus(`Recherche de l’ISBN ${isbn}…`, 0.45);
     try {
       const results = await window.BT.bookLookup.lookupISBN(isbn);
-      renderBookLookupResults(results);
-      setBookAnalysisStatus(results.length ? 'ISBN trouvé — choisissez la bonne édition.' : 'Aucune édition trouvée pour cet ISBN. Vous pouvez saisir le livre manuellement.', results.length ? 1 : null, !results.length);
+      renderBookLookupResults(results, '', isbn);
+      setBookAnalysisStatus(results.length ? 'ISBN trouvé — choisissez la bonne édition ou vérifiez les comparateurs intégrés.' : 'Aucune édition publique trouvée. Poursuivez la recherche préremplie sur Chasse aux Livres ou NiceBooks.', results.length ? 1 : null, !results.length);
     } catch (error) {
-      renderBookLookupResults([], error.message);
+      renderBookLookupResults([], error.message, isbn);
       setBookAnalysisStatus(error.message || 'Recherche ISBN impossible.', null, true);
     } finally {
       button.disabled = false;
@@ -1195,11 +1343,11 @@
   }
 
   function submitGoal(form, data) {
-    const period = form.dataset.period, all = data.get('allBooks') === 'on';
-    const updates = { bookIds: all ? [] : data.getAll('bookIds') };
+    const period = form.dataset.period, selectedBookIds = data.getAll('bookIds');
+    const updates = { bookIds: data.get('allBooks') === 'on' && !selectedBookIds.length ? [] : selectedBookIds };
     if (period === 'week') { updates.dailyMinutes = clamp(data.get('dailyMinutes'), 5, 240); updates.daysTarget = clamp(data.get('daysTarget'), 1, 7); }
     else updates.targetBooks = clamp(data.get('targetBooks'), 1, 100);
-    store.updateGoal(period, updates); closeDialog(); showToast('Objectif modifié, progression conservée'); render();
+    store.updateGoal(period, updates); closeDialog(); showToast('Objectif modifié · progression recalculée'); render();
   }
 
   async function submitProfile(form, data) {

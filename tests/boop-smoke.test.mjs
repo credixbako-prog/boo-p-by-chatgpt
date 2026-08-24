@@ -35,12 +35,15 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.doesNotMatch(app, /Ne plus rendre actif/);
   assert.match(app, /data-action="wishlist-recommendation"/);
   assert.match(app, /data-action="dismiss-recommendation"/);
+  assert.match(app, /data-action="refresh-recommendations"/);
+  assert.match(app, /data-change="goal-all-books"/);
+  assert.match(app, /data-change="goal-book"/);
   assert.match(app, /class="bookcase"/);
   assert.match(app, /class="genre-shelf"/);
   assert.match(app, /class="physical-shelf"/);
   assert.match(app, /class="book-spine"/);
   assert.match(app, /data-change="library-sort"/);
-  assert.match(app, /Suggestions BOO-P · prototype local/);
+  assert.match(app, /Suggestions BOO-P · analyse locale/);
   assert.match(store, /post-10/);
   assert.match(store, /activeSessions/);
   assert.match(store, /pauseOtherRunningSessions/);
@@ -134,8 +137,9 @@ test('Supabase: notifications sociales privées et temps réel', async () => {
 });
 
 test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles', async () => {
-  const [html, app, lookup, store] = await Promise.all([
-    read('app.html'), read('js/mvp-app.js'), read('js/book-lookup.js'), read('js/store.js')
+  const [html, app, lookup, store, proxy] = await Promise.all([
+    read('app.html'), read('js/mvp-app.js'), read('js/book-lookup.js'), read('js/store.js'),
+    read('supabase/functions/isbn-fallback/index.ts')
   ]);
   assert.match(html, /js\/book-lookup\.js/);
   assert.match(app, /data-form="isbn-lookup"/);
@@ -150,6 +154,16 @@ test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles
   assert.match(lookup, /openlibrary\.org\/api\/books/);
   assert.match(lookup, /openlibrary\.org\/search\.json/);
   assert.match(lookup, /openlibrary\.org\$\{workKey\}\.json/);
+  assert.match(lookup, /www\.chasse-aux-livres\.fr\/search\?query=/);
+  assert.match(lookup, /nicebooks\.com\/fr\/search\/isbn\?isbn=/);
+  assert.match(lookup, /functions\.invoke\(ISBN_FALLBACK_FUNCTION/);
+  assert.match(proxy, /NICEBOOKS_ORIGIN = "https:\/\/nicebooks\.com"/);
+  assert.match(proxy, /CHASSE_ORIGIN = "https:\/\/www\.chasse-aux-livres\.fr"/);
+  assert.match(proxy, /\/rest\/search-results\?h=/);
+  assert.match(proxy, /request\.method !== "POST"/);
+  assert.match(proxy, /isValidISBN\(isbn\)/);
+  assert.match(proxy, /Access-Control-Allow-Origin/);
+  assert.doesNotMatch(proxy, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(lookup, /info\.categories/);
   assert.match(lookup, /work\?\.subjects/);
   assert.match(lookup, /tesseract\.js@7\.0\.0/);
@@ -173,6 +187,47 @@ test('ajout de livre: validation ISBN-10 et ISBN-13', async () => {
   assert.equal(lookup.isValidISBN('9782070360023'), false);
   assert.equal(Array.from(lookup.isbnVariants('2070360024')).join(','), '2070360024,9782070360024');
   assert.equal(Array.from(lookup.isbnVariants('9782070360024')).join(','), '9782070360024,2070360024');
+  const external = Array.from(lookup.externalISBNLinks('9782070360024'));
+  assert.equal(external.length, 2);
+  assert.match(external[0].url, /query=9782070360024&catalog=fr/);
+  assert.match(external[1].url, /isbn=9782070360024/);
+});
+
+test('ajout de livre: le proxy Supabase prend automatiquement le relais', async () => {
+  const source = await read('js/book-lookup.js');
+  const calls = [];
+  const BT = {
+    auth: {
+      getClient: () => ({
+        functions: {
+          invoke: async (name, options) => {
+            calls.push({ name, options });
+            return {
+              data: { books:[{ source:'NiceBooks', isbn:'9782070360024', title:"L'étranger", authors:['Albert Camus'], publisher:'FOLIO', totalPages:191 }] },
+              error: null
+            };
+          }
+        }
+      })
+    }
+  };
+  const fetch = async url => ({
+    ok: true,
+    json: async () => String(url).includes('openlibrary.org/search.json') ? { docs:[] }
+      : String(url).includes('openlibrary.org/api/books') ? {}
+      : { items:[] }
+  });
+  const context = {
+    window:{ BT, setTimeout, clearTimeout }, BT, fetch, URLSearchParams, AbortController,
+    encodeURIComponent, console
+  };
+  vm.runInNewContext(source, context);
+  const results = await context.window.BT.bookLookup.lookupISBN('9782070360024');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'isbn-fallback');
+  assert.equal(calls[0].options.body.isbn, '9782070360024');
+  assert.equal(results[0].source, 'NiceBooks');
+  assert.equal(results[0].title, "L'étranger");
 });
 
 test('modèle local: plusieurs sessions, un seul chrono et rappels persistants', async () => {
@@ -203,7 +258,49 @@ test('modèle local: plusieurs sessions, un seul chrono et rappels persistants',
   assert.equal(shelved.genre, 'Essais');
   store.saveSettings({ collapsedLibraryGenres:['essais'] });
   assert.equal(store.getSettings().collapsedLibraryGenres.join(','), 'essais');
+  const monthKey = store.localDateKey().slice(0, 7);
+  const finished = store.addBook({ title:'Objectif terminé', author:'Lectrice test', status:'lu', completedAt:`${monthKey}-10T12:00:00.000Z` });
+  const planned = store.addBook({ title:'Objectif à venir', author:'Lectrice test', status:'a-lire' });
+  store.updateGoal('month', { targetBooks:2, bookIds:[finished.id] });
+  assert.equal(store.getGoalProgress().month.value, 1);
+  store.updateGoal('month', { targetBooks:2, bookIds:[planned.id] });
+  assert.equal(store.getGoalProgress().month.value, 0);
+  store.updateGoal('year', { targetBooks:2, bookIds:[finished.id] });
+  assert.equal(store.getGoalProgress().year.value, 1);
+  store.updateGoal('year', { targetBooks:2, bookIds:[planned.id] });
+  assert.equal(store.getGoalProgress().year.value, 0);
   assert.match(memory.get('boop_mvp_v5'), /reviewSuccesses/);
+});
+
+test('rapport mensuel: image Instagram et notes personnelles sur consentement', async () => {
+  const [html, app, report, css] = await Promise.all([read('app.html'), read('js/mvp-app.js'), read('js/monthly-report.js'), read('css/mvp-v5.css')]);
+  assert.match(html, /js\/monthly-report\.js/);
+  assert.match(app, /data-action="open-monthly-report"/);
+  assert.match(app, /name="includePersonalNotes"/);
+  assert.match(app, /data-action="share-monthly-report"/);
+  assert.match(report, /const WIDTH = 1080/);
+  assert.match(report, /const HEIGHT = 1350/);
+  assert.match(report, /navigator\.canShare/);
+  assert.match(css, /\.monthly-report-preview/);
+
+  const context = { window:{ BT:{} }, Intl, Date, console };
+  vm.runInNewContext(report, context);
+  const key = new Date().toISOString().slice(0, 7), at = `${key}-10T12:00:00.000Z`;
+  const state = { profile:{ name:'Lina', handle:'@lina' }, books:[{ title:'Le Livre', authors:['A. Auteur'], libraryState:'library', status:'lu', completedAt:at }], sessions:[{ startedAt:at, durationSeconds:3600, note:'Une note privée' }], lexicon:[{ kind:'word', word:'Clairière', definition:'Une ouverture.', createdAt:at }], traces:[{ text:'Une Trace privée', createdAt:at }] };
+  const withoutNotes = context.window.BT.monthlyReport.buildData(state, key, false);
+  const withNotes = context.window.BT.monthlyReport.buildData(state, key, true);
+  assert.equal(withoutNotes.books.length, 1);
+  assert.equal(withoutNotes.minutes, 60);
+  assert.equal(withoutNotes.notes.length, 0);
+  assert.ok(withNotes.notes.length >= 1);
+});
+
+test('mobile: aucun défilement horizontal, y compris dans les dialogues', async () => {
+  const css = await read('css/mvp-v5.css');
+  assert.match(css, /overscroll-behavior-x: none/);
+  assert.match(css, /\.dialog-body \{[^}]*overflow-x: (?:hidden|clip)/);
+  assert.match(css, /\.app-dialog \{[^}]*overflow-x: (?:hidden|clip)/);
+  assert.match(css, /\.tabs \{ flex-wrap: wrap; overflow-x: clip/);
 });
 
 test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts', async () => {
@@ -219,9 +316,10 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v8/);
+  assert.match(worker, /boo-p-webapp-v11/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
+  assert.match(worker, /js\/monthly-report\.js/);
   assert.match(worker, /\['script', 'style', 'worker'\]/);
   assert.match(worker, /ignoreSearch: true/);
   assert.match(workflow, /actions\/deploy-pages@v4/);
