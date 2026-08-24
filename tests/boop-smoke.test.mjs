@@ -194,7 +194,9 @@ test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles
   assert.match(app, /id="book-genre-field"/);
   assert.match(app, /data-action="analyze-book-cover"/);
   assert.match(app, /scrollIntoView/);
-  assert.match(app, /Aucune édition trouvée dans les catalogues consultés/);
+  assert.match(app, /Aucune édition trouvée après plusieurs tentatives automatiques/);
+  assert.doesNotMatch(app, /Poursuivez la recherche préremplie/);
+  assert.doesNotMatch(app, /externalISBNFallback/);
   assert.match(app, /Saisie manuelle ou correction/);
   assert.doesNotMatch(app, /reconnaissance de couverture est simulée/i);
   assert.doesNotMatch(app, /case 'recognize-cover'/);
@@ -202,12 +204,17 @@ test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles
   assert.match(lookup, /openlibrary\.org\/api\/books/);
   assert.match(lookup, /openlibrary\.org\/search\.json/);
   assert.match(lookup, /openlibrary\.org\$\{workKey\}\.json/);
-  assert.match(lookup, /www\.chasse-aux-livres\.fr\/search\?query=/);
-  assert.match(lookup, /nicebooks\.com\/fr\/search\/isbn\?isbn=/);
   assert.match(lookup, /functions\.invoke\(ISBN_FALLBACK_FUNCTION/);
+  assert.match(lookup, /ISBN_FALLBACK_ATTEMPTS = 2/);
+  assert.doesNotMatch(lookup, /externalISBNLinks/);
   assert.match(proxy, /NICEBOOKS_ORIGIN = "https:\/\/nicebooks\.com"/);
   assert.match(proxy, /CHASSE_ORIGIN = "https:\/\/www\.chasse-aux-livres\.fr"/);
   assert.match(proxy, /\/rest\/search-results\?h=/);
+  assert.match(proxy, /SOURCE_ATTEMPTS = 3/);
+  assert.match(proxy, /Promise\.all\(\[/);
+  assert.match(proxy, /lookupWithRetries/);
+  assert.match(proxy, /containsISBN\(html, isbn\)/, 'NiceBooks expose l’ISBN hors du bloc résultat');
+  assert.match(proxy, /cachedBook\(isbn\)/);
   assert.match(proxy, /request\.method !== "POST"/);
   assert.match(proxy, /isValidISBN\(isbn\)/);
   assert.match(proxy, /Access-Control-Allow-Origin/);
@@ -235,10 +242,7 @@ test('ajout de livre: validation ISBN-10 et ISBN-13', async () => {
   assert.equal(lookup.isValidISBN('9782070360023'), false);
   assert.equal(Array.from(lookup.isbnVariants('2070360024')).join(','), '2070360024,9782070360024');
   assert.equal(Array.from(lookup.isbnVariants('9782070360024')).join(','), '9782070360024,2070360024');
-  const external = Array.from(lookup.externalISBNLinks('9782070360024'));
-  assert.equal(external.length, 2);
-  assert.match(external[0].url, /query=9782070360024&catalog=fr/);
-  assert.match(external[1].url, /isbn=9782070360024/);
+  assert.equal(lookup.externalISBNLinks, undefined);
 });
 
 test('ajout de livre: le proxy Supabase prend automatiquement le relais', async () => {
@@ -251,6 +255,7 @@ test('ajout de livre: le proxy Supabase prend automatiquement le relais', async 
         functions: {
           invoke: async (name, options) => {
             calls.push({ name, options });
+            if (calls.length === 1) return { data:{ books:[] }, error:null };
             return {
               data: { books:[{ source:'NiceBooks', isbn:'9782070360024', title:"L'étranger", authors:['Albert Camus'], publisher:'FOLIO', totalPages:191 }] },
               error: null
@@ -275,12 +280,12 @@ test('ajout de livre: le proxy Supabase prend automatiquement le relais', async 
   };
   vm.runInNewContext(source, context);
   const results = await context.window.BT.bookLookup.lookupISBN('9782070360024');
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2, 'une réponse vide doit être retentée sans action de l’utilisateur');
   assert.equal(calls[0].name, 'isbn-fallback');
   assert.equal(calls[0].options.body.isbn, '9782070360024');
   assert.equal(results[0].source, 'NiceBooks');
   assert.equal(results[0].title, "L'étranger");
-  assert.equal(publicCalls, 5, 'un résultat du proxy ne doit pas relancer les catalogues publics');
+  assert.equal(publicCalls, 3, 'le proxy doit démarrer en parallèle des catalogues publics');
 });
 
 test('ajout de livre: une recherche ISBN vide peut être relancée', async () => {
@@ -307,7 +312,7 @@ test('ajout de livre: une recherche ISBN vide peut être relancée', async () =>
   vm.runInNewContext(source, context);
   await context.window.BT.bookLookup.lookupISBN('9782070360024');
   await context.window.BT.bookLookup.lookupISBN('9782070360024');
-  assert.equal(invokeCalls, 2, 'un résultat vide ne doit pas rester bloqué dans le cache');
+  assert.equal(invokeCalls, 4, 'chaque recherche vide doit être retentée et ne pas rester bloquée dans le cache');
 });
 
 test('modèle local: plusieurs sessions, un seul chrono et rappels persistants', async () => {
@@ -396,7 +401,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v13/);
+  assert.match(worker, /boo-p-webapp-v14/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

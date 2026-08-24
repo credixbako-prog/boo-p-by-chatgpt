@@ -6,6 +6,8 @@
   const OPEN_LIBRARY_ENDPOINT = 'https://openlibrary.org/api/books';
   const OPEN_LIBRARY_SEARCH_ENDPOINT = 'https://openlibrary.org/search.json';
   const ISBN_FALLBACK_FUNCTION = 'isbn-fallback';
+  const ISBN_FALLBACK_ATTEMPTS = 2;
+  const ISBN_FALLBACK_RETRY_DELAY_MS = 320;
   const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
   const ZXING_CDN = 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.2.1/umd/zxing-browser.min.js';
   const COVER_MAX_EDGE = 1200;
@@ -63,16 +65,6 @@
     const isbn = normalizeISBN(value);
     const converted = isbn.length === 10 ? isbn10To13(isbn) : isbn13To10(isbn);
     return [...new Set([isbn, converted].filter(isValidISBN))];
-  }
-
-  function externalISBNLinks(value) {
-    const isbn = normalizeISBN(value);
-    if (!isValidISBN(isbn)) return [];
-    const encoded = encodeURIComponent(isbn);
-    return [
-      { id:'chasse-aux-livres', label:'Chasse aux Livres', url:`https://www.chasse-aux-livres.fr/search?query=${encoded}&catalog=fr` },
-      { id:'nicebooks', label:'NiceBooks', url:`https://nicebooks.com/fr/search/isbn?isbn=${encoded}` }
-    ];
   }
 
   function plainText(value) {
@@ -268,9 +260,20 @@
     const isbn = normalizeISBN(value);
     const client = window.BT?.auth?.getClient?.();
     if (!client?.functions?.invoke) return [];
-    const { data, error } = await client.functions.invoke(ISBN_FALLBACK_FUNCTION, { body:{ isbn } });
-    if (error) throw new Error('Le catalogue ISBN de secours est momentanément indisponible.');
-    return deduplicate((Array.isArray(data?.books) ? data.books : []).map(item => mapFallbackBook(item, isbn)));
+    let lastError = null;
+    for (let attempt = 0; attempt < ISBN_FALLBACK_ATTEMPTS; attempt += 1) {
+      try {
+        const { data, error } = await client.functions.invoke(ISBN_FALLBACK_FUNCTION, { body:{ isbn } });
+        if (error) throw error;
+        const results = deduplicate((Array.isArray(data?.books) ? data.books : []).map(item => mapFallbackBook(item, isbn)));
+        if (results.length) return results;
+      } catch (error) { lastError = error; }
+      if (attempt < ISBN_FALLBACK_ATTEMPTS - 1) {
+        await new Promise(resolve => window.setTimeout(resolve, ISBN_FALLBACK_RETRY_DELAY_MS));
+      }
+    }
+    if (lastError) throw new Error('La recherche ISBN automatique est momentanément indisponible.');
+    return [];
   }
 
   function openLibraryDescription(value) {
@@ -309,12 +312,15 @@
     if (metadataCache.has(isbn)) return metadataCache.get(isbn);
     const request = (async () => {
       const requests = [
+        searchISBNFallback(isbn),
         searchGoogle(isbn, { isbn:true }),
         searchOpenLibraryISBN(isbn).then(items => Promise.all(items.map(enrichOpenLibrary))),
         searchOpenLibrary(isbn, { isbn:true }).then(items => Promise.all(items.map(enrichOpenLibrary)))
       ];
       const outcomes = await Promise.allSettled(requests);
       let results = deduplicate(outcomes.flatMap(outcome => outcome.status === 'fulfilled' ? outcome.value : []));
+      const hasPartnerResult = results.some(item => /NiceBooks|Chasse aux Livres/.test(item.source || ''));
+      if (hasPartnerResult) return results;
       if (!results.length) {
         const alternate = isbnVariants(isbn).find(candidate => candidate !== isbn);
         if (alternate) {
@@ -322,16 +328,9 @@
           results = deduplicate(fallbacks.flatMap(outcome => outcome.status === 'fulfilled' ? outcome.value : []));
         }
       }
-      let fallbackFailure = null;
-      if (!results.length) {
-        try {
-          const fallbackResults = await searchISBNFallback(isbn);
-          if (fallbackResults.length) return fallbackResults;
-        }
-        catch (error) { fallbackFailure = error; }
-      }
       if (results.length) return enrichDescriptions(results);
-      const failure = outcomes.find(outcome => outcome.status === 'rejected')?.reason;
+      const fallbackFailure = outcomes[0]?.status === 'rejected' ? outcomes[0].reason : null;
+      const failure = outcomes.slice(1).find(outcome => outcome.status === 'rejected')?.reason;
       if (fallbackFailure && outcomes.every(outcome => outcome.status === 'rejected')) throw fallbackFailure;
       if (failure && outcomes.every(outcome => outcome.status === 'rejected')) throw failure;
       return [];
@@ -598,7 +597,7 @@
 
   window.BT = window.BT || {};
   window.BT.bookLookup = {
-    analyzeCover, externalISBNLinks, isbnVariants, isValidISBN, lookupISBN, normalizeISBN, prepareCover, searchBooks,
+    analyzeCover, isbnVariants, isValidISBN, lookupISBN, normalizeISBN, prepareCover, searchBooks,
     constants: { GOOGLE_BOOKS_ENDPOINT, OPEN_LIBRARY_ENDPOINT, OPEN_LIBRARY_SEARCH_ENDPOINT, ISBN_FALLBACK_FUNCTION, TESSERACT_CDN, ZXING_CDN, ANALYSIS_MAX_EDGE }
   };
 })();
