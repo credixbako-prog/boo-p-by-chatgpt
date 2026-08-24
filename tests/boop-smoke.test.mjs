@@ -71,8 +71,54 @@ test('lexique: dictionnaire, questions ciblées et répétition espacée', async
   assert.match(dictionary, /fr\.wiktionary/);
   assert.match(dictionary, /fr\.wikipedia/);
   assert.match(dictionary, /action: 'parse'/);
+  assert.match(dictionary, /wiktionary-search/);
+  assert.match(dictionary, /getElementById\('Français'\)/);
+  assert.match(dictionary, /REQUEST_TIMEOUT_MS = 9000/);
   assert.match(store, /REVIEW_OFFSETS = \[1, 3, 5, 30\]/);
   assert.match(store, /reviewLexiconWord/);
+});
+
+test('lexique: la recherche tolérante retrouve une définition française', async () => {
+  const source = await read('js/dictionary.js');
+  const calls = [];
+  const frenchDocument = () => {
+    const copy = { textContent:'Qui ne dure qu’un jour.', querySelectorAll:() => [] };
+    const item = { parentElement:{ closest:() => null }, cloneNode:() => copy };
+    const end = { matches:selector => selector === '.mw-heading2, h2', nextElementSibling:null };
+    const content = {
+      matches:() => false,
+      querySelectorAll:selector => selector === 'ol > li' ? [item] : [],
+      nextElementSibling:end
+    };
+    const heading = { nextElementSibling:content };
+    const title = { closest:selector => selector === '.mw-heading2' ? heading : null };
+    return { getElementById:id => id === 'Français' ? title : null };
+  };
+  class DOMParser {
+    parseFromString(value) { return value === 'FRENCH' ? frenchDocument() : { getElementById:() => null }; }
+  }
+  const fetch = async endpoint => {
+    const action = endpoint.searchParams.get('action');
+    const page = endpoint.searchParams.get('page');
+    calls.push(`${action}:${page || endpoint.searchParams.get('gsrsearch')}`);
+    if (action === 'query') {
+      return { ok:true, json:async () => ({ query:{ pages:[
+        { index:0, title:'ephemere' }, { index:1, title:'éphémère' }
+      ] } }) };
+    }
+    return { ok:true, json:async () => ({ parse:{ title:page, text:page === 'éphémère' ? 'FRENCH' : 'OTHER' } }) };
+  };
+  const BT = {};
+  const context = {
+    window:{ BT }, BT, fetch, DOMParser, URL, URLSearchParams, AbortController,
+    setTimeout, clearTimeout, console
+  };
+  vm.runInNewContext(source, context);
+  const found = await context.window.BT.dictionary.lookup('ephemere', 'word');
+  assert.equal(found.definition, 'Qui ne dure qu’un jour.');
+  assert.equal(found.sourceLabel, 'Wiktionnaire');
+  assert.match(found.sourceUrl, /%C3%A9ph%C3%A9m%C3%A8re/);
+  assert.deepEqual(calls, ['parse:ephemere', 'query:ephemere', 'parse:éphémère']);
 });
 
 test('profil: annuaire réel, amitiés et carnet de badges privés', async () => {
@@ -350,7 +396,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v12/);
+  assert.match(worker, /boo-p-webapp-v13/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

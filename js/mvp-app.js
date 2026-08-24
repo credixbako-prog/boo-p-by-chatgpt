@@ -734,7 +734,11 @@
       form.elements.sourceUrl.value = found.sourceUrl;
       result.innerHTML = `Proposition issue de <a href="${attr(found.sourceUrl)}" target="_blank" rel="noopener">${esc(found.sourceLabel)}</a>. Relisez-la et adaptez-la au contexte du livre avant d’enregistrer.`;
       form.elements.definition.focus();
-    } catch (error) { result.textContent = error.message || 'Aucune explication trouvée. Saisissez la vôtre.'; }
+    } catch (error) {
+      result.textContent = error.message || 'Aucune explication trouvée. Saisissez la vôtre.';
+      showToast(result.textContent);
+      form.elements.word.focus();
+    }
     finally { button.disabled = false; button.removeAttribute('aria-busy'); }
   }
 

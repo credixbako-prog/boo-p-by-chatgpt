@@ -5,11 +5,28 @@ BT.dictionary = (() => {
   'use strict';
 
   const cache = new Map();
+  const REQUEST_TIMEOUT_MS = 9000;
   const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
   const truncate = (value, max = 1400) => {
     const text = clean(value);
     return text.length > max ? `${text.slice(0, max).replace(/\s+\S*$/, '')}…` : text;
   };
+
+  async function fetchLexicalJSON(endpoint, unavailableMessage) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(endpoint, { headers:{ Accept:'application/json' }, signal:controller.signal });
+      if (!response.ok) throw new Error(unavailableMessage);
+      return await response.json();
+    } catch (error) {
+      if (error?.name === 'AbortError') throw new Error('La recherche lexicale prend trop de temps. Réessayez dans un instant.');
+      if (error instanceof Error && error.message === unavailableMessage) throw error;
+      throw new Error('Impossible de joindre les sources lexicales. Vérifiez votre connexion puis réessayez.');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 
   async function queryWiki(project, term) {
     const endpoint = new URL(`https://${project}.org/w/api.php`);
@@ -22,13 +39,31 @@ BT.dictionary = (() => {
     // linguistiques et peut donc être vide. L'extrait complet contient la définition.
     if (project === 'fr.wikipedia') params.exintro = '1';
     endpoint.search = new URLSearchParams(params);
-    const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
-    if (!response.ok) throw new Error('La source lexicale ne répond pas pour le moment.');
-    const payload = await response.json();
+    const payload = await fetchLexicalJSON(endpoint, 'La source lexicale ne répond pas pour le moment.');
     return Object.values(payload.query?.pages || {})
       .sort((a, b) => Number(a.index ?? 99) - Number(b.index ?? 99))
       .map(page => ({ title: clean(page.title), extract: truncate(page.extract), url: page.fullurl || '' }))
       .filter(item => item.extract);
+  }
+
+  function frenchDefinitions(document) {
+    const frenchTitle = document.getElementById('Français');
+    const frenchHeading = frenchTitle?.closest('.mw-heading2') || frenchTitle?.closest('h2');
+    if (!frenchHeading) return [];
+    const sectionNodes = [];
+    for (let node = frenchHeading.nextElementSibling; node; node = node.nextElementSibling) {
+      if (node.matches?.('.mw-heading2, h2')) break;
+      sectionNodes.push(node);
+    }
+    const items = sectionNodes.flatMap(node => {
+      const found = node.matches?.('ol > li') ? [node] : [];
+      return found.concat([...(node.querySelectorAll?.('ol > li') || [])]);
+    });
+    return items.filter(item => !item.parentElement.closest('li')).map(item => {
+      const copy = item.cloneNode(true);
+      copy.querySelectorAll('ul, ol, dl, sup, .reference, .mw-editsection').forEach(node => node.remove());
+      return clean(copy.textContent);
+    }).filter(text => text.length >= 8).slice(0, 4);
   }
 
   async function queryWiktionary(term) {
@@ -37,17 +72,11 @@ BT.dictionary = (() => {
       action: 'parse', page: term, prop: 'text|displaytitle', redirects: '1',
       format: 'json', formatversion: '2', origin: '*'
     });
-    const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
-    if (!response.ok) throw new Error('Le Wiktionnaire ne répond pas pour le moment.');
-    const payload = await response.json();
+    const payload = await fetchLexicalJSON(endpoint, 'Le Wiktionnaire ne répond pas pour le moment.');
     if (!payload.parse?.text) return [];
 
     const document = new DOMParser().parseFromString(payload.parse.text, 'text/html');
-    const definitions = [...document.querySelectorAll('ol > li')].filter(item => !item.parentElement.closest('li')).map(item => {
-      const copy = item.cloneNode(true);
-      copy.querySelectorAll('ul, ol, dl, sup, .reference, .mw-editsection').forEach(node => node.remove());
-      return clean(copy.textContent);
-    }).filter(text => text.length >= 8).slice(0, 4);
+    const definitions = frenchDefinitions(document);
     if (!definitions.length) return [];
     const title = clean(payload.parse.title || term);
     return [{
@@ -57,6 +86,24 @@ BT.dictionary = (() => {
     }];
   }
 
+  async function searchWiktionary(term) {
+    const endpoint = new URL('https://fr.wiktionary.org/w/api.php');
+    endpoint.search = new URLSearchParams({
+      action:'query', generator:'search', gsrsearch:term, gsrnamespace:'0', gsrlimit:'5',
+      prop:'info', inprop:'url', redirects:'1', format:'json', formatversion:'2', origin:'*'
+    });
+    const payload = await fetchLexicalJSON(endpoint, 'Le Wiktionnaire ne répond pas pour le moment.');
+    const exact = term.toLocaleLowerCase('fr');
+    const titles = Object.values(payload.query?.pages || {})
+      .sort((a, b) => Number(a.index ?? 99) - Number(b.index ?? 99))
+      .map(page => clean(page.title))
+      .filter(title => title && title.toLocaleLowerCase('fr') !== exact)
+      .slice(0, 4);
+    const outcomes = await Promise.allSettled(titles.map(queryWiktionary));
+    const results = outcomes.flatMap(outcome => outcome.status === 'fulfilled' ? outcome.value : []);
+    return results.filter((item, index, all) => all.findIndex(candidate => candidate.url === item.url) === index);
+  }
+
   async function lookup(term, kind = 'word') {
     const query = clean(term);
     if (query.length < 2) throw new Error('Saisissez au moins deux caractères.');
@@ -64,12 +111,14 @@ BT.dictionary = (() => {
     if (cache.has(cacheKey)) return cache.get(cacheKey);
 
     const sources = kind === 'word'
-      ? [['wiktionary-parse', 'Wiktionnaire']]
-      : [['wiktionary-parse', 'Wiktionnaire'], ['fr.wikipedia', 'Wikipédia']];
+      ? [['wiktionary-parse', 'Wiktionnaire'], ['wiktionary-search', 'Wiktionnaire']]
+      : [['wiktionary-parse', 'Wiktionnaire'], ['wiktionary-search', 'Wiktionnaire'], ['fr.wikipedia', 'Wikipédia']];
     let lastError = null;
     for (const [project, label] of sources) {
       try {
-        const results = project === 'wiktionary-parse' ? await queryWiktionary(query) : await queryWiki(project, query);
+        const results = project === 'wiktionary-parse' ? await queryWiktionary(query)
+          : project === 'wiktionary-search' ? await searchWiktionary(query)
+          : await queryWiki(project, query);
         if (results.length) {
           const best = results.find(item => item.title.toLocaleLowerCase('fr') === query.toLocaleLowerCase('fr')) || results[0];
           const value = { term: query, kind, definition: best.extract, sourceLabel: label, sourceUrl: best.url, alternatives: results.slice(1) };
