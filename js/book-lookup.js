@@ -324,7 +324,10 @@
       }
       let fallbackFailure = null;
       if (!results.length) {
-        try { results = await searchISBNFallback(isbn); }
+        try {
+          const fallbackResults = await searchISBNFallback(isbn);
+          if (fallbackResults.length) return fallbackResults;
+        }
         catch (error) { fallbackFailure = error; }
       }
       if (results.length) return enrichDescriptions(results);
@@ -334,7 +337,11 @@
       return [];
     })();
     metadataCache.set(isbn, request);
-    try { return await request; }
+    try {
+      const results = await request;
+      if (!results.length) metadataCache.delete(isbn);
+      return results;
+    }
     catch (error) { metadataCache.delete(isbn); throw error; }
   }
 

@@ -147,6 +147,8 @@ test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles
   assert.match(app, /id="book-isbn-field"/);
   assert.match(app, /id="book-genre-field"/);
   assert.match(app, /data-action="analyze-book-cover"/);
+  assert.match(app, /scrollIntoView/);
+  assert.match(app, /Aucune édition trouvée dans les catalogues consultés/);
   assert.match(app, /Saisie manuelle ou correction/);
   assert.doesNotMatch(app, /reconnaissance de couverture est simulée/i);
   assert.doesNotMatch(app, /case 'recognize-cover'/);
@@ -196,6 +198,7 @@ test('ajout de livre: validation ISBN-10 et ISBN-13', async () => {
 test('ajout de livre: le proxy Supabase prend automatiquement le relais', async () => {
   const source = await read('js/book-lookup.js');
   const calls = [];
+  let publicCalls = 0;
   const BT = {
     auth: {
       getClient: () => ({
@@ -211,12 +214,15 @@ test('ajout de livre: le proxy Supabase prend automatiquement le relais', async 
       })
     }
   };
-  const fetch = async url => ({
-    ok: true,
-    json: async () => String(url).includes('openlibrary.org/search.json') ? { docs:[] }
-      : String(url).includes('openlibrary.org/api/books') ? {}
-      : { items:[] }
-  });
+  const fetch = async url => {
+    publicCalls += 1;
+    return {
+      ok: true,
+      json: async () => String(url).includes('openlibrary.org/search.json') ? { docs:[] }
+        : String(url).includes('openlibrary.org/api/books') ? {}
+        : { items:[] }
+    };
+  };
   const context = {
     window:{ BT, setTimeout, clearTimeout }, BT, fetch, URLSearchParams, AbortController,
     encodeURIComponent, console
@@ -228,6 +234,34 @@ test('ajout de livre: le proxy Supabase prend automatiquement le relais', async 
   assert.equal(calls[0].options.body.isbn, '9782070360024');
   assert.equal(results[0].source, 'NiceBooks');
   assert.equal(results[0].title, "L'étranger");
+  assert.equal(publicCalls, 5, 'un résultat du proxy ne doit pas relancer les catalogues publics');
+});
+
+test('ajout de livre: une recherche ISBN vide peut être relancée', async () => {
+  const source = await read('js/book-lookup.js');
+  let invokeCalls = 0;
+  const BT = {
+    auth: {
+      getClient: () => ({ functions:{ invoke:async () => {
+        invokeCalls += 1;
+        return { data:{ books:[] }, error:null };
+      } } })
+    }
+  };
+  const fetch = async url => ({
+    ok:true,
+    json:async () => String(url).includes('openlibrary.org/search.json') ? { docs:[] }
+      : String(url).includes('openlibrary.org/api/books') ? {}
+      : { items:[] }
+  });
+  const context = {
+    window:{ BT, setTimeout, clearTimeout }, BT, fetch, URLSearchParams, AbortController,
+    encodeURIComponent, console
+  };
+  vm.runInNewContext(source, context);
+  await context.window.BT.bookLookup.lookupISBN('9782070360024');
+  await context.window.BT.bookLookup.lookupISBN('9782070360024');
+  assert.equal(invokeCalls, 2, 'un résultat vide ne doit pas rester bloqué dans le cache');
 });
 
 test('modèle local: plusieurs sessions, un seul chrono et rappels persistants', async () => {
@@ -316,7 +350,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v11/);
+  assert.match(worker, /boo-p-webapp-v12/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

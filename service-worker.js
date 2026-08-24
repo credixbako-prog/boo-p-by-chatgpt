@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'boo-p-webapp-v11';
+const CACHE_VERSION = 'boo-p-webapp-v12';
 const APP_SHELL = [
   './',
   './index.html',

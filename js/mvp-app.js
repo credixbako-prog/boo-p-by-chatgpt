@@ -693,15 +693,28 @@
     return `<aside class="external-isbn-search section-block" aria-label="Recherche ISBN élargie"><div><strong>Recherche élargie</strong><p class="small muted">Ces comparateurs trouvent souvent les éditions absentes des catalogues publics. La recherche ISBN est déjà préremplie.</p></div><div class="button-row">${links.map(link => `<a class="button button--secondary button--small" href="${attr(link.url)}" target="_blank" rel="noopener noreferrer">Voir sur ${esc(link.label)} ↗</a>`).join('')}</div></aside>`;
   }
 
+  function revealBookLookupResults(container) {
+    if (!container) return;
+    window.requestAnimationFrame(() => {
+      const firstResult = container.querySelector('.recognition-result');
+      const target = firstResult || container;
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      target.scrollIntoView({ behavior:reducedMotion ? 'auto' : 'smooth', block:'center', inline:'nearest' });
+      firstResult?.focus({ preventScroll:true });
+    });
+  }
+
   function renderBookLookupResults(suggestions, message = '', isbn = '') {
     const container = document.getElementById('book-lookup-results'); if (!container) return;
     ui.bookSuggestions = Array.isArray(suggestions) ? suggestions : [];
     const external = externalISBNFallback(isbn);
     if (!ui.bookSuggestions.length) {
-      container.innerHTML = `<div class="book-lookup-empty section-block"><strong>Aucune édition trouvée dans Google Books ou Open Library</strong><p class="small muted">${esc(message || 'Vérifiez le numéro ou saisissez les informations manuellement ci-dessous.')}</p></div>${external}`;
+      container.innerHTML = `<div class="book-lookup-empty section-block"><strong>Aucune édition trouvée dans les catalogues consultés</strong><p class="small muted">${esc(message || 'Vérifiez le numéro ou saisissez les informations manuellement ci-dessous.')}</p></div>${external}`;
+      revealBookLookupResults(container);
       return;
     }
     container.innerHTML = `<div class="success-panel section-block"><strong>${ui.bookSuggestions.length} édition${ui.bookSuggestions.length > 1 ? 's' : ''} trouvée${ui.bookSuggestions.length > 1 ? 's' : ''}</strong><p class="small">Choisissez la bonne édition, puis vérifiez les champs préremplis.${ui.pendingCover ? ' Votre photo restera disponible comme couverture personnalisée.' : ''}</p></div><div class="book-lookup-results section-block">${ui.bookSuggestions.map((item,index) => { const resultCover = item.coverUrl || ui.pendingCover; return `<button class="recognition-result" type="button" data-action="pick-book-result" data-index="${index}">${resultCover ? `<span class="book-cover book-cover--small"><img src="${attr(resultCover)}" alt="Couverture de ${attr(item.title)}" loading="lazy"></span>` : `<span class="book-cover book-cover--small" style="background:${gradientFor(item.title)}"><span>${esc(item.title)}</span></span>`}<span class="card-content"><strong>${esc(item.title)}</strong><span class="small muted">${esc((item.authors || []).join(', ') || 'Auteur non renseigné')}${item.publisher ? ` · ${esc(item.publisher)}` : ''}${item.totalPages ? ` · ${item.totalPages} pages` : ''}</span><span class="micro muted">${esc(item.isbn ? `ISBN ${item.isbn} · ` : '')}${esc(item.source || 'Catalogues publics')}${item.description ? ` · résumé ${esc(item.descriptionSource || 'disponible')}` : ' · résumé non fourni'}${!item.coverUrl && ui.pendingCover ? ' · votre photo' : ''}</span></span></button>`; }).join('')}</div>${external}`;
+    revealBookLookupResults(container);
   }
 
   function openLexiconDialog(entry = null, bookId = null) {
@@ -1225,7 +1238,8 @@
     try {
       const results = await window.BT.bookLookup.lookupISBN(isbn);
       renderBookLookupResults(results, '', isbn);
-      setBookAnalysisStatus(results.length ? 'ISBN trouvé — choisissez la bonne édition ou vérifiez les comparateurs intégrés.' : 'Aucune édition publique trouvée. Poursuivez la recherche préremplie sur Chasse aux Livres ou NiceBooks.', results.length ? 1 : null, !results.length);
+      const sources = [...new Set(results.map(item => item.source).filter(Boolean))].join(' et ');
+      setBookAnalysisStatus(results.length ? `ISBN trouvé${sources ? ` via ${sources}` : ''} — choisissez la bonne édition.` : 'Aucune édition trouvée. Poursuivez la recherche préremplie sur Chasse aux Livres ou NiceBooks.', results.length ? 1 : null, !results.length);
     } catch (error) {
       renderBookLookupResults([], error.message, isbn);
       setBookAnalysisStatus(error.message || 'Recherche ISBN impossible.', null, true);
