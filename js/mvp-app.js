@@ -8,11 +8,11 @@
     communityTab: 'public', pathTab: 'library', memoryIndex: 0,
     libraryQuery: '', libraryStatus: 'tous', notificationFilter: 'all',
     openComments: new Set(), friendQuery: '', lexiconQuery: '', timer: null, heartbeat: null,
-    lastFocus: null, pendingCover: '', pendingCoverFile: null, pendingCoverKind: '', bookSuggestions: [],
+    lastFocus: null, pendingCover: '', pendingCoverKind: '', pendingISBNPhoto: '', pendingISBNPhotoFile: null, bookSuggestions: [],
     pendingPostPhotoUrl: '', searchQuery: '', communityLoaded: false,
     friendResults: [], friendSearchBusy: false, friendSearchTimer: null,
     catalogRecommendations: [], recommendationsBusy: false, currentRecommendations: [],
-    monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null
+    monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null
   };
 
   const NAV = [
@@ -144,19 +144,31 @@
   }
 
   function render(shouldFocus = false) {
+    const previousRoute = ui.renderedRoute;
     parseRoute();
     if (ui.route === 'session' && !store.getActiveSession()) { location.hash = '#home'; return; }
-    updateNavigation(); updateHeader();
     const view = document.getElementById('main-view');
     const renderers = { home: renderHome, community: renderCommunity, path: renderPath, profile: renderProfile, session: renderSession, book: renderBookDetail };
-    try { view.innerHTML = renderers[ui.route](); }
-    catch (error) {
-      console.error('BOO-P render error', error);
-      view.innerHTML = `<section class="empty-state" role="alert"><h1>Un passage s’est refermé trop vite</h1><p>Vos données locales sont intactes. Vous pouvez revenir à l’Accueil et réessayer.</p><a class="button button--primary" href="#home">Revenir à l’Accueil</a></section>`;
+    const paint = () => {
+      updateNavigation(); updateHeader();
+      try { view.innerHTML = renderers[ui.route](); }
+      catch (error) {
+        console.error('BOO-P render error', error);
+        view.innerHTML = `<section class="empty-state" role="alert"><h1>Un passage s’est refermé trop vite</h1><p>Vos données locales sont intactes. Vous pouvez revenir à l’Accueil et réessayer.</p><a class="button button--primary" href="#home">Revenir à l’Accueil</a></section>`;
+      }
+      ui.renderedRoute = ui.route;
+      checkCelebrations();
+      tickSessionClock();
+    };
+    const routeChanged = Boolean(previousRoute && previousRoute !== ui.route);
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    if (routeChanged && !reducedMotion && typeof document.startViewTransition === 'function') {
+      const transition = document.startViewTransition(paint);
+      if (shouldFocus) transition.finished.then(() => view.focus({ preventScroll:true })).catch(() => view.focus({ preventScroll:true }));
+      return;
     }
+    paint();
     if (shouldFocus) view.focus({ preventScroll: true });
-    checkCelebrations();
-    tickSessionClock();
   }
 
   function updateHeader() {
@@ -477,7 +489,8 @@
   function renderBookSpine(book, index) {
     let hash = index + 17; for (const character of `${book.genre}${book.title}`) hash = character.charCodeAt(0) + ((hash << 5) - hash);
     const hue = Math.abs(hash) % 360, width = 27 + Math.abs(hash % 13), height = 122 + Math.abs((hash >> 4) % 45);
-    return `<button class="book-spine" type="button" data-action="open-book" data-id="${attr(book.id)}" title="${attr(book.title)}" aria-label="Ouvrir ${attr(book.title)}, ${attr(book.authors.join(', '))}, rayon ${attr(book.genre || 'À classer')}" style="--spine-h:${height}px;--spine-w:${width}px;--spine-a:hsl(${hue} 46% 40%);--spine-b:hsl(${(hue + 24) % 360} 50% 56%)"><span>${esc(book.title)}</span></button>`;
+    const peek = book.coverUrl ? `<img class="book-spine__peek" src="${attr(book.coverUrl)}" alt="" loading="lazy" aria-hidden="true">` : '';
+    return `<button class="book-spine" type="button" data-action="open-book" data-id="${attr(book.id)}" title="${attr(book.title)}" aria-label="Ouvrir ${attr(book.title)}, ${attr(book.authors.join(', '))}, rayon ${attr(book.genre || 'À classer')}" style="--spine-h:${height}px;--spine-w:${width}px;--spine-a:hsl(${hue} 46% 40%);--spine-b:hsl(${(hue + 24) % 360} 50% 56%)">${peek}<span>${esc(book.title)}</span></button>`;
   }
 
   function handleLibraryShelfToggle(event) {
@@ -668,20 +681,19 @@
   function openBookDialog(book = null) {
     const editing = Boolean(book);
     ui.pendingCover = book?.coverUrl || '';
-    ui.pendingCoverFile = null;
     ui.pendingCoverKind = book?.customCover ? 'custom' : (book?.coverUrl ? 'catalogue' : '');
+    ui.pendingISBNPhoto = '';
+    ui.pendingISBNPhotoFile = null;
     ui.bookSuggestions = [];
-    const existingPreview = book?.coverUrl ? `<img class="book-cover-upload-preview" id="book-cover-preview" src="${attr(book.coverUrl)}" alt="Aperçu de la couverture">` : `<img class="book-cover-upload-preview" id="book-cover-preview" alt="Aperçu de la couverture" hidden>`;
-    openDialog({ title: editing ? 'Modifier le livre' : 'Ajouter un livre', eyebrow: editing ? 'Métadonnées modifiables' : 'Photo, ISBN ou saisie manuelle', wide: true, body: `
-      <section class="book-import-panel" aria-labelledby="book-photo-title">
+    openDialog({ title: editing ? 'Modifier le livre' : 'Ajouter un livre', eyebrow: editing ? 'Métadonnées modifiables' : 'ISBN ou saisie manuelle', wide: true, body: `
+      <section class="book-import-panel" aria-labelledby="book-isbn-photo-title">
         <div class="book-import-grid">
-          <label class="camera-dropzone" for="cover-file">${existingPreview}<span id="book-cover-prompt"><strong>${book?.coverUrl ? 'Remplacer la couverture' : 'Prendre une photo ou choisir une image'}</strong><br><span class="small muted">JPG, PNG, WebP ou photo du téléphone · compression automatique</span></span><input class="sr-only" id="cover-file" type="file" accept="image/*,.heic,.heif" data-change="cover-file"></label>
-          <div class="book-import-copy"><h3 id="book-photo-title">Reconnaître la couverture</h3><p class="small muted">BOO-P cherche d’abord un code-barres, puis lit le titre et l’auteur sur l’image. L’analyse de l’image se fait sur cet appareil ; seuls les mots ou l’ISBN détectés servent à consulter les catalogues.</p><button class="button button--sage" id="analyze-book-cover" type="button" data-action="analyze-book-cover" disabled>Identifier le livre</button></div>
+          <label class="camera-dropzone" for="isbn-photo-file"><img class="isbn-photo-preview" id="book-isbn-photo-preview" alt="Aperçu du code-barres ISBN" hidden><span id="book-isbn-photo-prompt"><strong>Photographier le code-barres ISBN</strong><br><span class="small muted">Cadrez le code-barres et le numéro imprimé au dos du livre</span></span><input class="sr-only" id="isbn-photo-file" type="file" accept="image/*,.heic,.heif" capture="environment" data-change="isbn-photo-file"></label>
+          <div class="book-import-copy"><h3 id="book-isbn-photo-title">Lire le code ISBN</h3><p class="small muted">BOO-P analyse uniquement le code-barres ou le numéro ISBN visible sur la photo. La photo reste sur cet appareil et n’est pas enregistrée comme couverture.</p><button class="button button--sage" id="scan-book-isbn" type="button" data-action="scan-book-isbn" disabled>Lire l’ISBN</button></div>
         </div>
-        <div class="book-analysis-status small" id="book-analysis-status" role="status" aria-live="polite"><span id="book-analysis-message">Choisissez une photo nette et bien cadrée.</span><progress id="book-analysis-progress" max="1" value="0" hidden></progress></div>
+        <div class="book-analysis-status small" id="book-analysis-status" role="status" aria-live="polite"><span id="book-analysis-message">Vous pouvez photographier le code ou saisir l’ISBN ci-dessous.</span><progress id="book-analysis-progress" max="1" value="0" hidden></progress></div>
       </section>
       <section class="isbn-lookup-card section-block" aria-labelledby="isbn-lookup-title"><h3 id="isbn-lookup-title">Rechercher avec le code ISBN</h3><p class="small muted">Le numéro se trouve généralement près du code-barres au dos du livre.</p><form class="isbn-lookup-form" data-form="isbn-lookup"><label class="field" for="book-isbn-lookup"><span class="sr-only">ISBN-10 ou ISBN-13</span><input id="book-isbn-lookup" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="Ex. 9782070360024" value="${attr(book?.isbn || '')}" required></label><button class="button button--secondary" type="submit">Rechercher l’ISBN</button></form></section>
-      <section class="isbn-lookup-card section-block" aria-labelledby="book-search-title"><h3 id="book-search-title">Rechercher par titre ou auteur</h3><p class="small muted">Utile si la photo n’est pas reconnue ou si l’ISBN est absent du catalogue.</p><form class="isbn-lookup-form" data-form="book-search"><label class="field" for="book-title-lookup"><span class="sr-only">Titre ou auteur</span><input id="book-title-lookup" name="query" autocomplete="off" placeholder="Ex. L’Étranger Albert Camus" required></label><button class="button button--secondary" type="submit">Rechercher le livre</button></form></section>
       <div id="book-lookup-results" aria-live="polite"></div>
       <hr class="section-block"><p class="eyebrow">Saisie manuelle ou correction</p>
       <form class="form-grid" data-form="book"><input type="hidden" name="id" value="${attr(book?.id || '')}"><input type="hidden" name="coverUrl" id="book-cover-value" value="${attr(book?.coverUrl || '')}"><input type="hidden" name="coverSource" id="book-cover-source" value="${attr(ui.pendingCoverKind)}"><div class="field-row"><label class="field">Destination<select name="libraryState"><option value="library" ${book?.libraryState !== 'wishlist' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${book?.libraryState === 'wishlist' ? 'selected' : ''}>Ma wishlist</option></select></label><label class="field">Support<select name="mediaType" data-change="book-media"><option value="print" ${book?.mediaType !== 'ebook' && book?.mediaType !== 'audio' ? 'selected' : ''}>Livre papier</option><option value="ebook" ${book?.mediaType === 'ebook' ? 'selected' : ''}>Livre numérique</option><option value="audio" ${book?.mediaType === 'audio' ? 'selected' : ''}>Livre audio</option></select></label></div><div class="field-row"><label class="field">Titre<input id="book-title-field" name="title" required value="${attr(book?.title || '')}" placeholder="Titre du livre"></label><label class="field">Auteur(s)<input id="book-authors-field" name="authors" required value="${attr(book?.authors.join(', ') || '')}" placeholder="Prénom Nom, autre auteur"></label></div><label class="field">Rayon littéraire<input id="book-genre-field" name="genre" list="book-genres" value="${attr(book?.genre || '')}" placeholder="Ex. Romans, Science-fiction…"><datalist id="book-genres"><option value="Romans"><option value="Essais"><option value="Science-fiction"><option value="Fantasy et fantastique"><option value="Policier et thriller"><option value="Philosophie"><option value="Histoire"><option value="Poésie"><option value="Biographies et mémoires"><option value="Sciences humaines"><option value="Jeunesse"><option value="Bande dessinée et manga"><option value="À classer"></datalist><span class="field-help">Proposé automatiquement par le catalogue et toujours modifiable.</span></label><div class="field-row"><label class="field">ISBN<input id="book-isbn-field" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" value="${attr(book?.isbn || '')}" placeholder="ISBN-10 ou ISBN-13"></label><label class="field">Date de publication<input id="book-published-field" name="publishedDate" value="${attr(book?.publishedDate || '')}" placeholder="Ex. 2024"></label></div><div class="field-row"><label class="field">Éditeur<input id="book-publisher-field" name="publisher" value="${attr(book?.publisher || '')}"></label><label class="field">Édition<input id="book-edition-field" name="edition" value="${attr(book?.edition || '')}"></label></div><div class="field-row" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}><label class="field">Format<input id="book-format-field" name="format" value="${attr(book?.format || 'Broché')}"></label><label class="field">Nombre de pages<input id="book-pages-field" type="number" min="0" name="totalPages" value="${book?.totalPages || ''}"></label></div><fieldset class="audio-book-fields" data-audio-fields ${book?.mediaType === 'audio' ? '' : 'hidden'}><legend>Informations du livre audio</legend><div class="field-row"><label class="field">Durée totale (minutes)<input type="number" min="0" name="durationMinutes" value="${book?.durationMinutes || ''}"></label><label class="field">Minute atteinte<input type="number" min="0" name="currentMinute" value="${book?.currentMinute || 0}"></label></div><div class="field-row"><label class="field">Narrateur ou narratrice<input name="narrator" value="${attr(book?.narrator || '')}"></label><label class="field">Plateforme ou source<input name="audioPlatform" value="${attr(book?.audioPlatform || '')}" placeholder="Audible, CD, bibliothèque…"></label></div></fieldset><label class="field">Résumé<textarea id="book-description-field" name="description">${esc(book?.description || '')}</textarea></label><div class="field-row"><label class="field">Statut<select name="status">${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${book?.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Situation<select name="situation">${Object.entries(SITUATION_LABELS).map(([value,label]) => `<option value="${value}" ${book?.situation === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><div class="field-row"><label class="field" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}>Page atteinte<input type="number" min="0" name="currentPage" value="${book?.currentPage || 0}"></label><label class="checkbox-row"><input type="checkbox" name="historicalBeforeJoin" ${book?.historicalBeforeJoin ? 'checked' : ''}> Lu avant mon inscription (sans date annuelle)</label></div><p class="small muted">Vous pouvez toujours compléter ou corriger les informations avant l’ajout.</p><button class="button button--primary" type="submit">${editing ? 'Enregistrer le livre' : 'Ajouter à BOO-P'}</button></form>` });
@@ -706,7 +718,7 @@
       revealBookLookupResults(container);
       return;
     }
-    container.innerHTML = `<div class="success-panel section-block"><strong>${ui.bookSuggestions.length} édition${ui.bookSuggestions.length > 1 ? 's' : ''} trouvée${ui.bookSuggestions.length > 1 ? 's' : ''}</strong><p class="small">Choisissez la bonne édition, puis vérifiez les champs préremplis.${ui.pendingCover ? ' Votre photo restera disponible comme couverture personnalisée.' : ''}</p></div><div class="book-lookup-results section-block">${ui.bookSuggestions.map((item,index) => { const resultCover = item.coverUrl || ui.pendingCover; return `<button class="recognition-result" type="button" data-action="pick-book-result" data-index="${index}">${resultCover ? `<span class="book-cover book-cover--small"><img src="${attr(resultCover)}" alt="Couverture de ${attr(item.title)}" loading="lazy"></span>` : `<span class="book-cover book-cover--small" style="background:${gradientFor(item.title)}"><span>${esc(item.title)}</span></span>`}<span class="card-content"><strong>${esc(item.title)}</strong><span class="small muted">${esc((item.authors || []).join(', ') || 'Auteur non renseigné')}${item.publisher ? ` · ${esc(item.publisher)}` : ''}${item.totalPages ? ` · ${item.totalPages} pages` : ''}</span><span class="micro muted">${esc(item.isbn ? `ISBN ${item.isbn} · ` : '')}${esc(item.source || 'Catalogues publics')}${item.description ? ` · résumé ${esc(item.descriptionSource || 'disponible')}` : ' · résumé non fourni'}${!item.coverUrl && ui.pendingCover ? ' · votre photo' : ''}</span></span></button>`; }).join('')}</div>`;
+    container.innerHTML = `<div class="success-panel section-block"><strong>${ui.bookSuggestions.length} édition${ui.bookSuggestions.length > 1 ? 's' : ''} trouvée${ui.bookSuggestions.length > 1 ? 's' : ''}</strong><p class="small">Choisissez la bonne édition, puis vérifiez les champs préremplis.${ui.pendingCover ? ' La couverture actuelle sera conservée si le catalogue n’en fournit pas.' : ''}</p></div><div class="book-lookup-results section-block">${ui.bookSuggestions.map((item,index) => { const resultCover = item.coverUrl || ui.pendingCover; return `<button class="recognition-result" type="button" data-action="pick-book-result" data-index="${index}">${resultCover ? `<span class="book-cover book-cover--small"><img src="${attr(resultCover)}" alt="Couverture de ${attr(item.title)}" loading="lazy"></span>` : `<span class="book-cover book-cover--small" style="background:${gradientFor(item.title)}"><span>${esc(item.title)}</span></span>`}<span class="card-content"><strong>${esc(item.title)}</strong><span class="small muted">${esc((item.authors || []).join(', ') || 'Auteur non renseigné')}${item.publisher ? ` · ${esc(item.publisher)}` : ''}${item.totalPages ? ` · ${item.totalPages} pages` : ''}</span><span class="micro muted">${esc(item.isbn ? `ISBN ${item.isbn} · ` : '')}${esc(item.source || 'Catalogues publics')}${item.description ? ` · résumé ${esc(item.descriptionSource || 'disponible')}` : ' · résumé non fourni'}${!item.coverUrl && ui.pendingCover ? ' · couverture actuelle' : ''}</span></span></button>`; }).join('')}</div>`;
     revealBookLookupResults(container);
   }
 
@@ -861,7 +873,7 @@
       case 'move-to-library': store.updateBook(id, { libraryState:'library' }); showToast('Livre ajouté à votre bibliothèque'); render(); break;
       case 'edit-book': openBookDialog(store.getBookById(id)); break;
       case 'delete-book': confirmDeleteBook(id); break;
-      case 'analyze-book-cover': await analyzeBookCover(trigger); break;
+      case 'scan-book-isbn': await scanBookISBN(trigger); break;
       case 'pick-book-result': pickBookResult(Number(trigger.dataset.index)); break;
       case 'manual-session': openManualSessionDialog(trigger.dataset.bookId || null); break;
       case 'edit-session': openManualSessionDialog(null, id); break;
@@ -909,7 +921,7 @@
         break;
       case 'notification-filter': ui.notificationFilter = control.value; renderNotifications(); break;
       case 'session-page': { const book = store.getBookById(store.getActiveSession()?.bookId); const total = book?.mediaType === 'audio' ? book?.durationMinutes : book?.totalPages; const value = clamp(control.value, 0, total || 99999); control.value = value; store.updateActiveSession({ endPage: value }); break; }
-      case 'cover-file': void readCoverFile(control.files?.[0]); break;
+      case 'isbn-photo-file': void readISBNPhoto(control.files?.[0]); break;
       case 'post-photo': previewPostPhoto(control.files?.[0]); break;
       case 'salon-pages': store.updateSalon(control.dataset.id, { sharePages: control.checked }); showToast(control.checked ? 'Progression partagée avec votre accord' : 'Progression en pages masquée'); break;
     }
@@ -939,7 +951,7 @@
     event.preventDefault(); if (!form.checkValidity()) { form.reportValidity(); return; }
     const data = new FormData(form), kind = form.dataset.form;
     const handlers = {
-      trace: submitTrace, 'manual-session': submitManualSession, 'isbn-lookup': submitISBNLookup, 'book-search':submitBookSearch, book: submitBook, lexicon: submitLexicon,
+      trace: submitTrace, 'manual-session': submitManualSession, 'isbn-lookup': submitISBNLookup, book: submitBook, lexicon: submitLexicon,
       goal: submitGoal, 'monthly-report':submitMonthlyReport, profile: submitProfile, adn: submitAdn, 'finish-session': submitFinishSession,
       comment: submitComment, privacy: submitPrivacy, 'notification-settings': submitNotificationSettings,
       post: submitPost, club: submitClub, 'salon-message': submitSalonMessage, reply: submitReply,
@@ -1164,62 +1176,53 @@
     else { meter.hidden = false; meter.value = clamp(progress, 0, 1); }
   }
 
-  function setBookCoverPreview(source) {
-    const preview = document.getElementById('book-cover-preview');
+  function setISBNPhotoPreview(source) {
+    const preview = document.getElementById('book-isbn-photo-preview');
     if (!preview) return;
     if (!source) { preview.hidden = true; preview.removeAttribute('src'); return; }
     preview.src = source;
     preview.hidden = false;
   }
 
-  async function readCoverFile(file) {
+  async function readISBNPhoto(file) {
     if (!file) return;
-    const analyzeButton = document.getElementById('analyze-book-cover');
-    if (analyzeButton) analyzeButton.disabled = true;
-    setBookAnalysisStatus('Compression de la photo…', 0.05);
+    const scanButton = document.getElementById('scan-book-isbn');
+    if (scanButton) scanButton.disabled = true;
+    setBookAnalysisStatus('Préparation de la photo du code-barres…', 0.05);
     try {
       const prepared = await window.BT.bookLookup.prepareCover(file, update => setBookAnalysisStatus(update.message, update.progress));
-      ui.pendingCover = prepared.dataUrl;
-      ui.pendingCoverFile = prepared.analysisBlob || file;
-      ui.pendingCoverKind = 'custom';
-      const field = document.getElementById('book-cover-value');
-      const sourceField = document.getElementById('book-cover-source');
-      if (field) field.value = prepared.dataUrl;
-      if (sourceField) sourceField.value = 'custom';
-      setBookCoverPreview(prepared.dataUrl);
-      document.getElementById('book-cover-prompt')?.classList.add('has-preview');
-      const before = Math.max(1, prepared.originalBytes), saved = Math.max(0, Math.round((1 - prepared.compressedBytes / before) * 100));
-      setBookAnalysisStatus(`Photo importée et compressée${saved ? ` (${saved} % plus légère)` : ''}. Vous pouvez maintenant identifier le livre.`, null);
-      if (analyzeButton) analyzeButton.disabled = false;
-      showToast('Couverture importée — l’image sera bien enregistrée avec le livre');
+      ui.pendingISBNPhoto = prepared.dataUrl;
+      ui.pendingISBNPhotoFile = prepared.analysisBlob || file;
+      setISBNPhotoPreview(prepared.dataUrl);
+      document.getElementById('book-isbn-photo-prompt')?.classList.add('has-preview');
+      setBookAnalysisStatus('Photo prête. Lancez maintenant la lecture du code ISBN.', null);
+      if (scanButton) scanButton.disabled = false;
+      showToast('Photo prête — elle ne sera pas enregistrée comme couverture');
     } catch (error) {
-      ui.pendingCoverFile = null;
+      ui.pendingISBNPhoto = '';
+      ui.pendingISBNPhotoFile = null;
       setBookAnalysisStatus(error.message || 'Impossible de préparer cette image.', null, true);
       showToast(error.message || 'Import de l’image impossible');
     }
   }
 
-  async function analyzeBookCover(button) {
-    if (!ui.pendingCoverFile) { setBookAnalysisStatus('Importez d’abord une photo de la couverture.', null, true); return; }
+  async function scanBookISBN(button) {
+    if (!ui.pendingISBNPhotoFile) { setBookAnalysisStatus('Photographiez d’abord le code-barres ISBN.', null, true); return; }
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
     ui.bookSuggestions = [];
     const resultsContainer = document.getElementById('book-lookup-results');
-    if (resultsContainer) resultsContainer.innerHTML = '<div class="book-lookup-empty section-block"><strong>Analyse en cours…</strong><p class="small muted">Gardez cette fenêtre ouverte pendant la lecture de l’image.</p></div>';
+    if (resultsContainer) resultsContainer.innerHTML = '<div class="book-lookup-empty section-block"><strong>Lecture du code ISBN…</strong><p class="small muted">Gardez cette fenêtre ouverte pendant l’analyse locale de la photo.</p></div>';
     try {
-      const analysis = await window.BT.bookLookup.analyzeCover(ui.pendingCoverFile, update => setBookAnalysisStatus(update.message, update.progress));
-      renderBookLookupResults(analysis.results);
-      if (analysis.isbn) {
-        const lookupField = document.getElementById('book-isbn-lookup');
-        if (lookupField) lookupField.value = analysis.isbn;
-      }
-      const titleLookup = document.getElementById('book-title-lookup');
-      if (titleLookup && analysis.query && !analysis.isbn) titleLookup.value = analysis.query.replace(/\b(?:intitle|inauthor):"?/g, '').replace(/"/g, ' ').replace(/\s+/g, ' ').trim();
-      const method = analysis.method === 'barcode' ? 'Code-barres reconnu' : analysis.method === 'ocr-isbn' ? 'ISBN lu sur la photo' : 'Titre et auteur lus sur la photo';
-      setBookAnalysisStatus(`${method} — choisissez la bonne édition ci-dessous.`, 1);
+      const analysis = await window.BT.bookLookup.scanISBNFromImage(ui.pendingISBNPhotoFile, update => setBookAnalysisStatus(update.message, update.progress));
+      const lookupField = document.getElementById('book-isbn-lookup');
+      if (lookupField) lookupField.value = analysis.isbn;
+      renderBookLookupResults(analysis.results, '', analysis.isbn);
+      const method = analysis.method === 'barcode' ? 'Code-barres reconnu' : 'ISBN lu sur la photo';
+      setBookAnalysisStatus(analysis.results.length ? `${method} — choisissez la bonne édition ci-dessous.` : `${method}, mais aucune édition n’a été trouvée. Complétez les champs manuellement.`, analysis.results.length ? 1 : null, !analysis.results.length);
     } catch (error) {
       renderBookLookupResults([], error.message);
-      setBookAnalysisStatus(error.message || 'La couverture n’a pas pu être identifiée.', null, true);
+      setBookAnalysisStatus(error.message || 'Le code ISBN n’a pas pu être lu.', null, true);
     } finally {
       button.disabled = false;
       button.removeAttribute('aria-busy');
@@ -1246,24 +1249,6 @@
     }
   }
 
-  async function submitBookSearch(form, data) {
-    const button = form.querySelector('button[type="submit"]'), query = String(data.get('query') || '').trim();
-    button.disabled = true;
-    button.setAttribute('aria-busy', 'true');
-    setBookAnalysisStatus(`Recherche de « ${query} » dans les catalogues…`, 0.45);
-    try {
-      const results = await window.BT.bookLookup.searchBooks(query);
-      renderBookLookupResults(results);
-      setBookAnalysisStatus(results.length ? 'Livres trouvés — choisissez l’édition qui correspond.' : 'Aucun résultat. Essayez seulement le titre et le nom de l’auteur.', results.length ? 1 : null, !results.length);
-    } catch (error) {
-      renderBookLookupResults([], error.message);
-      setBookAnalysisStatus(error.message || 'Recherche du livre impossible.', null, true);
-    } finally {
-      button.disabled = false;
-      button.removeAttribute('aria-busy');
-    }
-  }
-
   function pickBookResult(index) {
     const item = ui.bookSuggestions[index]; if (!item) return;
     const values = {
@@ -1281,8 +1266,6 @@
     Object.entries(values).forEach(([id, value]) => { const field = document.getElementById(id); if (field) field.value = value; });
     const lookupField = document.getElementById('book-isbn-lookup');
     if (lookupField && item.isbn) lookupField.value = item.isbn;
-    const titleLookup = document.getElementById('book-title-lookup');
-    if (titleLookup) titleLookup.value = `${item.title} ${(item.authors || []).join(' ')}`.trim();
     if (ui.pendingCoverKind !== 'custom' && item.coverUrl) {
       ui.pendingCover = item.coverUrl;
       ui.pendingCoverKind = 'catalogue';
@@ -1290,7 +1273,6 @@
       const sourceField = document.getElementById('book-cover-source');
       if (coverField) coverField.value = item.coverUrl;
       if (sourceField) sourceField.value = 'catalogue';
-      setBookCoverPreview(item.coverUrl);
     }
     showToast('Édition sélectionnée — vérifiez ou corrigez les informations');
     document.getElementById('book-title-field')?.focus();
@@ -1344,7 +1326,7 @@
     const record = { title: data.get('title').trim(), authors: data.get('authors').split(',').map(item => item.trim()).filter(Boolean), genre, genres:genre ? [genre] : [], isbn, publishedDate: data.get('publishedDate').trim(), publisher: data.get('publisher').trim(), edition: data.get('edition').trim(), format: mediaType === 'audio' ? '' : data.get('format').trim(), mediaType, durationMinutes, currentMinute, narrator:data.get('narrator')?.trim() || '', audioPlatform:data.get('audioPlatform')?.trim() || '', libraryState:data.get('libraryState'), totalPages:mediaType === 'audio' ? 0 : totalPages, currentPage:mediaType === 'audio' ? 0 : currentPage, description: data.get('description').trim(), status: data.get('status'), situation: data.get('situation'), historicalBeforeJoin: data.get('historicalBeforeJoin') === 'on', coverUrl: data.get('coverUrl') || '', coverColor: gradientFor(`${data.get('title')}${data.get('authors')}`), customCover: data.get('coverSource') === 'custom' };
     const book = id ? store.updateBook(id, record) : store.addBook(record);
     if (!id && book.status === 'en-cours') store.setActiveBook(book.id);
-    ui.pendingCover = ''; ui.pendingCoverFile = null; ui.pendingCoverKind = ''; closeDialog(); showToast(id ? 'Livre mis à jour' : `Livre ajouté à ${book.libraryState === 'wishlist' ? 'la wishlist' : 'la bibliothèque'}`); location.hash = `#book?id=${encodeURIComponent(book.id)}`; render();
+    ui.pendingCover = ''; ui.pendingCoverKind = ''; ui.pendingISBNPhoto = ''; ui.pendingISBNPhotoFile = null; closeDialog(); showToast(id ? 'Livre mis à jour' : `Livre ajouté à ${book.libraryState === 'wishlist' ? 'la wishlist' : 'la bibliothèque'}`); location.hash = `#book?id=${encodeURIComponent(book.id)}`; render();
   }
 
   function submitLexicon(form, data) {

@@ -22,6 +22,9 @@ body {
   font: var(--text-body-md);
   color: var(--color-bleu-nuit);
   background-color: var(--surface);
+  background-image: var(--paper-grain);
+  background-attachment: fixed;
+  background-blend-mode: multiply;
   min-height: 100vh;
   overflow-x: hidden;
   position: relative;

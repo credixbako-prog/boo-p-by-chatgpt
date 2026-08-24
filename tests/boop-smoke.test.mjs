@@ -14,7 +14,7 @@ test('inscription: les trois mots de passe disposent d’un contrôle de visibil
   assert.match(script, /Votre sentier attend son premier pas/);
 });
 
-test('onboarding: quatre étapes, couvertures, objectif et thème libre', async () => {
+test('onboarding: quatre étapes, première Trace, objectif et thème libre', async () => {
   const [html, script] = await Promise.all([read('onboarding.html'), read('js/onboarding.js')]);
   assert.equal((html.match(/class="step-wrapper/g) || []).length, 4);
   assert.doesNotMatch(html, /id="step5"/);
@@ -22,6 +22,11 @@ test('onboarding: quatre étapes, couvertures, objectif et thème libre', async 
   assert.match(html, /id="customTheme"/);
   assert.match(html, /data-goal-preset="30"/);
   assert.match(script, /book-tile__cover/);
+  assert.match(html, /id="bookSparks"/);
+  assert.match(script, /Pourquoi ce livre vous a-t-il marqué/);
+  assert.match(script, /initialTraces/);
+  assert.match(script, /type:'onboarding'/);
+  assert.match(script, /BT\.store\.saveTrace/);
   assert.match(script, /setTimeout\(finishOnboarding/);
   assert.match(script, /const visibility = 'private'/);
 });
@@ -42,6 +47,7 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.match(app, /class="genre-shelf"/);
   assert.match(app, /class="physical-shelf"/);
   assert.match(app, /class="book-spine"/);
+  assert.match(app, /class="book-spine__peek"/);
   assert.match(app, /data-change="library-sort"/);
   assert.match(app, /Suggestions BOO-P · analyse locale/);
   assert.match(store, /post-10/);
@@ -182,17 +188,21 @@ test('Supabase: notifications sociales privées et temps réel', async () => {
   assert.match(worker, /js\/notifications-api\.js/);
 });
 
-test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles', async () => {
+test('ajout de livre: photo du code ISBN et saisie manuelle restent disponibles', async () => {
   const [html, app, lookup, store, proxy] = await Promise.all([
     read('app.html'), read('js/mvp-app.js'), read('js/book-lookup.js'), read('js/store.js'),
     read('supabase/functions/isbn-fallback/index.ts')
   ]);
   assert.match(html, /js\/book-lookup\.js/);
   assert.match(app, /data-form="isbn-lookup"/);
-  assert.match(app, /data-form="book-search"/);
+  assert.doesNotMatch(app, /data-form="book-search"/);
   assert.match(app, /id="book-isbn-field"/);
   assert.match(app, /id="book-genre-field"/);
-  assert.match(app, /data-action="analyze-book-cover"/);
+  assert.match(app, /data-action="scan-book-isbn"/);
+  assert.match(app, /capture="environment"/);
+  assert.match(app, /La photo reste sur cet appareil et n’est pas enregistrée comme couverture/);
+  assert.doesNotMatch(app, /Rechercher par titre ou auteur/);
+  assert.doesNotMatch(app, /Reconnaître la couverture/);
   assert.match(app, /scrollIntoView/);
   assert.match(app, /Aucune édition trouvée après plusieurs tentatives automatiques/);
   assert.doesNotMatch(app, /Poursuivez la recherche préremplie/);
@@ -225,10 +235,12 @@ test('ajout de livre: image réelle, ISBN et saisie manuelle restent disponibles
   assert.match(lookup, /BarcodeDetector/);
   assert.match(lookup, /@zxing\/browser@0\.2\.1/);
   assert.match(lookup, /BrowserMultiFormatReader/);
+  assert.match(lookup, /scanISBNFromImage/);
+  assert.match(lookup, /findISBNInText/);
+  assert.doesNotMatch(lookup, /ocrQueries|scoreOCRResult|analyzeCover/);
   assert.match(lookup, /COVER_TARGET_BYTES = 360 \* 1024/);
   assert.match(store, /isbn: data\.isbn/);
   await access(path.join(root, 'tests/fixtures/book-cover-ocr.svg'));
-  await access(path.join(root, 'tests/fixtures/book-cover-title-ocr.svg'));
 });
 
 test('ajout de livre: validation ISBN-10 et ISBN-13', async () => {
@@ -388,6 +400,23 @@ test('mobile: aucun défilement horizontal, y compris dans les dialogues', async
   assert.match(css, /\.tabs \{ flex-wrap: wrap; overflow-x: clip/);
 });
 
+test('design: papier, ombres colorées, monospace et transitions restent progressifs', async () => {
+  const [tokens, base, css, app] = await Promise.all([
+    read('css/tokens.css'), read('css/base.css'), read('css/mvp-v5.css'), read('js/mvp-app.js')
+  ]);
+  assert.match(tokens, /--paper-grain:/);
+  assert.match(tokens, /--font-mono:/);
+  assert.match(tokens, /--shadow-ocre:/);
+  assert.match(base, /background-image: var\(--paper-grain\)/);
+  assert.match(css, /--boo-shadow-sage:/);
+  assert.match(css, /--boo-mono:/);
+  assert.match(css, /view-transition-name: boo-view/);
+  assert.match(css, /::view-transition-new\(boo-view\)/);
+  assert.match(css, /\.book-spine__peek/);
+  assert.match(app, /document\.startViewTransition\(paint\)/);
+  assert.match(app, /prefers-reduced-motion: reduce/);
+});
+
 test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts', async () => {
   const [manifestSource, index, app, onboarding, worker, workflow] = await Promise.all([
     read('manifest.webmanifest'), read('index.html'), read('app.html'), read('onboarding.html'),
@@ -401,7 +430,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v14/);
+  assert.match(worker, /boo-p-webapp-v15/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

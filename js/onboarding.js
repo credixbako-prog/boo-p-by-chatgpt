@@ -26,11 +26,13 @@
     { id:'origin-1984', title:'1984', author:'George Orwell', totalPages:328, coverUrl:'https://covers.openlibrary.org/b/isbn/9782070368228-L.jpg', gradient:'linear-gradient(135deg,#141E30,#243B55)' }
   ];
   const selectedBooks = [];
+  const initialTraces = new Map();
   let currentStep = 1;
   let dailyGoal = 15;
   let finishing = false;
 
   const bookGrid = document.getElementById('bookGrid');
+  const bookSparks = document.getElementById('bookSparks');
   const bookSearch = document.getElementById('bookSearch');
   const continueButton = document.getElementById('btnContinue');
   const counter = document.getElementById('selectionCounter');
@@ -51,14 +53,22 @@
     }).join('') || '<p class="text-body-md text-center text-muted" style="grid-column:1/-1">Aucun résultat. Essayez un titre plus court.</p>';
   }
 
+  function renderSparks() {
+    bookSparks.innerHTML = selectedBooks.map(book => `<label class="onboarding-spark" for="spark-${book.id}"><span class="onboarding-spark__head"><strong>L’étincelle · ${escapeHTML(book.title)}</strong><span>Facultatif</span></span><span class="text-body-sm text-muted">Pourquoi ce livre vous a-t-il marqué ? Une phrase suffit.</span><textarea id="spark-${book.id}" data-spark-book-id="${book.id}" maxlength="240" placeholder="Ce que ce livre a laissé en moi…">${escapeHTML(initialTraces.get(book.id) || '')}</textarea></label>`).join('');
+  }
+
   bookGrid.addEventListener('click', event => {
     const tile = event.target.closest('[data-book-id]'); if (!tile) return;
     const book = booksData.find(item => item.id === tile.dataset.bookId); if (!book) return;
     const index = selectedBooks.findIndex(item => item.id === book.id);
-    if (index >= 0) selectedBooks.splice(index, 1);
+    if (index >= 0) { selectedBooks.splice(index, 1); initialTraces.delete(book.id); }
     else if (selectedBooks.length < 3) selectedBooks.push(book);
     else { tile.animate?.([{ transform:'translateX(-4px)' },{ transform:'translateX(4px)' },{ transform:'translateX(0)' }], { duration:180 }); return; }
-    renderBooks(bookSearch.value); updateControls();
+    renderBooks(bookSearch.value); renderSparks(); updateControls();
+  });
+  bookSparks.addEventListener('input', event => {
+    const field = event.target.closest('[data-spark-book-id]');
+    if (field) initialTraces.set(field.dataset.sparkBookId, field.value.slice(0, 240));
   });
   bookSearch.addEventListener('input', () => renderBooks(bookSearch.value));
 
@@ -165,8 +175,11 @@
     selectedBooks.forEach((book,index) => {
       const existing = currentBooks.find(item => normalize(item.title) === normalize(book.title));
       const updates = { isADN:true, adnOrder:index, status:'lu', historicalBeforeJoin:true, completedAt:null, currentPage:book.totalPages || existing?.currentPage || 0 };
-      if (existing) BT.store.updateBook(existing.id, updates);
-      else BT.store.addBook({ title:book.title, authors:[book.author].filter(Boolean), totalPages:book.totalPages, currentPage:book.totalPages, coverUrl:book.coverUrl, coverColor:book.gradient, ...updates });
+      const savedBook = existing
+        ? BT.store.updateBook(existing.id, updates)
+        : BT.store.addBook({ title:book.title, authors:[book.author].filter(Boolean), totalPages:book.totalPages, currentPage:book.totalPages, coverUrl:book.coverUrl, coverColor:book.gradient, ...updates });
+      const traceText = String(initialTraces.get(book.id) || '').trim();
+      if (traceText) BT.store.saveTrace({ bookId:savedBook.id, text:traceText, privacy:'private', type:'onboarding', source:'onboarding' });
     });
     BT.store.saveGoal({ dailyMinutes:dailyGoal });
     const profile = BT.store.getProfile(), user = BT.auth.getCurrentUser();
@@ -187,5 +200,5 @@
     location.href = 'app.html#home';
   }
 
-  renderBooks(); updateRing(15); updateControls();
+  renderBooks(); renderSparks(); updateRing(15); updateControls();
 })();

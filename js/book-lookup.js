@@ -397,7 +397,7 @@
   }
 
   async function prepareCover(file, onProgress = () => {}) {
-    if (!file) throw new Error('Choisissez une image de couverture.');
+    if (!file) throw new Error('Choisissez une photo du code-barres ISBN.');
     const imageExtension = /\.(?:jpe?g|png|webp|gif|heic|heif)$/i.test(String(file.name || ''));
     if (!String(file.type || '').startsWith('image/') && !imageExtension) throw new Error('Choisissez un fichier image.');
     onProgress({ stage: 'compression', progress: 0.1, message: 'Préparation de la photo…' });
@@ -505,73 +505,23 @@
     return candidates.map(normalizeISBN).find(isValidISBN) || '';
   }
 
-  function ocrLines(text) {
-    const ignored = /^(isbn|édition|editions|roman|poche|collection|folio|gallimard|pocket|j'?ai lu|le livre de poche|a novel|penguin classics?)$/i;
-    return String(text || '').split(/\r?\n/)
-      .map(line => line.replace(/[^\p{L}\p{N}'’:&., -]/gu, ' ').replace(/\s+/g, ' ').trim())
-      .filter(line => line.length >= 3 && line.length <= 80)
-      .filter(line => (line.match(/[\p{L}]/gu) || []).length >= 3)
-      .filter(line => !ignored.test(line));
-  }
-
-  function queryFromOCR(text) {
-    return [...new Set(ocrLines(text))].slice(0, 5).join(' ').slice(0, 220);
-  }
-
-  function ocrQueries(text) {
-    const lines = [...new Set(ocrLines(text))].slice(0, 7);
-    const options = [];
-    lines.slice(0, 5).forEach((line,index) => {
-      if (!lines[index + 1]) return;
-      options.push(`intitle:"${line}" inauthor:"${lines[index + 1]}"`);
-      options.push(`${line} ${lines[index + 1]}`);
-    });
-    lines.slice(0, 5).forEach((line,index) => {
-      options.push(`intitle:"${line}"`);
-      options.push(line);
-    });
-    options.push(lines.slice(0, 3).join(' '), queryFromOCR(text));
-    return [...new Set(options.map(item => item.trim()).filter(Boolean))].slice(0, 10);
-  }
-
-  function normalizedWords(value) {
-    return new Set(plainText(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().match(/[a-z0-9]{3,}/g) || []);
-  }
-
-  function normalizedPhrase(value) {
-    return [...normalizedWords(value)].join(' ');
-  }
-
-  function scoreOCRResult(item, text) {
-    const seen = normalizedWords(text), titleWords = normalizedWords(item.title), authorWords = normalizedWords((item.authors || []).join(' '));
-    const lines = ocrLines(text).map(normalizedPhrase).filter(Boolean);
-    const titlePhrase = normalizedPhrase(item.title), authorPhrase = normalizedPhrase((item.authors || []).join(' '));
-    let score = item.coverUrl ? 1 : 0;
-    titleWords.forEach(word => { if (seen.has(word)) score += 4; });
-    authorWords.forEach(word => { if (seen.has(word)) score += 2; });
-    if (titlePhrase && lines.some(line => line === titlePhrase)) score += 14;
-    if (authorPhrase && lines.some(line => line === authorPhrase)) score += 8;
-    if (item.description) score += 1;
-    return score;
-  }
-
-  async function analyzeCover(imageBlob, onProgress = () => {}) {
-    if (!imageBlob) throw new Error('Importez d’abord une photo de la couverture.');
+  async function scanISBNFromImage(imageBlob, onProgress = () => {}) {
+    if (!imageBlob) throw new Error('Photographiez d’abord le code-barres ISBN.');
     onProgress({ stage: 'barcode', progress: 0.08, message: 'Recherche d’un code-barres…' });
     const barcodeISBN = await detectBarcode(imageBlob);
     if (barcodeISBN) {
       onProgress({ stage: 'catalogue', progress: 0.35, message: `ISBN ${barcodeISBN} détecté. Recherche de l’édition…` });
       const results = await lookupISBN(barcodeISBN);
-      if (results.length) return { method: 'barcode', isbn: barcodeISBN, text: '', query: barcodeISBN, results };
+      return { method: 'barcode', isbn: barcodeISBN, text: '', results };
     }
 
-    onProgress({ stage: 'ocr', progress: 0.12, message: 'Lecture du titre et de l’auteur sur la couverture…' });
+    onProgress({ stage: 'ocr', progress: 0.12, message: 'Lecture du numéro imprimé près du code-barres…' });
     const tesseract = await loadTesseract();
     const recognition = await tesseract.recognize(imageBlob, 'fra+eng', {
       tessedit_pageseg_mode:'11', preserve_interword_spaces:'1',
       logger: message => {
         if (message.status !== 'recognizing text') return;
-        onProgress({ stage: 'ocr', progress: Number(message.progress) || 0, message: `Lecture de la couverture… ${Math.round((Number(message.progress) || 0) * 100)} %` });
+        onProgress({ stage: 'ocr', progress: Number(message.progress) || 0, message: `Lecture du code ISBN… ${Math.round((Number(message.progress) || 0) * 100)} %` });
       }
     });
     const text = String(recognition?.data?.text || '').trim();
@@ -579,25 +529,14 @@
     if (ocrISBN) {
       onProgress({ stage: 'catalogue', progress: 0.8, message: `ISBN ${ocrISBN} lu sur l’image. Recherche de l’édition…` });
       const results = await lookupISBN(ocrISBN);
-      if (results.length) return { method: 'ocr-isbn', isbn: ocrISBN, text, query: ocrISBN, results };
+      return { method: 'ocr-isbn', isbn: ocrISBN, text, results };
     }
-    const queries = ocrQueries(text), query = queries[0] || '';
-    if (!query) throw new Error('Aucun titre exploitable n’a été lu. Essayez une photo plus nette ou utilisez l’ISBN/la saisie manuelle.');
-    let results = [];
-    for (const [index,candidate] of queries.entries()) {
-      onProgress({ stage: 'catalogue', progress: 0.82, message: `Recherche de « ${candidate.slice(0, 70)} »…` });
-      try { results = deduplicate([...results, ...await searchBooks(candidate)], 12); }
-      catch { /* try the next OCR interpretation */ }
-      if (results.length >= 6 && index >= 1) break;
-    }
-    if (!results.length) throw new Error('La couverture a été lue, mais aucun livre correspondant n’a été trouvé. Utilisez l’ISBN ou la saisie manuelle.');
-    results.sort((a,b) => scoreOCRResult(b, text) - scoreOCRResult(a, text));
-    return { method: 'ocr', isbn: '', text, query, results:results.slice(0, 8) };
+    throw new Error('Aucun code ISBN valide n’a été reconnu. Recadrez la photo sur le code-barres ou saisissez le numéro manuellement.');
   }
 
   window.BT = window.BT || {};
   window.BT.bookLookup = {
-    analyzeCover, isbnVariants, isValidISBN, lookupISBN, normalizeISBN, prepareCover, searchBooks,
+    isbnVariants, isValidISBN, lookupISBN, normalizeISBN, prepareCover, scanISBNFromImage, searchBooks,
     constants: { GOOGLE_BOOKS_ENDPOINT, OPEN_LIBRARY_ENDPOINT, OPEN_LIBRARY_SEARCH_ENDPOINT, ISBN_FALLBACK_FUNCTION, TESSERACT_CDN, ZXING_CDN, ANALYSIS_MAX_EDGE }
   };
 })();
