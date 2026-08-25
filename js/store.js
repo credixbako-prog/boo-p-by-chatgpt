@@ -215,7 +215,7 @@ BT.store = (() => {
     state.notifications = Array.isArray(state.notifications) ? state.notifications : base.notifications;
     state.badges = { ...base.badges, ...(state.badges || {}), unlocked: state.badges?.unlocked || {} };
     state.settings = { ...base.settings, ...(state.settings || {}), notifications: { ...base.settings.notifications, ...(state.settings?.notifications || {}) }, blockedUsers: state.settings?.blockedUsers || [], recentSearches: state.settings?.recentSearches || [], dismissedRecommendationIds: state.settings?.dismissedRecommendationIds || [], collapsedLibraryGenres:state.settings?.collapsedLibraryGenres || [] };
-    state.settings.libraryFinish = ['terracotta','blue','sage','red'].includes(state.settings.libraryFinish) ? state.settings.libraryFinish : 'terracotta';
+    state.settings.libraryFinish = ['terracotta','blue','sage','red','black','white'].includes(state.settings.libraryFinish) ? state.settings.libraryFinish : 'terracotta';
     state.outbox = Array.isArray(state.outbox) ? state.outbox : [];
     state.timeline = Array.isArray(state.timeline) ? state.timeline : [];
     state.meta = { ...base.meta, ...(state.meta || {}) };

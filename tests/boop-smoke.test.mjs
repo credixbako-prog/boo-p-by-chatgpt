@@ -103,9 +103,15 @@ test('lexique: dictionnaire, questions ciblées et répétition espacée', async
 test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
   const [app, css] = await Promise.all([read('js/mvp-app.js'), read('css/mvp-v5.css')]);
   assert.match(app, /label: 'Galerie'/);
+  assert.match(app, /class="gallery-nav-glyph"/);
+  assert.match(css, /\.gallery-nav-glyph/);
   assert.match(app, /\['library','Bibliothèque'\]/);
   assert.match(app, /\['trail','Sentier'\]/);
   assert.match(app, /\['lexicon','Lexiques'\]/);
+  assert.match(app, /const tabs = \[\['overview','Profil'\],\['goals','Objectifs'\]\]/);
+  assert.match(app, /href="#profile\?tab=goals"/);
+  assert.match(app, /filter\(book => book\.libraryState === 'library' && book\.status === 'lu'\)/);
+  assert.match(app, /sans filtre d’année/);
   assert.match(app, /class="trail-map mind-map"/);
   assert.match(app, /class="trail-book-trunk"/);
   assert.match(app, /data-action="lexicon-filter"/);
@@ -178,17 +184,22 @@ test('objectifs: mois et année mélangent les parts vertes et orange des livres
   }
 });
 
-test('bibliothèque: quatre finitions et rayons horizontaux restent contenus', async () => {
+test('bibliothèque: six finitions visuelles et rayons horizontaux restent contenus', async () => {
   const [app, store, css] = await Promise.all([read('js/mvp-app.js'), read('js/store.js'), read('css/mvp-v5.css')]);
   assert.match(app, /\['terracotta','Terracotta'\]/);
   assert.match(app, /\['blue','Bleu'\]/);
   assert.match(app, /\['sage','Vert sauge'\]/);
   assert.match(app, /\['red','Rouge'\]/);
+  assert.match(app, /\['black','Noir'\]/);
+  assert.match(app, /\['white','Blanc'\]/);
+  assert.doesNotMatch(app, /<span aria-hidden="true"><\/span>\$\{label\}<\/button>/);
   assert.match(store, /libraryFinish: 'terracotta'/);
   assert.match(css, /\.physical-shelf \{[^}]*overflow-x: auto/);
   assert.match(css, /\.bookcase--blue/);
   assert.match(css, /\.bookcase--sage/);
   assert.match(css, /\.bookcase--red/);
+  assert.match(css, /\.bookcase--black/);
+  assert.match(css, /\.bookcase--white/);
 });
 
 test('lexique: la recherche tolérante retrouve une définition française', async () => {
@@ -543,7 +554,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v19/);
+  assert.match(worker, /boo-p-webapp-v20/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

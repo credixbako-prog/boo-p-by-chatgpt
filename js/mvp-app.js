@@ -5,7 +5,7 @@
   const store = window.BT.store;
   const ui = {
     route: 'home', params: new URLSearchParams(),
-    communityTab: 'public', pathTab: 'library', memoryIndex: 0,
+    communityTab: 'public', pathTab: 'library', profileTab: 'overview', memoryIndex: 0,
     libraryQuery: '', libraryStatus: 'tous', notificationFilter: 'all',
     openComments: new Set(), friendQuery: '', lexiconQuery: '', timer: null, heartbeat: null,
     lastFocus: null, pendingCover: '', pendingCoverKind: '', pendingISBNPhoto: '', pendingISBNPhotoFile: null, bookSuggestions: [],
@@ -21,8 +21,8 @@
   const NAV = [
     { id: 'home', label: 'Accueil', icon: '⌂', href: '#home' },
     { id: 'community', label: 'Communauté', icon: '◎', href: '#community?tab=public' },
-    { id: 'path', label: 'Galerie', icon: '🖼️', href: '#path?tab=library' },
-    { id: 'profile', label: 'Profil', icon: '◉', href: '#profile' }
+    { id: 'path', label: 'Galerie', icon: '<span class="gallery-nav-glyph"></span>', href: '#path?tab=library' },
+    { id: 'profile', label: 'Profil', icon: '◉', href: '#profile?tab=overview' }
   ];
   const TITLES = {
     home: ['Votre espace', 'Accueil'], community: ['Échanges choisis', 'Communauté'],
@@ -87,7 +87,8 @@
     ui.route = ['home','community','path','profile','session','book','club'].includes(route) ? route : 'home';
     ui.params = new URLSearchParams(query);
     if (ui.route === 'community') ui.communityTab = ['public','clubs','salons','friends'].includes(ui.params.get('tab')) ? ui.params.get('tab') : 'public';
-    if (ui.route === 'path') ui.pathTab = ['library','trail','lexicon','goals'].includes(ui.params.get('tab')) ? ui.params.get('tab') : 'library';
+    if (ui.route === 'path') ui.pathTab = ['library','trail','lexicon'].includes(ui.params.get('tab')) ? ui.params.get('tab') : 'library';
+    if (ui.route === 'profile') ui.profileTab = ['overview','goals'].includes(ui.params.get('tab')) ? ui.params.get('tab') : 'overview';
   }
 
   function init() {
@@ -267,7 +268,7 @@
       </section>
 
       <section class="section-block" aria-labelledby="home-goals-title">
-        <div class="section-heading"><h2 id="home-goals-title">Objectifs</h2><a class="text-link" href="#path?tab=goals">Ajuster dans Galerie</a></div>
+        <div class="section-heading"><h2 id="home-goals-title">Objectifs</h2><a class="text-link" href="#profile?tab=goals">Ajuster dans Profil</a></div>
         <div class="goal-grid">
           ${goalMini('Semaine', `${goals.week.value}/${goals.week.target} jours`, weekPct)}
           ${goalMini('Mois', goalStatusText(goals.month), goals.month)}
@@ -567,9 +568,9 @@
   }
 
   function renderPath() {
-    const tabs = [['library','Bibliothèque'],['trail','Sentier'],['lexicon','Lexiques'],['goals','Objectifs']];
-    const bodies = { library: renderLibrary, trail: renderTrail, lexicon: renderLexicon, goals: renderGoals };
-    return `<section class="page-head"><div><p class="eyebrow">Livres, mémoire et objectifs</p><h1>Galerie</h1><p>Votre cheminement reste modifiable : corrigez une page, un statut ou une ancienne lecture à tout moment.</p></div></section>
+    const tabs = [['library','Bibliothèque'],['trail','Sentier'],['lexicon','Lexiques']];
+    const bodies = { library: renderLibrary, trail: renderTrail, lexicon: renderLexicon };
+    return `<section class="page-head"><div><p class="eyebrow">Livres et mémoire</p><h1>Galerie</h1><p>Votre cheminement reste modifiable : corrigez une page, un statut ou une ancienne lecture à tout moment.</p></div></section>
       <nav class="tabs" aria-label="Sections de la Galerie">${tabs.map(([id,label]) => `<a class="tab" href="#path?tab=${id}" aria-current="${ui.pathTab === id ? 'page' : 'false'}">${label}</a>`).join('')}</nav>${bodies[ui.pathTab]()}`;
   }
 
@@ -601,7 +602,7 @@
     };
     if (view !== 'shelf') return `<div class="book-grid">${books.map(renderCard).join('')}</div>`;
     const settings = store.getSettings(), collapsed = new Set(settings.collapsedLibraryGenres || []), groups = new Map();
-    const finish = ['terracotta','blue','sage','red'].includes(settings.libraryFinish) ? settings.libraryFinish : 'terracotta';
+    const finish = ['terracotta','blue','sage','red','black','white'].includes(settings.libraryFinish) ? settings.libraryFinish : 'terracotta';
     books.forEach(book => { const genre = String(book.genre || '').trim() || 'À classer'; if (!groups.has(genre)) groups.set(genre, []); groups.get(genre).push(book); });
     const ordered = [...groups.entries()].sort(([a],[b]) => a === 'À classer' ? 1 : b === 'À classer' ? -1 : a.localeCompare(b, 'fr'));
     const shelves = ordered.map(([genre, items]) => {
@@ -609,8 +610,8 @@
       const isOpen = ui.libraryQuery || !collapsed.has(genreKey);
       return `<details class="genre-shelf" data-library-genre="${attr(genreKey)}" ${isOpen ? 'open' : ''}><summary><span>${esc(genre)}</span><small>${items.length} livre${items.length > 1 ? 's' : ''} · glissez horizontalement</small></summary><div class="physical-shelf" role="group" tabindex="0" aria-label="Rayon ${attr(genre)}, défilement horizontal">${items.map((book,index) => renderBookSpine(book,index)).join('')}</div></details>`;
     }).join('');
-    const finishes = [['terracotta','Terracotta'],['blue','Bleu'],['sage','Vert sauge'],['red','Rouge']];
-    return `<details class="bookcase-finish-picker"><summary aria-label="Choisir la couleur du meuble"><span aria-hidden="true">◐</span> Couleur du meuble</summary><div role="group" aria-label="Finitions de la bibliothèque">${finishes.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="library-finish" data-finish="${key}" aria-pressed="${finish === key}"><span aria-hidden="true"></span>${label}</button>`).join('')}</div></details><div class="bookcase bookcase--${finish}" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↔</span> Glissez un rayon pour parcourir les livres. Touchez une première fois pour sélectionner, puis une seconde fois pour ouvrir.</p>${shelves}</div>`;
+    const finishes = [['terracotta','Terracotta'],['blue','Bleu'],['sage','Vert sauge'],['red','Rouge'],['black','Noir'],['white','Blanc']];
+    return `<div class="bookcase-finish-picker" role="group" aria-label="Couleur du meuble">${finishes.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="library-finish" data-finish="${key}" aria-label="${label}" title="${label}" aria-pressed="${finish === key}"><span aria-hidden="true"></span></button>`).join('')}</div><div class="bookcase bookcase--${finish}" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↔</span> Glissez un rayon pour parcourir les livres. Touchez une première fois pour sélectionner, puis une seconde fois pour ouvrir.</p>${shelves}</div>`;
   }
 
   function renderBookSpine(book, index) {
@@ -700,8 +701,7 @@
   }
 
   function renderTrail() {
-    const year = new Date().getFullYear();
-    const books = store.getBooks().filter(book => book.libraryState === 'library' && book.status === 'lu' && book.completedAt && !book.historicalBeforeJoin && new Date(book.completedAt).getFullYear() === year).sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
+    const books = store.getBooks().filter(book => book.libraryState === 'library' && book.status === 'lu').sort((a,b) => (new Date(b.completedAt || 0) - new Date(a.completedAt || 0)) || a.title.localeCompare(b.title, 'fr'));
     const lexicon = store.getLexicon(), traces = store.getTraces(), posts = store.getCommunity().posts;
     const category = (kind, icon, title, count, content) => `<section class="trail-branch-group trail-branch-group--${kind}"><div class="trail-branch-category"><span aria-hidden="true">${icon}</span><div><small>${count}</small><strong>${title}</strong></div></div><div class="trail-branch-leaves">${content}</div></section>`;
     const tree = books.map(book => {
@@ -719,9 +719,9 @@
         <a class="trail-open-book text-link small" href="#book?id=${encodeURIComponent(book.id)}">Ouvrir la fiche du livre →</a>
       </div>` : '';
       const detailCount = bookLexicon.length + comments.length + bookTraces.length + encouragements;
-      return `<section class="trail-book-node ${expanded ? 'is-expanded' : ''}"><button class="trail-book-trunk" type="button" data-action="toggle-trail-book" data-id="${attr(book.id)}" aria-expanded="${expanded}" aria-controls="trail-branches-${attr(book.id)}"><span class="trail-book-trunk__mark" aria-hidden="true">▥</span><span><small>Lu en ${year} · ${detailCount} ramification${detailCount > 1 ? 's' : ''}</small><strong>${esc(book.title)}</strong><em>${esc(book.authors.join(', '))} · ${formatDate(book.completedAt)}</em></span><span class="trail-book-trunk__toggle" aria-hidden="true">${expanded ? '−' : '+'}</span></button>${branches}</section>`;
+      return `<section class="trail-book-node ${expanded ? 'is-expanded' : ''}"><button class="trail-book-trunk" type="button" data-action="toggle-trail-book" data-id="${attr(book.id)}" aria-expanded="${expanded}" aria-controls="trail-branches-${attr(book.id)}"><span class="trail-book-trunk__mark" aria-hidden="true">▥</span><span><small>Livre lu · ${detailCount} ramification${detailCount > 1 ? 's' : ''}</small><strong>${esc(book.title)}</strong><em>${esc(book.authors.join(', '))}${book.completedAt ? ` · ${formatDate(book.completedAt)}` : ''}</em></span><span class="trail-book-trunk__toggle" aria-hidden="true">${expanded ? '−' : '+'}</span></button>${branches}</section>`;
     }).join('');
-    return `<div class="section-heading"><div><h2>Sentier ${year}</h2><p class="small muted">Une carte mentale de vos livres lus cette année. Touchez un livre pour faire apparaître ses lexiques, encouragements, interactions et Traces.</p></div></div>${books.length ? `<div class="trail-map mind-map" aria-label="Carte mentale interactive des lectures terminées en ${year}">${tree}</div>` : `<div class="empty-state"><h3>Aucun livre terminé en ${year}</h3><p>Les livres apparaîtront ici dès qu’une lecture de l’année sera marquée comme lue.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
+    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Une carte mentale de tous vos livres lus, sans filtre d’année. Touchez un livre pour faire apparaître ses lexiques, encouragements, interactions et Traces.</p></div></div>${books.length ? `<div class="trail-map mind-map" aria-label="Carte mentale interactive de toutes les lectures terminées">${tree}</div>` : `<div class="empty-state"><h3>Aucun livre terminé</h3><p>Les livres apparaîtront ici dès qu’une lecture sera marquée comme lue.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
   }
 
   function renderLexicon() {
@@ -763,11 +763,14 @@
   }
 
   function renderProfile() {
+    const tabs = [['overview','Profil'],['goals','Objectifs']];
+    const tabNavigation = `<nav class="tabs" aria-label="Sections du Profil">${tabs.map(([id,label]) => `<a class="tab" href="#profile?tab=${id}" aria-current="${ui.profileTab === id ? 'page' : 'false'}">${label}</a>`).join('')}</nav>`;
+    if (ui.profileTab === 'goals') return `<section class="page-head"><div><p class="eyebrow">Progression personnelle</p><h1>Objectifs</h1><p>Choisissez vos livres et suivez séparément les lectures terminées et celles qui sont encore en cours.</p></div></section>${tabNavigation}${renderGoals()}`;
     const profile = store.getProfile(), settings = store.getSettings(), stats = store.getStats();
     let adn = store.getBooks().filter(book => book.isADN).sort((a,b) => (a.adnOrder ?? 99) - (b.adnOrder ?? 99)).slice(0,3);
     if (adn.length < 3) adn = adn.concat(store.getBooks().filter(book => !adn.some(item => item.id === book.id)).slice(0, 3 - adn.length));
     const progress = store.getGoalProgress(), badges = store.getBadges();
-    return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main"><span class="profile-avatar">${esc(initials(profile.name))}</span><div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button></section>
+    return `${tabNavigation}<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main"><span class="profile-avatar">${esc(initials(profile.name))}</span><div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button></section>
       <section class="section-block"><div class="section-heading"><div><p class="eyebrow">Trois livres, une ligne</p><h2>ADN du lecteur</h2></div><button class="text-link" type="button" data-action="edit-adn">Modifier</button></div><div class="adn-row">${adn.map(book => `<div class="adn-book">${cover(book)}<strong>${esc(book.title)}</strong></div>`).join('')}</div></section>
       <section class="section-block"><h2>Statistiques</h2><div class="stats-grid"><div class="card stat-card"><strong>${stats.booksRead}</strong><span>livres lus</span></div><div class="card stat-card"><strong>${Math.floor(stats.totalMinutes/60)} h ${stats.totalMinutes%60}</strong><span>temps de lecture</span></div><div class="card stat-card"><strong>${stats.streak}</strong><span>jours de série</span></div><div class="card stat-card"><strong>${stats.totalTraces}</strong><span>Traces et lexique</span></div><div class="card stat-card"><strong>${stats.booksTransmitted}</strong><span>prêtés ou donnés</span></div><div class="card stat-card"><strong>${progress.week.value}/${progress.week.target}</strong><span>objectif semaine</span></div><div class="card stat-card"><strong>${progress.month.value}/${progress.month.target}</strong><span>objectif mois</span></div><div class="card stat-card"><strong>${progress.year.value}/${progress.year.target}</strong><span>objectif année</span></div></div></section>
       ${renderLatestBadge(badges)}
