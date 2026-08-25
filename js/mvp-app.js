@@ -15,7 +15,8 @@
     monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
     selectedLibraryBookId: null, memoryDeckKeys: [], memoryDeckSignature: '', memorySessionTotal: 0, memorySessionComplete: false,
     memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all',
-    expandedTrailBooks: new Set(), clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map()
+    expandedTrailBooks: new Set(), trailYear: 'all', trailStatus: 'all', clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map(),
+    syncReady: false, syncBusy: false, syncPending: false, syncTimer: null, syncUnsubscribe: null, syncBootstrapping: false, syncErrorShown: false
   };
 
   const NAV = [
@@ -61,11 +62,22 @@
 
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[char]);
   const attr = esc;
+  const isGuestMode = () => Boolean(window.BT.auth?.isGuest?.());
   const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
   const pct = (value, total) => total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
   const initials = name => String(name || 'L').trim().split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase();
   const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
   const formatDate = value => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: new Date(value).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined }).format(new Date(value));
+  const dateInputValue = value => /^\d{4}-\d{2}-\d{2}/.test(String(value || '')) ? String(value).slice(0, 10) : '';
+  const readingDateISO = value => value ? new Date(`${value}T12:00:00`).toISOString() : null;
+  const ratingStars = value => {
+    const rating = Math.max(0, Math.min(5, Math.round(Number(value) || 0)));
+    return `<span class="book-rating-stars" role="img" aria-label="${rating} étoile${rating > 1 ? 's' : ''} sur 5"><span aria-hidden="true">${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</span></span>`;
+  };
+  const ratingPicker = (value = 0, target = 'finish-rating') => {
+    const rating = Math.max(0, Math.min(5, Math.round(Number(value) || 0)));
+    return `<div class="rating-row" role="group" aria-label="Note de 1 à 5 étoiles">${[1,2,3,4,5].map(star => `<button class="rating-button ${star <= rating ? 'is-filled' : ''}" type="button" data-action="select-rating" data-target="${attr(target)}" data-value="${star}" aria-pressed="${star === rating}" aria-label="${star} étoile${star > 1 ? 's' : ''} sur 5"><span aria-hidden="true">★</span></button>`).join('')}</div>`;
+  };
   const formatDateTime = value => new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
   const formatDuration = seconds => {
     const total = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -93,15 +105,16 @@
 
   function init() {
     store.recoverActiveSession();
-    const user = window.BT.auth?.getCurrentUser?.();
+    const user = isGuestMode() ? null : window.BT.auth?.getCurrentUser?.();
     const profile = store.getProfile();
+    if (isGuestMode() && (profile.name === 'Dixon' || !profile.name)) store.saveProfile({ name:'Invité BOO-P', handle:'@invite', visibility:'public' });
     if (user && (profile.email !== user.email || (!profile.name || profile.name === 'Dixon') || (!profile.handle && user.profile?.handle))) store.saveProfile({ email: user.email, name: profile.name === 'Dixon' ? user.name : profile.name, handle:profile.handle || (user.profile?.handle ? `@${user.profile.handle}` : '') });
     ui.memoryIndex = Number(store.getSettings().memoryIndex) || 0;
     applyTheme();
     bindGlobalEvents();
     renderNavigation();
     window.addEventListener('hashchange', () => { render(true); });
-    window.addEventListener('online', updateNetworkState);
+    window.addEventListener('online', () => { updateNetworkState(); bootstrapUserDataSync({ quiet:true }); });
     window.addEventListener('offline', updateNetworkState);
     updateNetworkState();
     if (!location.hash) location.hash = '#home'; else render();
@@ -113,8 +126,68 @@
     }
     ui.timer = window.setInterval(tickSessionClock, 1000);
     ui.heartbeat = window.setInterval(() => store.heartbeatActiveSession(), 10000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); refreshNotifications({ quiet:true }); render(); } });
-    window.addEventListener('pagehide', () => ui.notificationUnsubscribe?.(), { once:true });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); refreshNotifications({ quiet:true }); bootstrapUserDataSync({ quiet:true, refresh:true }).finally(() => render()); } });
+    window.addEventListener('pagehide', () => { ui.notificationUnsubscribe?.(); ui.syncUnsubscribe?.(); clearTimeout(ui.syncTimer); }, { once:true });
+  }
+
+  function remoteSnapshotHasData(snapshot) {
+    return ['books','sessions','traces','lexicon'].some(key => Array.isArray(snapshot?.[key]) && snapshot[key].length)
+      || Boolean(snapshot?.goals && Object.keys(snapshot.goals).length);
+  }
+
+  function scheduleUserDataSync(delay = 750) {
+    if (!ui.syncReady || isGuestMode() || !navigator.onLine) return;
+    clearTimeout(ui.syncTimer);
+    ui.syncTimer = window.setTimeout(() => syncUserDataNow(), delay);
+  }
+
+  async function syncUserDataNow() {
+    if (!ui.syncReady || isGuestMode() || !navigator.onLine || !window.BT.userDataSync) return;
+    if (!store.getDataSyncStatus?.().dirty) return;
+    if (ui.syncBusy) { ui.syncPending = true; return; }
+    ui.syncBusy = true;
+    try {
+      await window.BT.userDataSync.pushAll(store.getSyncedData(), { touch:true, replaceRemote:true });
+      store.markDataSynced();
+      ui.syncErrorShown = false;
+    } catch (error) {
+      console.error('BOO-P personal data sync', error);
+      if (!ui.syncErrorShown) { showToast('Vos changements restent sur cet appareil ; synchronisation en attente.'); ui.syncErrorShown = true; }
+    } finally {
+      ui.syncBusy = false;
+      if (ui.syncPending) { ui.syncPending = false; scheduleUserDataSync(100); }
+    }
+  }
+
+  async function bootstrapUserDataSync({ quiet = false, refresh = false } = {}) {
+    if (isGuestMode() || !window.BT.userDataSync || !navigator.onLine || ui.syncBootstrapping) return false;
+    if (ui.syncReady && !refresh) return true;
+    ui.syncBootstrapping = true;
+    try {
+      window.BT.userDataSync.configure({ isGuest:isGuestMode });
+      const localStatus = store.getDataSyncStatus();
+      const remote = await window.BT.userDataSync.pullAll();
+      if (remote?._sync?.skipped) return false;
+      if (!remoteSnapshotHasData(remote)) {
+        await window.BT.userDataSync.pushAll(store.getSyncedData(), { touch:true, replaceRemote:true });
+      } else if (localStatus.lastSyncedFingerprint && localStatus.dirty) {
+        await window.BT.userDataSync.pushAll(store.getSyncedData(), { touch:true, replaceRemote:true });
+      } else {
+        store.replaceSyncedData(remote);
+      }
+      store.markDataSynced(remote?._sync?.pulledAt || new Date().toISOString());
+      if (!ui.syncUnsubscribe) ui.syncUnsubscribe = store.subscribe(() => scheduleUserDataSync());
+      ui.syncReady = true;
+      ui.syncErrorShown = false;
+      return true;
+    } catch (error) {
+      console.error('BOO-P initial data sync', error);
+      ui.syncReady = false;
+      if (!quiet && !ui.syncErrorShown) { showToast('Synchronisation indisponible pour le moment ; vos données locales sont conservées.'); ui.syncErrorShown = true; }
+      return false;
+    } finally {
+      ui.syncBootstrapping = false;
+    }
   }
 
   function bindGlobalEvents() {
@@ -253,6 +326,8 @@
 
   function renderHome() {
     const profile = store.getProfile(), active = store.getCurrentBook(), session = active ? store.getActiveSessionForBook(active.id) : null, goals = store.getGoalProgress();
+    const memoryColors = [['terracotta','Terracotta'],['blue','Bleu'],['sage','Vert sauge'],['red','Rouge'],['black','Noir'],['white','Blanc']];
+    const memoryColor = memoryColors.some(([key]) => key === store.getSettings().memoryCardColor) ? store.getSettings().memoryCardColor : 'sage';
     const inProgress = store.getBooks().filter(book => book.status === 'en-cours' && book.libraryState === 'library');
     const openSessions = store.getActiveSessions();
     const progress = active ? bookProgress(active) : null;
@@ -297,7 +372,8 @@
 
       <section class="section-block" aria-labelledby="memory-title">
         <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} disponible${memory.length > 1 ? 's' : ''}</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez la réponse, touchez une carte pour la retourner ou balayez pour en choisir une autre.</p></div><a class="text-link" href="#path?tab=lexicon">Lexiques</a></div>
-        <div class="memory-list" aria-label="Cartes de la mémoire active">${memory.length ? `<div class="memory-carousel" data-memory-carousel tabindex="0" aria-label="Balayez horizontalement entre les cartes">${memory.map((item, index) => renderMemoryQuiz(item, index + 1, memory.length)).join('')}</div><div class="memory-carousel-dots" aria-hidden="true">${memory.map((_, index) => `<span class="${index === Math.min(ui.memoryCursor, memory.length - 1) ? 'is-current' : ''}"></span>`).join('')}</div>` : renderMemoryComplete()}</div>
+        <div class="memory-color-picker bookcase-finish-picker" role="group" aria-label="Couleur des cartes devinettes">${memoryColors.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="memory-card-color" data-color="${key}" aria-label="${label}" title="${label}" aria-pressed="${memoryColor === key}"><span aria-hidden="true"></span></button>`).join('')}</div>
+        <div class="memory-list memory-list--${memoryColor}" aria-label="Cartes de la mémoire active">${memory.length ? `<div class="memory-carousel" data-memory-carousel tabindex="0" aria-label="Balayez horizontalement entre les cartes">${memory.map((item, index) => renderMemoryQuiz(item, index + 1, memory.length)).join('')}</div><div class="memory-carousel-dots" aria-hidden="true">${memory.map((_, index) => `<span class="${index === Math.min(ui.memoryCursor, memory.length - 1) ? 'is-current' : ''}"></span>`).join('')}</div>` : renderMemoryComplete()}</div>
         <p class="memory-reminder small muted">Jusqu’à 10 cartes en même temps · une nouvelle entrée du lexique arrive automatiquement après « Retrouvé ».</p>
       </section>`;
   }
@@ -305,7 +381,7 @@
   function goalMini(label, value, progress) {
     const mixed = typeof progress === 'object';
     const green = mixed ? progress.greenPct : progress, orange = mixed ? progress.orangePct : 0, total = Math.min(100, green + orange);
-    return `<a class="goal-mini" href="#path?tab=goals" aria-label="${label}, ${value}"><span class="progress-ring ${mixed ? 'progress-ring--mixed' : ''}" style="--pct:${green};--green-pct:${green};--orange-pct:${orange};--total-pct:${total}"><span>${total}%</span></span><span><strong>${label}</strong><small>${value}</small></span></a>`;
+    return `<a class="goal-mini" href="#profile?tab=goals" aria-label="${label}, ${value}"><span class="progress-ring ${mixed ? 'progress-ring--mixed' : ''}" style="--pct:${green};--green-pct:${green};--orange-pct:${orange};--total-pct:${total}"><span>${total}%</span></span><span><strong>${label}</strong><small>${value}</small></span></a>`;
   }
 
   function goalStatusText(progress) {
@@ -413,7 +489,7 @@
       <div class="session-top"><button class="button button--ghost" type="button" data-action="leave-session">← Accueil</button>${sessions.length > 1 ? `<label class="session-switcher">Session<select data-change="focus-session">${sessions.map(item => { const itemBook = store.getBookById(item.bookId); return `<option value="${attr(item.id)}" ${item.id === session.id ? 'selected' : ''}>${esc(itemBook?.title || 'Livre')} · ${item.status === 'running' ? 'en lecture' : 'en pause'}</option>`; }).join('')}</select></label>` : ''}<span class="simulated-badge">Sauvegarde locale active</span></div>
       <div class="session-book">${cover(book,'small')}<div><p class="eyebrow">Lecture en cours</p><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p></div></div>
       <div class="session-timer"><span class="session-timer__value" data-session-clock>${formatDuration(store.activeDuration(session))}</span><span class="session-timer__status">${session.status === 'paused' ? 'En pause' : 'En lecture'}</span>${session.autoPaused ? '<p class="small muted">BOO-P a mis cette session en pause après 30 minutes en arrière-plan.</p>' : ''}</div>
-      <div class="session-controls"><button class="button button--secondary" type="button" data-action="quick-trace">Trace</button><button class="button button--secondary" type="button" data-action="session-lexicon">+ Lexique</button><button class="button button--primary session-control-main" type="button" data-action="toggle-session" aria-label="${session.status === 'paused' ? 'Reprendre' : 'Mettre en pause'}">${session.status === 'paused' ? '▶' : 'Ⅱ'}</button><button class="button button--sage" type="button" data-action="finish-session">Terminer</button></div>
+      <div class="session-controls"><button class="button button--secondary" type="button" data-action="session-lexicon">+ Lexique</button><button class="button button--primary session-control-main" type="button" data-action="toggle-session" aria-label="${session.status === 'paused' ? 'Reprendre' : 'Mettre en pause'}">${session.status === 'paused' ? '▶' : 'Ⅱ'}</button><button class="button button--sage" type="button" data-action="finish-session">Terminer</button></div>
       <aside class="card card-pad session-panel">
         <p class="eyebrow">Progression et note</p><div class="form-grid">
           <label class="field">${audio ? 'Minute atteinte' : 'Page atteinte'}<input type="number" min="0" max="${max}" value="${session.endPage}" data-change="session-page"><span class="field-help">Bornée à ${audio ? `${book.durationMinutes || 'la durée connue'} minutes` : `${book.totalPages || 'la valeur connue du livre'} pages`}.</span></label>
@@ -523,6 +599,20 @@
 
   async function loadClubSpace(id, { force = false } = {}) {
     if (!id || !window.BT.community?.getClubSpace || ui.clubSpaceLoading.has(id) || (!force && (ui.clubSpaces.has(id) || ui.clubSpaceErrors.has(id)))) return;
+    const localCommunity = store.getCommunity();
+    const localClub = localCommunity.clubs.find(club => club.id === id);
+    if (localClub && (isGuestMode() || !localClub.isRemote)) {
+      ui.clubSpaceErrors.delete(id);
+      ui.clubSpaces.set(id, {
+        club:localClub,
+        locked:!localClub.joined,
+        books:Array.isArray(localClub.books) && localClub.books.length ? localClub.books : (localClub.bookTitle ? [{ id:`local-current-${id}`, title:localClub.bookTitle, status:'current', updated_at:new Date().toISOString() }] : []),
+        posts:Array.isArray(localClub.posts) ? localClub.posts : [],
+        salons:localCommunity.salons.filter(salon => salon.clubId === id)
+      });
+      if (ui.route === 'club' && ui.params.get('id') === id) render();
+      return;
+    }
     ui.clubSpaceLoading.add(id);
     ui.clubSpaceErrors.delete(id);
     try {
@@ -647,6 +737,21 @@
     document.getElementById('live-region').textContent = message;
   }
 
+  function clearLibraryBookSelection(announce = false) {
+    if (!ui.selectedLibraryBookId) return false;
+    ui.selectedLibraryBookId = null;
+    document.querySelectorAll('.book-spine[data-action="select-book"]').forEach(spine => {
+      spine.classList.remove('is-selected');
+      spine.setAttribute('aria-pressed', 'false');
+      const book = store.getBookById(spine.dataset.id);
+      if (!book) return;
+      spine.title = book.title;
+      spine.setAttribute('aria-label', `Sélectionner ${book.title}, ${book.authors.join(', ')}, rayon ${book.genre || 'À classer'}`);
+    });
+    if (announce) document.getElementById('live-region').textContent = 'Sélection du livre annulée.';
+    return true;
+  }
+
   function handleLibraryShelfToggle(event) {
     const shelf = event.target;
     if (!(shelf instanceof HTMLDetailsElement) || !shelf.matches('[data-library-genre]')) return;
@@ -701,27 +806,45 @@
   }
 
   function renderTrail() {
-    const books = store.getBooks().filter(book => book.libraryState === 'library' && book.status === 'lu').sort((a,b) => (new Date(b.completedAt || 0) - new Date(a.completedAt || 0)) || a.title.localeCompare(b.title, 'fr'));
+    const activityDate = book => book.status === 'lu' ? (book.completedAt || book.startedAt || book.addedAt) : (book.startedAt || book.addedAt);
+    const allBooks = store.getBooks().filter(book => book.libraryState === 'library');
+    const years = [...new Set(allBooks.map(book => new Date(activityDate(book)).getFullYear()).filter(Number.isFinite))].sort((a,b) => b - a);
+    if (ui.trailYear !== 'all' && !years.includes(Number(ui.trailYear))) ui.trailYear = 'all';
+    const books = allBooks.filter(book => {
+      const matchesYear = ui.trailYear === 'all' || new Date(activityDate(book)).getFullYear() === Number(ui.trailYear);
+      return matchesYear && (ui.trailStatus === 'all' || book.status === ui.trailStatus);
+    }).sort((a,b) => (new Date(activityDate(b)) - new Date(activityDate(a))) || a.title.localeCompare(b.title, 'fr'));
     const lexicon = store.getLexicon(), traces = store.getTraces(), posts = store.getCommunity().posts;
-    const category = (kind, icon, title, count, content) => `<section class="trail-branch-group trail-branch-group--${kind}"><div class="trail-branch-category"><span aria-hidden="true">${icon}</span><div><small>${count}</small><strong>${title}</strong></div></div><div class="trail-branch-leaves">${content}</div></section>`;
-    const tree = books.map(book => {
-      const expanded = ui.expandedTrailBooks.has(book.id);
+    const layout = window.BT.trailMindmap?.layout?.(books, ui.expandedTrailBooks) || { width:900, height:660, root:{ x:105, y:330 }, nodes:[] };
+    const details = new Map(books.map(book => {
       const bookLexicon = lexicon.filter(item => item.bookId === book.id);
       const bookTraces = traces.filter(item => item.bookId === book.id);
       const bookPosts = posts.filter(post => normalize(post.bookTitle) === normalize(book.title));
-      const encouragements = bookPosts.reduce((sum, post) => sum + (Number(post.encouragements) || 0), 0);
       const comments = bookPosts.flatMap(post => post.comments || []);
-      const branches = expanded ? `<div class="trail-branches" id="trail-branches-${attr(book.id)}">
-        ${category('lexicon','Aa','Lexiques',bookLexicon.length,bookLexicon.length ? bookLexicon.slice(0,6).map(item => `<article class="trail-leaf"><strong>${esc(item.word)}</strong><span>${esc(item.definition)}</span></article>`).join('') : '<p class="trail-empty-branch">Aucun mot ou expression lié à ce livre.</p>')}
-        ${category('encouragement','♡','Encouragements',encouragements,encouragements ? `<article class="trail-leaf"><strong>${encouragements} geste${encouragements > 1 ? 's' : ''} reçu${encouragements > 1 ? 's' : ''}</strong><span>sur ${bookPosts.length} partage${bookPosts.length > 1 ? 's' : ''} autour de cette lecture</span></article>` : '<p class="trail-empty-branch">Aucun encouragement pour le moment.</p>')}
-        ${category('interaction','☍','Interactions',comments.length,comments.length ? comments.slice(0,4).map(comment => `<article class="trail-leaf"><strong>${esc(comment.authorName || 'Lecteur BOO-P')}</strong><span>${esc(comment.text)}</span></article>`).join('') : '<p class="trail-empty-branch">Aucun commentaire lié à cette lecture.</p>')}
-        ${bookTraces.length ? category('trace','✦','Traces personnelles',bookTraces.length,bookTraces.slice(0,4).map(trace => `<article class="trail-leaf"><strong>${trace.page ? `Page ${trace.page}` : 'Trace'}</strong><span>${esc(trace.text)}</span></article>`).join('')) : ''}
-        <a class="trail-open-book text-link small" href="#book?id=${encodeURIComponent(book.id)}">Ouvrir la fiche du livre →</a>
-      </div>` : '';
-      const detailCount = bookLexicon.length + comments.length + bookTraces.length + encouragements;
-      return `<section class="trail-book-node ${expanded ? 'is-expanded' : ''}"><button class="trail-book-trunk" type="button" data-action="toggle-trail-book" data-id="${attr(book.id)}" aria-expanded="${expanded}" aria-controls="trail-branches-${attr(book.id)}"><span class="trail-book-trunk__mark" aria-hidden="true">▥</span><span><small>Livre lu · ${detailCount} ramification${detailCount > 1 ? 's' : ''}</small><strong>${esc(book.title)}</strong><em>${esc(book.authors.join(', '))}${book.completedAt ? ` · ${formatDate(book.completedAt)}` : ''}</em></span><span class="trail-book-trunk__toggle" aria-hidden="true">${expanded ? '−' : '+'}</span></button>${branches}</section>`;
+      const encouragements = bookPosts.reduce((sum, post) => sum + (Number(post.encouragements) || 0), 0);
+      return [book.id, [
+        { kind:'lexicon', icon:'Aa', title:'Lexiques', count:bookLexicon.length, preview:bookLexicon[0] ? `${bookLexicon[0].word} · ${bookLexicon[0].definition}` : 'Aucun lexique lié' },
+        { kind:'trace', icon:'✦', title:'Traces', count:bookTraces.length, preview:bookTraces[0]?.text || 'Aucune Trace personnelle' },
+        { kind:'encouragement', icon:'♡', title:'Encouragements', count:encouragements, preview:encouragements ? `${encouragements} geste${encouragements > 1 ? 's' : ''} sur ${bookPosts.length} partage${bookPosts.length > 1 ? 's' : ''}` : 'Aucun encouragement' },
+        { kind:'interaction', icon:'☍', title:'Interactions', count:comments.length, preview:comments[0] ? `${comments[0].authorName || 'Lecteur BOO-P'} · ${comments[0].text}` : 'Aucune interaction' }
+      ]];
+    }));
+    const paths = layout.nodes.map(node => {
+      const book = books.find(item => item.id === node.id);
+      return `<path class="trail-canvas-link trail-canvas-link--${attr(book?.status || 'a-lire')}" d="${attr(node.path)}"></path>${node.branches.map(branch => `<path class="trail-canvas-link trail-canvas-link--branch" d="${attr(branch.path)}"></path>`).join('')}`;
     }).join('');
-    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Une carte mentale de tous vos livres lus, sans filtre d’année. Touchez un livre pour faire apparaître ses lexiques, encouragements, interactions et Traces.</p></div></div>${books.length ? `<div class="trail-map mind-map" aria-label="Carte mentale interactive de toutes les lectures terminées">${tree}</div>` : `<div class="empty-state"><h3>Aucun livre terminé</h3><p>Les livres apparaîtront ici dès qu’une lecture sera marquée comme lue.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
+    const nodes = layout.nodes.map(node => {
+      const book = books.find(item => item.id === node.id); if (!book) return '';
+      const expanded = ui.expandedTrailBooks.has(book.id), branches = details.get(book.id) || [];
+      const date = activityDate(book), dateLabel = book.status === 'lu' ? 'Terminé' : book.startedAt ? 'Commencé' : 'Ajouté';
+      const satellites = expanded ? node.branches.map((branch,index) => {
+        const item = branches[index];
+        return `<article class="trail-satellite trail-satellite--${item.kind}" style="--x:${branch.x}px;--y:${branch.y}px"><span class="trail-satellite__icon" aria-hidden="true">${item.icon}</span><span><small>${item.count}</small><strong>${item.title}</strong><em>${esc(item.preview)}</em></span></article>`;
+      }).join('') : '';
+      return `<div class="trail-canvas-book-wrap ${expanded ? 'is-expanded' : ''}" style="--x:${node.x}px;--y:${node.y}px"><button class="trail-canvas-book trail-canvas-book--${attr(book.status)}" type="button" data-action="toggle-trail-book" data-id="${attr(book.id)}" aria-expanded="${expanded}"><span class="trail-canvas-book__status">${esc(STATUS_LABELS[book.status])}</span><strong>${esc(book.title)}</strong><small>${esc(book.authors.join(', '))}</small><time datetime="${attr(date)}">${dateLabel} · ${formatDate(date)}</time><span class="trail-canvas-book__toggle" aria-hidden="true">${expanded ? '−' : '+'}</span></button>${expanded ? `<a class="trail-canvas-book__open" href="#book?id=${encodeURIComponent(book.id)}">Ouvrir la fiche →</a>` : ''}</div>${satellites}`;
+    }).join('');
+    const filters = `<div class="trail-toolbar"><div><label for="trail-year">Année</label><select id="trail-year" data-change="trail-year"><option value="all" ${ui.trailYear === 'all' ? 'selected' : ''}>Toutes</option>${years.map(year => `<option value="${year}" ${String(year) === ui.trailYear ? 'selected' : ''}>${year}</option>`).join('')}</select></div><div><label for="trail-status">Statut</label><select id="trail-status" data-change="trail-status"><option value="all" ${ui.trailStatus === 'all' ? 'selected' : ''}>Tous les livres</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.trailStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div><span>${books.length} livre${books.length > 1 ? 's' : ''} affiché${books.length > 1 ? 's' : ''}</span></div>`;
+    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Une vraie carte mentale libre de toute votre bibliothèque : livres à lire, en cours, en pause, lus ou abandonnés. Touchez un nœud pour déployer ses ramifications.</p></div></div>${filters}<div class="trail-legend" aria-label="Légende des statuts">${Object.entries(STATUS_LABELS).map(([value,label]) => `<span class="trail-legend__${value}"><i></i>${label}</span>`).join('')}</div>${books.length ? `<div class="trail-canvas-shell" tabindex="0" aria-label="Carte mentale interactive. Faites glisser horizontalement et verticalement pour l’explorer."><p class="trail-pan-hint"><span aria-hidden="true">↔</span> Faites glisser la carte dans toutes les directions</p><div class="trail-canvas" style="width:${layout.width}px;height:${layout.height}px"><svg viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true" focusable="false">${paths}</svg><div class="trail-root" style="--x:${layout.root.x}px;--y:${layout.root.y}px"><span aria-hidden="true">✦</span><strong>Mon sentier</strong><small>${allBooks.length} livre${allBooks.length > 1 ? 's' : ''}</small></div>${nodes}</div></div>` : `<div class="empty-state"><h3>Aucun livre dans ce filtre</h3><p>Affichez toutes les années et tous les statuts, ou ajoutez un livre à votre bibliothèque.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
   }
 
   function renderLexicon() {
@@ -753,9 +876,9 @@
     const id = ui.params.get('id'), book = store.getBookById(id);
     if (!book) return `<div class="empty-state"><h1>Livre introuvable</h1><p>Il a peut-être été retiré de cette bibliothèque locale.</p><a class="button button--primary" href="#path?tab=library">Retour à la bibliothèque</a></div>`;
     const sessions = store.getSessionsForBook(id), traces = store.getTraces(id), lexicon = store.getLexicon().filter(item => item.bookId === id), openSession = store.getActiveSessionForBook(id), progress = bookProgress(book), wishlist = book.libraryState === 'wishlist', audio = book.mediaType === 'audio';
-    return `<a class="text-link" href="#path?tab=${wishlist ? 'library' : 'library'}">← Ma bibliothèque</a><section class="book-detail-head section-block">${cover(book,'large')}<div class="book-detail-copy"><div class="button-row"><span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</span>${!wishlist ? `<span class="privacy-badge">${SITUATION_LABELS[book.situation]}</span>` : ''}<span class="media-chip">${MEDIA_LABELS[book.mediaType] || 'Livre'}</span>${book.historicalBeforeJoin ? '<span class="status-chip">Lu avant mon inscription</span>' : ''}</div><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p><p>${esc(book.description || 'Aucun résumé pour cette édition.')}</p>${!wishlist ? `<div class="progress-track" aria-label="Progression ${pct(progress.value,progress.total)} %"><span style="--width:${pct(progress.value,progress.total)}%"></span></div><p class="small muted">${progress.label}${book.rating ? ` · appréciation ${'🔖'.repeat(book.rating)}` : ''}</p>` : '<p class="small muted">Envie de lecture conservée dans votre wishlist.</p>'}<div class="button-row">${wishlist ? `<button class="button button--primary" type="button" data-action="move-to-library" data-id="${attr(id)}">Ajouter à ma bibliothèque</button>` : `<button class="button button--primary" type="button" data-action="book-session" data-id="${attr(id)}">${openSession ? 'Reprendre la session' : 'Démarrer une session'}</button>`}<button class="button button--ghost" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div></div></section>
+    return `<a class="text-link" href="#path?tab=${wishlist ? 'library' : 'library'}">← Ma bibliothèque</a><section class="book-detail-head section-block">${cover(book,'large')}<div class="book-detail-copy"><div class="button-row"><span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</span>${!wishlist ? `<span class="privacy-badge">${SITUATION_LABELS[book.situation]}</span>` : ''}<span class="media-chip">${MEDIA_LABELS[book.mediaType] || 'Livre'}</span>${book.historicalBeforeJoin ? '<span class="status-chip">Lu avant mon inscription</span>' : ''}</div><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p><p>${esc(book.description || 'Aucun résumé pour cette édition.')}</p>${!wishlist ? `<div class="progress-track" aria-label="Progression ${pct(progress.value,progress.total)} %"><span style="--width:${pct(progress.value,progress.total)}%"></span></div><p class="small muted">${progress.label}${book.rating ? ` · ${ratingStars(book.rating)}` : ''}</p>` : '<p class="small muted">Envie de lecture conservée dans votre wishlist.</p>'}<div class="button-row">${wishlist ? `<button class="button button--primary" type="button" data-action="move-to-library" data-id="${attr(id)}">Ajouter à ma bibliothèque</button>` : `<button class="button button--primary" type="button" data-action="book-session" data-id="${attr(id)}">${openSession ? 'Reprendre la session' : 'Démarrer une session'}</button>`}<button class="button button--ghost" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div></div></section>
       <div class="grid-2">
-        <section class="card card-pad"><div class="section-heading"><h2>Édition et progression</h2><button class="text-link" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div><dl class="metadata-list"><div><dt>Rayon</dt><dd>${esc(book.genre || 'À classer')}</dd></div><div><dt>Éditeur</dt><dd>${esc(book.publisher || 'Non renseigné')}</dd></div><div><dt>Édition</dt><dd>${esc(book.edition || 'Non renseignée')}</dd></div>${audio ? `<div><dt>Support</dt><dd>Livre audio</dd></div><div><dt>Durée</dt><dd>${book.durationMinutes || 'Non renseignée'} min</dd></div><div><dt>Narration</dt><dd>${esc(book.narrator || 'Non renseignée')}</dd></div><div><dt>Plateforme</dt><dd>${esc(book.audioPlatform || 'Non renseignée')}</dd></div>` : `<div><dt>Format</dt><dd>${esc(book.format || (book.mediaType === 'ebook' ? 'Livre numérique' : 'Non renseigné'))}</dd></div><div><dt>Pages</dt><dd>${book.totalPages || 'Non renseigné'}</dd></div>`}<div><dt>Statut</dt><dd>${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</dd></div>${!wishlist ? `<div><dt>Situation</dt><dd>${SITUATION_LABELS[book.situation]}</dd></div>` : ''}</dl></section>
+        <section class="card card-pad"><div class="section-heading"><h2>Édition et progression</h2><button class="text-link" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div><dl class="metadata-list"><div><dt>Rayon</dt><dd>${esc(book.genre || 'À classer')}</dd></div><div><dt>Éditeur</dt><dd>${esc(book.publisher || 'Non renseigné')}</dd></div><div><dt>Édition</dt><dd>${esc(book.edition || 'Non renseignée')}</dd></div>${audio ? `<div><dt>Support</dt><dd>Livre audio</dd></div><div><dt>Durée</dt><dd>${book.durationMinutes || 'Non renseignée'} min</dd></div><div><dt>Narration</dt><dd>${esc(book.narrator || 'Non renseignée')}</dd></div><div><dt>Plateforme</dt><dd>${esc(book.audioPlatform || 'Non renseignée')}</dd></div>` : `<div><dt>Format</dt><dd>${esc(book.format || (book.mediaType === 'ebook' ? 'Livre numérique' : 'Non renseigné'))}</dd></div><div><dt>Pages</dt><dd>${book.totalPages || 'Non renseigné'}</dd></div>`}<div><dt>Statut</dt><dd>${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</dd></div>${!wishlist ? `<div><dt>Début de lecture</dt><dd>${book.startedAt ? formatDate(book.startedAt) : 'Non renseigné'}</dd></div><div><dt>Fin de lecture</dt><dd>${book.completedAt ? formatDate(book.completedAt) : 'Non renseignée'}</dd></div><div><dt>Situation</dt><dd>${SITUATION_LABELS[book.situation]}</dd></div>` : ''}</dl></section>
         <section class="card card-pad"><div class="section-heading"><h2>Sessions</h2><button class="text-link" type="button" data-action="manual-session" data-book-id="${attr(id)}">Ajouter une session passée</button></div>${sessions.length ? `<div class="history-list">${sessions.map(session => `<div class="history-item"><span class="history-item__icon">◷</span><div class="history-item__content"><strong>${Math.round(session.durationSeconds/60)} min · ${audio ? 'min.' : 'p.'} ${session.startPage} à ${session.endPage}</strong><span class="small muted">${formatDate(session.startedAt)}${session.manual ? ' · ajoutée manuellement' : ''}</span></div><button class="text-link small" type="button" data-action="edit-session" data-id="${attr(session.id)}">Modifier</button></div>`).join('')}</div>` : `<p class="small muted">Aucune session enregistrée.</p>`}</section>
         <section class="card card-pad"><div class="section-heading"><h2>Traces</h2><button class="text-link" type="button" data-action="quick-trace" data-book-id="${attr(id)}">Ajouter</button></div>${traces.length ? traces.map(trace => `<article class="history-item"><span class="history-item__icon">✦</span><div class="history-item__content"><strong>${esc(trace.text)}</strong><span class="small muted">${trace.page ? `${audio ? 'min.' : 'p.'} ${trace.page} · ` : ''}${VISIBILITY_LABELS[trace.privacy] || 'Privé'}</span></div></article>`).join('') : '<p class="small muted">Aucune Trace pour ce livre.</p>'}</section>
         <section class="card card-pad"><div class="section-heading"><h2>Lexique</h2><button class="text-link" type="button" data-action="add-lexicon" data-book-id="${attr(id)}">Ajouter</button></div>${lexicon.length ? lexicon.map(item => `<article class="history-item"><span class="history-item__icon">Aa</span><div class="history-item__content"><strong>${esc(item.word)}</strong><span class="small muted">${esc(item.definition)}</span></div></article>`).join('') : '<p class="small muted">Aucune entrée associée.</p>'}</section>
@@ -846,7 +969,8 @@
   function renderNotifications() {
     const all = store.getNotifications();
     const items = ui.notificationFilter === 'unread' ? all.filter(item => !item.read) : ui.notificationFilter === 'social' ? all.filter(item => ['friend','trace','encouragement'].includes(item.type)) : all;
-    document.getElementById('notifications-body').innerHTML = `<div class="toolbar"><label class="sr-only" for="notification-filter">Filtrer</label><select id="notification-filter" data-change="notification-filter"><option value="all" ${ui.notificationFilter === 'all' ? 'selected' : ''}>Toutes</option><option value="unread" ${ui.notificationFilter === 'unread' ? 'selected' : ''}>Non lues</option><option value="social" ${ui.notificationFilter === 'social' ? 'selected' : ''}>Communauté</option></select><button class="button button--ghost button--small" type="button" data-action="mark-all-notifications">Tout marquer comme lu</button></div><p class="small muted">Demandes d’amis, Traces et encouragements sont synchronisés avec votre compte BOO-P.</p>${items.length ? items.map(item => `<article class="notification-item ${item.read ? '' : 'is-unread'}">${item.read ? '<span class="notification-dot" style="opacity:.2"></span>' : '<span class="notification-dot"></span>'}<div class="card-content"><strong>${esc(item.title)}</strong><p class="small">${esc(item.text)}</p><span class="micro muted">${relativeDate(item.date)}</span><div class="card-actions"><button class="text-link small" type="button" data-action="open-notification" data-id="${attr(item.id)}" data-route="${attr(item.route)}">Ouvrir</button>${!item.read ? `<button class="text-link small" type="button" data-action="mark-notification" data-id="${attr(item.id)}">Marquer comme lue</button>` : ''}</div></div></article>`).join('') : `<div class="empty-state"><h3>Tout est calme</h3><p>Aucune notification dans ce filtre.</p></div>`}`;
+    const syncNote = isGuestMode() ? 'En mode invité, les notifications de test restent sur cet appareil.' : 'Demandes d’amis, Traces et encouragements sont synchronisés avec votre compte BOO-P.';
+    document.getElementById('notifications-body').innerHTML = `<div class="toolbar"><label class="sr-only" for="notification-filter">Filtrer</label><select id="notification-filter" data-change="notification-filter"><option value="all" ${ui.notificationFilter === 'all' ? 'selected' : ''}>Toutes</option><option value="unread" ${ui.notificationFilter === 'unread' ? 'selected' : ''}>Non lues</option><option value="social" ${ui.notificationFilter === 'social' ? 'selected' : ''}>Communauté</option></select><button class="button button--ghost button--small" type="button" data-action="mark-all-notifications">Tout marquer comme lu</button></div><p class="small muted">${syncNote}</p>${items.length ? items.map(item => `<article class="notification-item ${item.read ? '' : 'is-unread'}">${item.read ? '<span class="notification-dot" style="opacity:.2"></span>' : '<span class="notification-dot"></span>'}<div class="card-content"><strong>${esc(item.title)}</strong><p class="small">${esc(item.text)}</p><span class="micro muted">${relativeDate(item.date)}</span><div class="card-actions"><button class="text-link small" type="button" data-action="open-notification" data-id="${attr(item.id)}" data-route="${attr(item.route)}">Ouvrir</button>${!item.read ? `<button class="text-link small" type="button" data-action="mark-notification" data-id="${attr(item.id)}">Marquer comme lue</button>` : ''}</div></div></article>`).join('') : `<div class="empty-state notification-empty"><div class="notification-sleeper" aria-hidden="true"><span class="notification-sleeper__pillow"></span><span class="notification-sleeper__head"></span><span class="notification-sleeper__body"></span><span class="notification-sleeper__blanket"></span><i>Z</i><i>Z</i><i>Z</i></div><h3>Tout est calme</h3><p>Aucune notification dans ce filtre.</p></div>`}`;
   }
 
   function openTraceDialog(bookId = null) {
@@ -881,6 +1005,11 @@
       <div id="book-lookup-results" aria-live="polite"></div>
       <hr class="section-block"><p class="eyebrow">Saisie manuelle ou correction</p>
       <form class="form-grid" data-form="book"><input type="hidden" name="id" value="${attr(book?.id || '')}"><input type="hidden" name="coverUrl" id="book-cover-value" value="${attr(book?.coverUrl || '')}"><input type="hidden" name="coverSource" id="book-cover-source" value="${attr(ui.pendingCoverKind)}"><div class="field-row"><label class="field">Destination<select name="libraryState"><option value="library" ${book?.libraryState !== 'wishlist' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${book?.libraryState === 'wishlist' ? 'selected' : ''}>Ma wishlist</option></select></label><label class="field">Support<select name="mediaType" data-change="book-media"><option value="print" ${book?.mediaType !== 'ebook' && book?.mediaType !== 'audio' ? 'selected' : ''}>Livre papier</option><option value="ebook" ${book?.mediaType === 'ebook' ? 'selected' : ''}>Livre numérique</option><option value="audio" ${book?.mediaType === 'audio' ? 'selected' : ''}>Livre audio</option></select></label></div><div class="field-row"><label class="field">Titre<input id="book-title-field" name="title" required value="${attr(book?.title || '')}" placeholder="Titre du livre"></label><label class="field">Auteur(s)<input id="book-authors-field" name="authors" required value="${attr(book?.authors.join(', ') || '')}" placeholder="Prénom Nom, autre auteur"></label></div><label class="field">Rayon littéraire<input id="book-genre-field" name="genre" list="book-genres" value="${attr(book?.genre || '')}" placeholder="Ex. Romans, Science-fiction…"><datalist id="book-genres"><option value="Romans"><option value="Essais"><option value="Science-fiction"><option value="Fantasy et fantastique"><option value="Policier et thriller"><option value="Philosophie"><option value="Histoire"><option value="Poésie"><option value="Biographies et mémoires"><option value="Sciences humaines"><option value="Jeunesse"><option value="Bande dessinée et manga"><option value="À classer"></datalist><span class="field-help">Proposé automatiquement par le catalogue et toujours modifiable.</span></label><div class="field-row"><label class="field">ISBN<input id="book-isbn-field" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" value="${attr(book?.isbn || '')}" placeholder="ISBN-10 ou ISBN-13"></label><label class="field">Date de publication<input id="book-published-field" name="publishedDate" value="${attr(book?.publishedDate || '')}" placeholder="Ex. 2024"></label></div><div class="field-row"><label class="field">Éditeur<input id="book-publisher-field" name="publisher" value="${attr(book?.publisher || '')}"></label><label class="field">Édition<input id="book-edition-field" name="edition" value="${attr(book?.edition || '')}"></label></div><div class="field-row" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}><label class="field">Format<input id="book-format-field" name="format" value="${attr(book?.format || 'Broché')}"></label><label class="field">Nombre de pages<input id="book-pages-field" type="number" min="0" name="totalPages" value="${book?.totalPages || ''}"></label></div><fieldset class="audio-book-fields" data-audio-fields ${book?.mediaType === 'audio' ? '' : 'hidden'}><legend>Informations du livre audio</legend><div class="field-row"><label class="field">Durée totale (minutes)<input type="number" min="0" name="durationMinutes" value="${book?.durationMinutes || ''}"></label><label class="field">Minute atteinte<input type="number" min="0" name="currentMinute" value="${book?.currentMinute || 0}"></label></div><div class="field-row"><label class="field">Narrateur ou narratrice<input name="narrator" value="${attr(book?.narrator || '')}"></label><label class="field">Plateforme ou source<input name="audioPlatform" value="${attr(book?.audioPlatform || '')}" placeholder="Audible, CD, bibliothèque…"></label></div></fieldset><label class="field">Résumé<textarea id="book-description-field" name="description">${esc(book?.description || '')}</textarea></label><div class="field-row"><label class="field">Statut<select name="status">${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${book?.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Situation<select name="situation">${Object.entries(SITUATION_LABELS).map(([value,label]) => `<option value="${value}" ${book?.situation === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><div class="field-row"><label class="field" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}>Page atteinte<input type="number" min="0" name="currentPage" value="${book?.currentPage || 0}"></label><label class="checkbox-row"><input type="checkbox" name="historicalBeforeJoin" ${book?.historicalBeforeJoin ? 'checked' : ''}> Lu avant mon inscription (sans date annuelle)</label></div><p class="small muted">Vous pouvez toujours compléter ou corriger les informations avant l’ajout.</p><button class="button button--primary" type="submit">${editing ? 'Enregistrer le livre' : 'Ajouter à BOO-P'}</button></form>` });
+    const bookForm = document.querySelector('form[data-form="book"]');
+    const formHint = bookForm?.querySelector(':scope > p.small.muted');
+    if (bookForm && formHint) {
+      formHint.insertAdjacentHTML('beforebegin', `<div class="field-row reading-date-fields"><label class="field">Date de début de lecture<input type="date" name="startedAt" value="${attr(dateInputValue(book?.startedAt))}"></label><label class="field">Date de fin de lecture<input type="date" name="completedAt" value="${attr(dateInputValue(book?.completedAt))}"><span class="field-help">Utilisée pour classer les livres lus par année dans le Sentier.</span></label></div><fieldset class="book-rating-field"><legend>Note du livre</legend>${ratingPicker(book?.rating, 'book-rating')}<input type="hidden" name="rating" id="book-rating" value="${book?.rating || ''}"><p class="small muted" id="book-rating-description">${book?.rating ? `${book.rating} étoile${book.rating > 1 ? 's' : ''} sur 5.` : 'Notation facultative de 1 à 5 étoiles.'}</p></fieldset>`);
+    }
   }
 
   function revealBookLookupResults(container) {
@@ -1007,10 +1136,12 @@
   function openFinishSessionDialog() {
     const session = store.getActiveSession(), book = store.getBookById(session.bookId);
     const audio = book.mediaType === 'audio', total = audio ? book.durationMinutes : book.totalPages;
-    openDialog({ title: 'Bilan de la session', eyebrow: 'Confirmer avant de clôturer', body: `<form class="form-grid" data-form="finish-session"><label class="field">${audio ? 'Minute atteinte' : 'Page atteinte'}<input type="number" name="endPage" min="0" max="${total || 99999}" value="${session.endPage}"></label><label class="field">Note de session<textarea name="note">${esc(session.note || '')}</textarea></label><fieldset><legend>Rituel de fin · appréciation facultative</legend><div class="rating-row">${[1,2,3,4,5].map(value => `<button class="rating-button" type="button" data-action="select-rating" data-value="${value}" aria-pressed="false" aria-label="${value} sur 5">🔖</button>`).join('')}</div><input type="hidden" name="rating" id="finish-rating"><p class="small muted" id="rating-description">Choisissez un signet si cette lecture se termine.</p></fieldset><label class="field">Trace ou bilan facultatif<textarea name="traceText">${esc(session.traceDraft || '')}</textarea></label><label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(total) && total ? 'checked' : ''}> Marquer le livre comme Lu</label><label class="checkbox-row"><input type="checkbox" name="share"> Partager explicitement ce bilan dans le fil public</label><p class="small muted">Sans partage, le bilan reste privé.</p><button class="button button--primary" type="submit">Clôturer et enregistrer</button></form>` });
+    openDialog({ title: 'Bilan de la session', eyebrow: 'Confirmer avant de clôturer', body: `<form class="form-grid" data-form="finish-session"><label class="field">${audio ? 'Minute atteinte' : 'Page atteinte'}<input type="number" name="endPage" min="0" max="${total || 99999}" value="${session.endPage}"></label><label class="field">Note de session<textarea name="note">${esc(session.note || '')}</textarea></label><fieldset class="book-rating-field"><legend>Note du livre · facultative</legend>${ratingPicker(book.rating, 'finish-rating')}<input type="hidden" name="rating" id="finish-rating" value="${book.rating || ''}"><p class="small muted" id="finish-rating-description">${book.rating ? `${book.rating} étoile${book.rating > 1 ? 's' : ''} sur 5.` : 'Choisissez une note de 1 à 5 étoiles.'}</p></fieldset><label class="field">Trace ou bilan facultatif<textarea name="traceText">${esc(session.traceDraft || '')}</textarea></label><label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(total) && total ? 'checked' : ''}> Marquer le livre comme Lu</label><label class="checkbox-row"><input type="checkbox" name="share"> Partager explicitement ce bilan dans le fil public</label><p class="small muted">Sans partage, le bilan reste privé.</p><button class="button button--primary" type="submit">Clôturer et enregistrer</button></form>` });
   }
 
   async function handleClick(event) {
+    const clickedSpine = event.target.closest?.('.book-spine[data-action="select-book"]');
+    if (ui.selectedLibraryBookId && clickedSpine?.dataset.id !== ui.selectedLibraryBookId) clearLibraryBookSelection(true);
     const trigger = event.target.closest('[data-action]'); if (!trigger) return;
     const action = trigger.dataset.action, id = trigger.dataset.id;
     switch (action) {
@@ -1038,6 +1169,7 @@
       case 'dictate-dialog-trace': startDictation(document.getElementById('trace-dialog-text')); break;
       case 'flip-memory': flipMemoryCard(trigger); break;
       case 'memory-rate': reviewMemory(id, trigger.dataset.quality, trigger.dataset.memoryKey); break;
+      case 'memory-card-color': store.saveSettings({ memoryCardColor:trigger.dataset.color }); render(); break;
       case 'restart-memory': ui.memoryDeckSignature = ''; ui.memoryDeckKeys = []; ui.memoryCompletedKeys = []; ui.memorySessionComplete = false; ui.memoryCursor = 0; render(); break;
       case 'show-day': showDayDetail(trigger.dataset.day); break;
       case 'show-week-detail': showWeekDetail(); break;
@@ -1098,11 +1230,11 @@
       case 'edit-adn': openAdnDialog(); break;
       case 'open-badges': openBadgesDialog(); break;
       case 'toggle-theme': { const settings = store.getSettings(); settings.theme = settings.theme === 'dark' ? 'light' : 'dark'; store.saveSettings(settings); applyTheme(); render(); break; }
-      case 'select-rating': selectRating(Number(trigger.dataset.value)); break;
+      case 'select-rating': selectRating(trigger, Number(trigger.dataset.value)); break;
       case 'simulated-password': openChangePasswordDialog(); break;
       case 'export-data': exportData(); break;
       case 'help': openHelpDialog(); break;
-      case 'logout': await window.BT.auth.signOut(); location.href = 'index.html?reason=signed-out'; break;
+      case 'logout': if (isGuestMode()) { window.BT.auth.leaveGuestMode(); location.href = 'index.html?reason=guest-ended'; } else { await window.BT.auth.signOut(); location.href = 'index.html?reason=signed-out'; } break;
       case 'delete-account': openDeleteAccountDialog(); break;
     }
   }
@@ -1114,6 +1246,8 @@
       case 'focus-session': store.focusActiveSession(control.value); render(); break;
       case 'library-status': ui.selectedLibraryBookId = null; ui.libraryStatus = control.value; render(); break;
       case 'library-sort': ui.selectedLibraryBookId = null; store.saveSettings({ librarySort:control.value }); render(); break;
+      case 'trail-year': ui.trailYear = control.value; ui.expandedTrailBooks.clear(); render(); break;
+      case 'trail-status': ui.trailStatus = control.value; ui.expandedTrailBooks.clear(); render(); break;
       case 'goal-all-books':
         if (control.checked) control.closest('form')?.querySelectorAll('input[name="bookIds"]').forEach(input => { input.checked = false; });
         break;
@@ -1242,6 +1376,13 @@
   async function refreshCommunity({ quiet = false } = {}) {
     if (!window.BT.community) return;
     try {
+      if (isGuestMode()) {
+        const posts = await window.BT.community.listPosts();
+        store.mergeRemotePosts(posts);
+        ui.communityLoaded = true;
+        if (ui.route === 'community') render();
+        return;
+      }
       const [posts, clubs] = await Promise.all([
         window.BT.community.listPosts(),
         window.BT.community.listClubs()
@@ -1274,7 +1415,7 @@
   }
 
   async function refreshNotifications({ quiet = false } = {}) {
-    if (!window.BT.notifications || !window.BT.auth?.isAuthenticated?.()) return;
+    if (isGuestMode() || !window.BT.notifications || !window.BT.auth?.isAuthenticated?.()) return;
     try {
       const preferences = store.getSettings().notifications;
       const notifications = (await window.BT.notifications.list()).filter(item => {
@@ -1290,7 +1431,7 @@
   }
 
   function startNotificationSubscription() {
-    if (!window.BT.notifications || !window.BT.auth?.isAuthenticated?.()) return;
+    if (isGuestMode() || !window.BT.notifications || !window.BT.auth?.isAuthenticated?.()) return;
     try {
       ui.notificationUnsubscribe = window.BT.notifications.subscribe(payload => {
         refreshNotifications({ quiet:true });
@@ -1308,6 +1449,7 @@
   async function markNotificationRead(id) {
     store.markNotification(id);
     renderNotifications(); updateHeader();
+    if (isGuestMode()) return;
     try { await window.BT.notifications?.markRead?.(id); }
     catch (error) { await refreshNotifications({ quiet:true }); showToast(error.message || 'Lecture non synchronisée'); }
   }
@@ -1315,6 +1457,7 @@
   async function markAllNotificationsRead() {
     store.markAllNotifications();
     renderNotifications(); updateHeader();
+    if (isGuestMode()) { showToast('Toutes les notifications locales sont lues'); return; }
     try { await window.BT.notifications?.markAllRead?.(); showToast('Toutes les notifications sont lues'); }
     catch (error) { await refreshNotifications({ quiet:true }); showToast(error.message || 'Lecture non synchronisée'); }
   }
@@ -1322,7 +1465,7 @@
   async function updateFriendRelation(userId, mode) {
     const user = store.getCommunity().users.find(item => item.id === userId);
     if (!user) return;
-    if (!user.isRemote) { store.updateFriend(userId, mode); showToast(`${friendToast(mode)} · exemple fictif`); render(); return; }
+    if (isGuestMode() || !user.isRemote) { store.updateFriend(userId, mode); showToast(`${friendToast(mode)} · conservé sur cet appareil`); render(); return; }
     try {
       await window.BT.community.updateFriend(userId, mode);
       store.updateFriend(userId, mode);
@@ -1334,8 +1477,8 @@
   async function togglePostEncouragement(id) {
     const post = store.getCommunity().posts.find(item => item.id === id);
     if (!post) return;
-    if (!post.isRemote) {
-      store.toggleEncouragement(id); showToast(post.encouraged ? 'Encouragement retiré' : 'Encouragement ajouté à cet exemple fictif'); render(); return;
+    if (isGuestMode() || !post.isRemote) {
+      store.toggleEncouragement(id); showToast(post.encouraged ? 'Encouragement retiré' : 'Encouragement conservé sur cet appareil'); render(); return;
     }
     try {
       await window.BT.community.toggleEncouragement(post.remoteId || post.id, post.encouraged);
@@ -1401,6 +1544,29 @@
     if (!file) { preview.hidden = true; preview.removeAttribute('src'); help.textContent = 'Facultatif · la photo sera redimensionnée et compressée avant envoi.'; return; }
     ui.pendingPostPhotoUrl = URL.createObjectURL(file); preview.src = ui.pendingPostPhotoUrl; preview.hidden = false;
     help.textContent = `${file.name} · compression automatique avant l’envoi.`;
+  }
+
+  async function localPhotoData(file) {
+    let blob = file;
+    try {
+      const source = await createImageBitmap(file);
+      const scale = Math.min(1, 1000 / Math.max(source.width, source.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(source.width * scale));
+      canvas.height = Math.max(1, Math.round(source.height * scale));
+      canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+      source.close?.();
+      blob = await new Promise((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Photo illisible')), 'image/jpeg', .7));
+    } catch {
+      blob = await window.BT.community.compressPhoto(file);
+    }
+    if (blob.size > 1500000) throw new Error('Cette photo reste trop lourde pour le mode invité. Choisissez une image plus légère.');
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('La photo ne peut pas être conservée sur cet appareil.'));
+      reader.readAsDataURL(blob);
+    });
   }
 
   function checkCelebrations() {
@@ -1526,11 +1692,17 @@
     document.getElementById('book-title-field')?.focus();
   }
 
-  function selectRating(value) {
-    document.getElementById('finish-rating').value = value;
-    document.querySelectorAll('.rating-button').forEach(button => button.setAttribute('aria-pressed', String(Number(button.dataset.value) <= value)));
+  function selectRating(trigger, value) {
+    const targetId = trigger.dataset.target || 'finish-rating';
+    const target = document.getElementById(targetId); if (!target) return;
+    target.value = value;
+    trigger.closest('.book-rating-field')?.querySelectorAll('.rating-button').forEach(button => {
+      button.classList.toggle('is-filled', Number(button.dataset.value) <= value);
+      button.setAttribute('aria-pressed', String(Number(button.dataset.value) === value));
+    });
     const descriptions = ['Cette lecture m’a laissé indifférent.','Elle a éveillé ma curiosité.','Elle m’a touché.','Elle m’a profondément marqué.','Elle m’a transformé.'];
-    document.getElementById('rating-description').textContent = descriptions[value-1];
+    const description = document.getElementById(`${targetId}-description`);
+    if (description) description.textContent = `${value} étoile${value > 1 ? 's' : ''} sur 5 · ${descriptions[value-1]}`;
   }
 
   function submitTrace(form, data) {
@@ -1571,7 +1743,22 @@
     }
     const mediaType = data.get('mediaType');
     const genre = String(data.get('genre') || '').trim();
+    const status = data.get('status'), historicalBeforeJoin = data.get('historicalBeforeJoin') === 'on';
+    const startedDate = String(data.get('startedAt') || ''), completedDate = String(data.get('completedAt') || '');
+    if (startedDate && completedDate && completedDate < startedDate) {
+      showToast('La date de fin de lecture doit être postérieure à la date de début.');
+      form.elements.completedAt?.focus();
+      return;
+    }
+    const rawRating = Number(data.get('rating'));
     const record = { title: data.get('title').trim(), authors: data.get('authors').split(',').map(item => item.trim()).filter(Boolean), genre, genres:genre ? [genre] : [], isbn, publishedDate: data.get('publishedDate').trim(), publisher: data.get('publisher').trim(), edition: data.get('edition').trim(), format: mediaType === 'audio' ? '' : data.get('format').trim(), mediaType, durationMinutes, currentMinute, narrator:data.get('narrator')?.trim() || '', audioPlatform:data.get('audioPlatform')?.trim() || '', libraryState:data.get('libraryState'), totalPages:mediaType === 'audio' ? 0 : totalPages, currentPage:mediaType === 'audio' ? 0 : currentPage, description: data.get('description').trim(), status: data.get('status'), situation: data.get('situation'), historicalBeforeJoin: data.get('historicalBeforeJoin') === 'on', coverUrl: data.get('coverUrl') || '', coverColor: gradientFor(`${data.get('title')}${data.get('authors')}`), customCover: data.get('coverSource') === 'custom' };
+    Object.assign(record, {
+      status,
+      historicalBeforeJoin,
+      startedAt: historicalBeforeJoin ? null : readingDateISO(startedDate),
+      completedAt: historicalBeforeJoin || status !== 'lu' ? null : readingDateISO(completedDate),
+      rating: Number.isInteger(rawRating) && rawRating >= 1 && rawRating <= 5 ? rawRating : null
+    });
     const book = id ? store.updateBook(id, record) : store.addBook(record);
     if (!id && book.status === 'en-cours') store.setActiveBook(book.id);
     ui.pendingCover = ''; ui.pendingCoverKind = ''; ui.pendingISBNPhoto = ''; ui.pendingISBNPhotoFile = null; closeDialog(); showToast(id ? 'Livre mis à jour' : `Livre ajouté à ${book.libraryState === 'wishlist' ? 'la wishlist' : 'la bibliothèque'}`); location.hash = `#book?id=${encodeURIComponent(book.id)}`; render();
@@ -1593,6 +1780,7 @@
 
   async function submitProfile(form, data) {
     store.saveProfile({ name: data.get('name').trim(), handle: data.get('handle').trim(), title: data.get('title').trim(), bio: data.get('bio').trim(), interests: data.get('interests').split(',').map(item => item.trim()).filter(Boolean).slice(0,12) });
+    if (isGuestMode()) { closeDialog(); showToast('Profil invité conservé sur cet appareil'); render(); return; }
     try { await window.BT.auth.updateProfile({ displayName:data.get('name').trim(), handle:data.get('handle').trim(), profileTitle:data.get('title').trim(), bio:data.get('bio').trim(), interests:store.getProfile().interests }); }
     catch (error) { showToast(error.message || 'Profil conservé localement ; synchronisation différée'); return; }
     closeDialog(); showToast('Profil mis à jour'); render();
@@ -1611,7 +1799,12 @@
     const total = book.mediaType === 'audio' ? book.durationMinutes : book.totalPages;
     store.finishActiveSession({ endPage: clamp(data.get('endPage'), 0, total || 99999), note: data.get('note'), rating: data.get('rating'), traceText, markRead: data.get('markRead') === 'on', share });
     if (share && traceText) {
-      try { const post = await window.BT.community.createPost({ type:'trace', bookTitle:book.title, text:traceText, visibility:'public' }); if (post) store.addPost(post); }
+      try {
+        const post = isGuestMode()
+          ? { type:'trace', bookTitle:book.title, text:traceText, visibility:'public' }
+          : await window.BT.community.createPost({ type:'trace', bookTitle:book.title, text:traceText, visibility:'public' });
+        if (post) store.addPost(post);
+      }
       catch (error) { showToast(error.message || 'Session enregistrée, mais partage non envoyé'); }
     }
     closeDialog(); showToast(share ? 'Session enregistrée et bilan partagé explicitement' : 'Session enregistrée, bilan privé'); location.hash = '#home';
@@ -1620,7 +1813,7 @@
   async function submitComment(form, data) {
     const post = store.getCommunity().posts.find(item => item.id === form.dataset.postId);
     if (!post) return;
-    if (!post.isRemote) { store.addComment(post.id, data.get('text')); showToast('Trace ajoutée à cet exemple fictif'); render(); return; }
+    if (isGuestMode() || !post.isRemote) { store.addComment(post.id, data.get('text')); showToast('Trace conservée sur cet appareil'); render(); return; }
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
     try {
       await window.BT.community.createComment(post.remoteId || post.id, data.get('text'));
@@ -1631,6 +1824,7 @@
   async function submitPrivacy(form, data) {
     store.saveProfile({ visibility: data.get('profileVisibility') || 'private' });
     store.saveSettings({ defaultPostVisibility: data.get('defaultVisibility') || 'me' });
+    if (isGuestMode()) { showToast('Confidentialité conservée sur cet appareil'); render(); return; }
     try { await window.BT.auth.updateProfile({ profileVisibility:data.get('profileVisibility') || 'private' }); }
     catch (error) { showToast(error.message || 'Confidentialité conservée localement ; synchronisation différée'); return; }
     showToast('Confidentialité enregistrée'); render();
@@ -1647,10 +1841,17 @@
     if (visibility === 'public' && store.getProfile().visibility === 'private' && !confirm('Votre profil est privé. Confirmez-vous cette publication ponctuelle dans le fil public ?')) return;
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true; submit.textContent = 'Compression et enregistrement…';
     try {
-      const post = await window.BT.community.createPost({ type:data.get('type'), bookTitle:data.get('bookTitle'), text:data.get('text'), visibility, file:data.get('photo') });
+      let post;
+      if (isGuestMode()) {
+        const file = data.get('photo');
+        const photoData = file?.size ? await localPhotoData(file) : null;
+        post = { type:data.get('type'), bookTitle:data.get('bookTitle'), text:data.get('text'), visibility, photoData };
+      } else {
+        post = await window.BT.community.createPost({ type:data.get('type'), bookTitle:data.get('bookTitle'), text:data.get('text'), visibility, file:data.get('photo') });
+      }
       if (post) store.addPost(post);
       if (ui.pendingPostPhotoUrl) URL.revokeObjectURL(ui.pendingPostPhotoUrl); ui.pendingPostPhotoUrl = '';
-      closeDialog(); showToast(`Trace enregistrée dans BOO-P · ${VISIBILITY_LABELS[visibility]}`); render();
+      closeDialog(); showToast(isGuestMode() ? 'Trace conservée uniquement sur cet appareil' : `Trace enregistrée dans BOO-P · ${VISIBILITY_LABELS[visibility]}`); render();
     } catch (error) {
       submit.disabled = false; submit.textContent = 'Enregistrer la Trace'; showToast(error.message || 'La Trace ne peut pas être enregistrée');
     }
@@ -1664,6 +1865,10 @@
     }
     const payload = { name:data.get('name'), description:data.get('description'), visibility:data.get('visibility'), access:data.get('access'), bookTitle, color:data.get('color') };
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    if (isGuestMode()) {
+      store.addGroup(payload);
+      closeDialog(); showToast('Club créé uniquement sur cet appareil'); render(); return;
+    }
     try {
       const remote = await window.BT.community.createClub(payload);
       await refreshCommunity({ quiet:true });
@@ -1673,6 +1878,10 @@
 
   async function submitClubEdit(form, data) {
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    if (isGuestMode()) {
+      store.updateGroup(form.dataset.clubId, { name:data.get('name'), description:data.get('description'), visibility:data.get('visibility'), access:data.get('access'), bookTitle:String(data.get('customBookTitle') || '').trim() || data.get('bookTitle'), color:data.get('color') });
+      ui.clubSpaces.delete(form.dataset.clubId); closeDialog(); showToast('Club modifié sur cet appareil'); render(); return;
+    }
     try {
       await window.BT.community.updateClub(form.dataset.clubId, {
         name:data.get('name'), description:data.get('description'), visibility:data.get('visibility'),
@@ -1686,6 +1895,11 @@
 
   async function submitClubMember(form, data) {
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    if (isGuestMode()) {
+      const reader = store.getCommunity().users.find(user => user.id === data.get('userId'));
+      store.addGroupMember(form.dataset.clubId, reader, data.get('role'));
+      ui.clubSpaces.delete(form.dataset.clubId); openClubDetails(form.dataset.clubId); showToast('Membre ajouté pour cet essai local'); return;
+    }
     try {
       await window.BT.community.addClubMember(form.dataset.clubId, data.get('userId'), data.get('role'));
       await refreshCommunity({ quiet:true });
@@ -1701,6 +1915,10 @@
 
   async function submitClubPost(form, data) {
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    if (isGuestMode()) {
+      store.addGroupPost(form.dataset.clubId, data.get('text'), data.get('type'));
+      form.reset(); await refreshClubSpace(form.dataset.clubId); showToast('Message conservé dans ce club local'); return;
+    }
     try {
       await window.BT.community.createClubPost(form.dataset.clubId, data.get('text'), data.get('type'));
       form.reset(); await refreshClubSpace(form.dataset.clubId); showToast(data.get('type') === 'announcement' ? 'Annonce publiée dans le club' : 'Message publié dans le club');
@@ -1709,6 +1927,10 @@
 
   async function submitClubComment(form, data) {
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    if (isGuestMode()) {
+      store.addGroupComment(form.dataset.clubId, form.dataset.postId, data.get('text'));
+      await refreshClubSpace(form.dataset.clubId); showToast('Commentaire conservé sur cet appareil'); return;
+    }
     try {
       await window.BT.community.createClubComment(form.dataset.postId, data.get('text'));
       await refreshClubSpace(form.dataset.clubId); showToast('Commentaire envoyé');
@@ -1717,6 +1939,10 @@
 
   async function submitClubBook(form, data) {
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    if (isGuestMode()) {
+      store.addGroupBook(form.dataset.clubId, data.get('title'), data.get('status'));
+      await refreshClubSpace(form.dataset.clubId); showToast('Lecture ajoutée au club local'); return;
+    }
     try {
       await window.BT.community.addClubBook({ clubId:form.dataset.clubId, title:data.get('title'), status:data.get('status') });
       await refreshCommunity({ quiet:true });
@@ -1726,6 +1952,10 @@
   }
 
   async function toggleClubSpaceEncouragement(clubId, postId, encouraged) {
+    if (isGuestMode()) {
+      store.toggleGroupPostEncouragement(clubId, postId);
+      await refreshClubSpace(clubId); showToast(encouraged ? 'Encouragement retiré' : 'Encouragement conservé sur cet appareil'); return;
+    }
     try {
       await window.BT.community.toggleClubPostEncouragement(postId, encouraged);
       await refreshClubSpace(clubId);
@@ -1735,6 +1965,10 @@
 
   async function markClubBookRead(clubId, bookId) {
     if (!confirm('Marquer ce livre comme lu par le club ?')) return;
+    if (isGuestMode()) {
+      store.updateGroupBook(clubId, bookId, { status:'read' });
+      await refreshClubSpace(clubId); showToast('Livre archivé dans ce club local'); return;
+    }
     try {
       await window.BT.community.updateClubBook(bookId, clubId, { status:'read' });
       await refreshCommunity({ quiet:true });
@@ -1745,6 +1979,10 @@
 
   async function submitSalonMessage(form, data) {
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    if (isGuestMode()) {
+      store.addSalonMessage(form.dataset.salonId, data.get('text'));
+      openSalonThread(form.dataset.salonId); showToast('Message conservé sur cet appareil'); return;
+    }
     try {
       await window.BT.community.createSalonMessage(form.dataset.salonId, data.get('text'));
       await refreshCommunity({ quiet:true });
@@ -1756,6 +1994,10 @@
     const club = store.getCommunity().clubs.find(item => item.id === data.get('clubId'));
     if (!club || club.role !== 'owner') { showToast('Seul le propriétaire du club peut créer un salon'); return; }
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    if (isGuestMode()) {
+      store.addSalon({ clubId:club.id, clubName:club.name, title:data.get('title'), bookTitle:data.get('bookTitle'), scheduledAt:new Date(data.get('scheduledAt')).toISOString() });
+      closeDialog(); showToast('Salon programmé sur cet appareil'); render(); return;
+    }
     try {
       await window.BT.community.createSalon({ clubId:club.id, title:data.get('title'), bookTitle:data.get('bookTitle'), scheduledAt:new Date(data.get('scheduledAt')).toISOString() });
       await refreshCommunity({ quiet:true });
@@ -1765,6 +2007,10 @@
 
   async function submitSalonEdit(form, data) {
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    if (isGuestMode()) {
+      store.updateSalon(form.dataset.salonId, { title:data.get('title'), bookTitle:data.get('bookTitle'), scheduledAt:new Date(data.get('scheduledAt')).toISOString(), status:data.get('status') });
+      closeDialog(); showToast('Salon modifié sur cet appareil'); render(); return;
+    }
     try {
       await window.BT.community.updateSalon(form.dataset.salonId, {
         title:data.get('title'), bookTitle:data.get('bookTitle'),
@@ -1776,7 +2022,7 @@
   }
   async function submitReply(form, data) {
     const post = store.getCommunity().posts.find(item => item.id === form.dataset.postId);
-    if (!post?.isRemote) { store.addComment(form.dataset.postId, data.get('text'), form.dataset.commentId); closeDialog(); ui.openComments.add(form.dataset.postId); showToast('Réponse ajoutée à cet exemple fictif'); render(); return; }
+    if (isGuestMode() || !post?.isRemote) { store.addComment(form.dataset.postId, data.get('text'), form.dataset.commentId); closeDialog(); ui.openComments.add(form.dataset.postId); showToast('Réponse conservée sur cet appareil'); render(); return; }
     try { await window.BT.community.createComment(post.remoteId || post.id, data.get('text'), form.dataset.commentId); closeDialog(); ui.openComments.add(post.id); await refreshCommunity({ quiet:true }); showToast('Réponse ajoutée'); }
     catch (error) { showToast(error.message || 'Réponse non envoyée'); }
   }
@@ -1799,7 +2045,10 @@
 
   function openPostDialog() {
     const settings = store.getSettings();
-    openDialog({ title:'Laisser une Trace', eyebrow:'Enregistrement sécurisé', body:`<form class="form-grid" data-form="post"><label class="field">Type d’activité<select name="type"><option value="trace">Trace ou bilan</option><option value="debut">Début de lecture</option><option value="fin">Fin de lecture</option><option value="goal">Objectif atteint</option></select></label><label class="field">Livre éventuel<select name="bookTitle"><option value="">Sans livre</option>${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Texte<textarea name="text" required maxlength="1200" placeholder="Ce que cette lecture laisse en vous…"></textarea></label><label class="field">Photo facultative<input type="file" name="photo" data-change="post-photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"><span class="field-help" id="post-photo-help">Facultatif · redimensionnement à 1 920 px et compression automatique avant envoi (5 Mo maximum après compression).</span><img class="post-photo-preview" id="post-photo-preview" alt="Aperçu de la photo choisie" hidden></label><label class="field">Visibilité<select name="visibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="club">Club</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><p class="small muted">La Trace et sa photo sont enregistrées dans Supabase. Tant que les vrais liens d’amitié et de club ne sont pas activés, les visibilités Amis et Club restent accessibles uniquement à vous.</p><button class="button button--primary" type="submit">Enregistrer la Trace</button></form>` });
+    const storageNote = isGuestMode()
+      ? 'Mode invité : la Trace et sa photo restent uniquement sur cet appareil et ne sont jamais publiées dans Supabase.'
+      : 'La Trace et sa photo sont enregistrées dans Supabase. Tant que les vrais liens d’amitié et de club ne sont pas activés, les visibilités Amis et Club restent accessibles uniquement à vous.';
+    openDialog({ title:'Laisser une Trace', eyebrow:isGuestMode() ? 'Essai local' : 'Enregistrement sécurisé', body:`<form class="form-grid" data-form="post"><label class="field">Type d’activité<select name="type"><option value="trace">Trace ou bilan</option><option value="debut">Début de lecture</option><option value="fin">Fin de lecture</option><option value="goal">Objectif atteint</option></select></label><label class="field">Livre éventuel<select name="bookTitle"><option value="">Sans livre</option>${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Texte<textarea name="text" required maxlength="1200" placeholder="Ce que cette lecture laisse en vous…"></textarea></label><label class="field">Photo facultative<input type="file" name="photo" data-change="post-photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"><span class="field-help" id="post-photo-help">Facultatif · redimensionnement et compression automatiques.</span><img class="post-photo-preview" id="post-photo-preview" alt="Aperçu de la photo choisie" hidden></label><label class="field">Visibilité<select name="visibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="club">Club</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><p class="small muted">${storageNote}</p><button class="button button--primary" type="submit">Enregistrer la Trace</button></form>` });
   }
 
   function openReplyDialog(postId, commentId) {
@@ -1842,6 +2091,13 @@
   }
 
   async function toggleClub(id, currentMembership) {
+    if (isGuestMode()) {
+      const club = store.toggleClub(id);
+      ui.clubSpaces.delete(id);
+      showToast(club?.joined ? 'Club rejoint pour cet essai local' : 'Participation retirée de cet appareil');
+      render();
+      return;
+    }
     try {
       const result = await window.BT.community.toggleClubMembership(id, currentMembership);
       await refreshCommunity({ quiet:true });
@@ -1852,6 +2108,9 @@
 
   async function removeClubMember(clubId, userId) {
     if (!confirm('Retirer ce membre du club ?')) return;
+    if (isGuestMode()) {
+      store.removeGroupMember(clubId, userId); ui.clubSpaces.delete(clubId); openClubDetails(clubId); showToast('Membre retiré de ce club local'); return;
+    }
     try {
       await window.BT.community.removeClubMember(clubId, userId);
       await refreshCommunity({ quiet:true });
@@ -1860,6 +2119,10 @@
   }
 
   async function approveClubMember(clubId, userId) {
+    if (isGuestMode()) {
+      const reader = store.getCommunity().users.find(user => user.id === userId);
+      store.addGroupMember(clubId, reader, 'member'); ui.clubSpaces.delete(clubId); openClubDetails(clubId); showToast('Demande acceptée localement'); return;
+    }
     try {
       await window.BT.community.addClubMember(clubId, userId, 'member');
       await refreshCommunity({ quiet:true });
@@ -1870,6 +2133,10 @@
   async function toggleSalon(id, leave = false) {
     const salon = store.getCommunity().salons.find(item => item.id === id); if (!salon) return;
     if (leave && !confirm('Quitter ce salon de lecture ?')) return;
+    if (isGuestMode()) {
+      store.updateSalon(id, { joined:!leave, myStatus:leave ? 'waiting' : 'reading' });
+      showToast(leave ? 'Salon quitté sur cet appareil' : 'Salon rejoint pour cet essai local'); render(); return;
+    }
     try {
       await window.BT.community.toggleSalonMembership(id, leave || salon.joined);
       await refreshCommunity({ quiet:true });
@@ -1879,6 +2146,9 @@
   }
 
   async function updateSalonSharing(id, checked) {
+    if (isGuestMode()) {
+      store.updateSalon(id, { sharePages:checked }); showToast(checked ? 'Progression partagée dans cet essai local' : 'Progression masquée'); openSalonThread(id); return;
+    }
     try {
       await window.BT.community.updateSalonPresence(id, { sharePages:checked });
       await refreshCommunity({ quiet:true });
@@ -1920,13 +2190,24 @@
 
   document.addEventListener('DOMContentLoaded', async () => {
     try {
-      const user = await window.BT.auth.ready();
-      const localPreview = ['localhost','127.0.0.1'].includes(location.hostname) && new URLSearchParams(location.search).has('preview');
-      if (!user && !localPreview) { location.replace('index.html?auth=login&reason=protected'); return; }
-      store.useUser?.(user?.id || 'local-preview');
-      const completedRemotely = localPreview || Boolean(user.profile?.onboarding_completed);
+      const query = new URLSearchParams(location.search);
+      if (query.has('guest')) window.BT.auth?.enterGuestMode?.();
+      const guest = isGuestMode();
+      let user = null;
+      try { user = await window.BT.auth.ready(); }
+      catch (error) { if (!guest) throw error; console.warn('BOO-P guest authentication unavailable', error); }
+      if (guest) user = null;
+      const localPreview = ['localhost','127.0.0.1'].includes(location.hostname) && query.has('preview');
+      if (!user && !localPreview && !guest) { location.replace('index.html?auth=login&reason=protected'); return; }
+      const localOwner = guest ? 'guest' : (user?.id || 'local-preview');
+      store.useUser?.(localOwner);
+      document.body.dataset.authMode = guest ? 'guest' : (user ? 'account' : 'preview');
+      document.documentElement.dataset.authMode = document.body.dataset.authMode;
+      document.getElementById('guest-banner').hidden = !guest;
+      const completedRemotely = guest || localPreview || Boolean(user?.profile?.onboarding_completed);
       if (completedRemotely && !store.isOnboardingComplete()) store.saveOnboarding({ completed:true, version:5, restoredFromProfile:true, completedAt:new Date().toISOString() });
       if (!completedRemotely && !store.isOnboardingComplete()) { location.replace('onboarding.html'); return; }
+      if (user) await bootstrapUserDataSync({ quiet:true });
       init();
     } catch (error) {
       console.error('BOO-P authentication gate', error);

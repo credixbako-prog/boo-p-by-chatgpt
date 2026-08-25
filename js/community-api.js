@@ -26,6 +26,11 @@ BT.community = (() => {
     return value;
   }
 
+  function optionalUser() {
+    if (window.BT.auth?.isGuest?.()) return null;
+    return window.BT.auth?.getCurrentUser?.() || null;
+  }
+
   function friendly(error, fallback) {
     console.error('BOO-P Supabase community', error);
     const message = String(error?.message || '');
@@ -119,13 +124,15 @@ BT.community = (() => {
 
   async function listPosts() {
     await window.BT.auth.ready();
-    const user = currentUser();
+    const user = optionalUser();
     const api = client();
-    const { data:posts, error } = await api
+    let request = api
       .from('community_posts')
       .select('id, author_id, author_name, author_initials, activity_type, book_title, body, visibility, photo_path, created_at, community_comments(id, post_id, author_id, author_name, parent_id, body, created_at)')
       .order('created_at', { ascending:false })
       .limit(50);
+    if (!user) request = request.eq('visibility', 'public');
+    const { data:posts, error } = await request;
     if (error) throw friendly(error, 'Le fil partagé ne peut pas être chargé.');
 
     const postIds = posts.map(post => post.id);
@@ -139,13 +146,13 @@ BT.community = (() => {
     const encouragementsByPost = new Map();
     encouragementRows.forEach(row => {
       const value = encouragementsByPost.get(row.post_id) || { count:0, mine:false };
-      value.count += 1; value.mine ||= row.user_id === user.id; encouragementsByPost.set(row.post_id, value);
+      value.count += 1; value.mine ||= Boolean(user && row.user_id === user.id); encouragementsByPost.set(row.post_id, value);
     });
 
     return await Promise.all(posts.map(async post => {
       const encouragement = encouragementsByPost.get(post.id) || { count:0, mine:false };
       return {
-        id:post.id, remoteId:post.id, authorId:post.author_id === user.id ? 'me' : post.author_id,
+        id:post.id, remoteId:post.id, authorId:user && post.author_id === user.id ? 'me' : post.author_id,
         authorName:post.author_name, initials:post.author_initials, type:post.activity_type,
         bookTitle:post.book_title, text:post.body, visibility:post.visibility,
         photoPath:post.photo_path, photoUrl:await signedPhotoUrl(post.photo_path), date:post.created_at,
@@ -533,8 +540,12 @@ BT.community = (() => {
 
   async function searchReaders(query = '') {
     await window.BT.auth.ready();
-    const user = currentUser(), api = client(), clean = String(query || '').trim().slice(0, 80);
-    const base = () => api.from('profile_directory').select('user_id, handle, display_name, profile_visibility').neq('user_id', user.id).limit(30);
+    const user = optionalUser(), api = client(), clean = String(query || '').trim().slice(0, 80);
+    const base = () => {
+      let request = api.from('profile_directory').select('user_id, handle, display_name, profile_visibility').limit(30);
+      request = user ? request.neq('user_id', user.id) : request.eq('profile_visibility', 'public');
+      return request;
+    };
     const searches = clean
       ? [base().ilike('display_name', `%${clean.replace(/[%_]/g, '')}%`), base().ilike('handle', `%${clean.toLowerCase().replace(/[^a-z0-9_.-]/g, '')}%`)]
       : [base().order('display_name')];
@@ -544,9 +555,9 @@ BT.community = (() => {
 
     const directory = new Map();
     results.flatMap(result => result.data || []).forEach(row => directory.set(row.user_id, row));
-    const relationResult = await api.from('friendships')
+    const relationResult = user ? await api.from('friendships')
       .select('id, requester_id, addressee_id, status, created_at, updated_at')
-      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`) : { data:[], error:null };
     if (relationResult.error) throw friendly(relationResult.error, 'Les demandes d’amitié ne peuvent pas être chargées.');
     const relationByUser = new Map();
     (relationResult.data || []).forEach(relation => {
@@ -555,7 +566,7 @@ BT.community = (() => {
     });
     return [...directory.values()].map(row => {
       const relation = relationByUser.get(row.user_id);
-      const friendState = !relation ? 'none' : relation.status === 'accepted' ? 'friend' : relation.requester_id === user.id ? 'sent' : 'received';
+      const friendState = !relation ? 'none' : relation.status === 'accepted' ? 'friend' : relation.requester_id === user?.id ? 'sent' : 'received';
       return { id:row.user_id, name:row.display_name, handle:`@${row.handle}`, initials:String(row.display_name || 'B').split(/\s+/).map(part => part[0]).slice(0,2).join('').toUpperCase(), bio:'', profileVisibility:row.profile_visibility, friendState, isRemote:true, friendshipId:relation?.id || null };
     }).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   }

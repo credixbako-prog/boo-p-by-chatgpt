@@ -6,6 +6,7 @@
   const signupDialog = document.querySelector('[data-signup-dialog]');
   const loginButtons = document.querySelectorAll('[data-login-open]');
   const signupButtons = document.querySelectorAll('[data-signup-open]');
+  const guestButtons = document.querySelectorAll('[data-guest-open]');
   const loginForm = document.querySelector('[data-login-form]');
   const signupForm = document.querySelector('[data-signup-form]');
   const loginMessage = document.querySelector('[data-login-message]');
@@ -62,6 +63,10 @@
 
   loginButtons.forEach((button) => button.addEventListener('click', openLogin));
   signupButtons.forEach((button) => button.addEventListener('click', openSignup));
+  guestButtons.forEach((button) => button.addEventListener('click', () => {
+    BT.auth?.enterGuestMode?.();
+    window.location.href = 'app.html?guest=1#home';
+  }));
   document.querySelector('[data-login-close]')?.addEventListener('click', () => closeDialog(loginDialog));
   document.querySelector('[data-signup-close]')?.addEventListener('click', () => closeDialog(signupDialog));
 

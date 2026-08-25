@@ -12,6 +12,7 @@ BT.auth = (function () {
   const STORAGE_KEY = 'boop_supabase_auth_v1';
   const PERSISTENCE_KEY = 'boop_auth_persistence_v1';
   const LEGACY_SESSION_KEY = 'boop_auth_session_v1';
+  const GUEST_KEY = 'boop_guest_mode_v1';
   const config = window.BOOP_SUPABASE_CONFIG;
 
   let client = null;
@@ -58,6 +59,18 @@ BT.auth = (function () {
   function shouldPersist() {
     if (sessionStorage.getItem(PERSISTENCE_KEY) === 'session') return false;
     return localStorage.getItem(PERSISTENCE_KEY) === 'persistent';
+  }
+
+  function enterGuestMode() {
+    sessionStorage.setItem(GUEST_KEY, 'true');
+  }
+
+  function leaveGuestMode() {
+    sessionStorage.removeItem(GUEST_KEY);
+  }
+
+  function isGuest() {
+    return sessionStorage.getItem(GUEST_KEY) === 'true';
   }
 
   const flexibleStorage = {
@@ -237,6 +250,7 @@ BT.auth = (function () {
     const cleanName = validateName(name);
     const cleanEmail = validateEmail(email);
     const cleanPassword = validatePassword(password);
+    leaveGuestMode();
     setPersistence(true);
 
     const options = { data: { full_name: cleanName } };
@@ -264,6 +278,7 @@ BT.auth = (function () {
     await readyPromise.catch(() => { throw initializationError; });
     const cleanEmail = validateEmail(email);
     const cleanPassword = validatePassword(password);
+    leaveGuestMode();
     setPersistence(Boolean(remember));
 
     const { data, error } = await client.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword });
@@ -312,6 +327,7 @@ BT.auth = (function () {
     }
     currentSession = null;
     currentProfile = null;
+    leaveGuestMode();
     flexibleStorage.removeItem(STORAGE_KEY);
   }
 
@@ -328,6 +344,9 @@ BT.auth = (function () {
     getSession,
     getProfile,
     getClient,
+    enterGuestMode,
+    leaveGuestMode,
+    isGuest,
     backend: 'supabase'
   };
 })();

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'boo-p-webapp-v20';
+const CACHE_VERSION = 'boo-p-webapp-v25';
 const APP_SHELL = [
   './',
   './index.html',
@@ -15,6 +15,7 @@ const APP_SHELL = [
   './js/auth.js',
   './js/book-lookup.js',
   './js/community-api.js',
+  './js/components/trail-mindmap.js',
   './js/notifications-api.js',
   './js/dictionary.js',
   './js/landing.js',
@@ -24,6 +25,7 @@ const APP_SHELL = [
   './js/pwa.js',
   './js/speech.js',
   './js/store.js',
+  './js/user-data-sync-api.js',
   './js/supabase-config.js',
   './assets/brand/closed-book-proposals/boo-p-closed-01-signet.png',
   './assets/community/boo-p-reading-moments-sprite-v1.png',

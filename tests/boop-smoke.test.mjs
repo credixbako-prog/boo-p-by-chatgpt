@@ -15,7 +15,7 @@ test('inscription: les trois mots de passe disposent d’un contrôle de visibil
 });
 
 test('onboarding: quatre étapes, première Trace, objectif et thème libre', async () => {
-  const [html, script] = await Promise.all([read('onboarding.html'), read('js/onboarding.js')]);
+  const [html, script, store] = await Promise.all([read('onboarding.html'), read('js/onboarding.js'), read('js/store.js')]);
   assert.equal((html.match(/class="step-wrapper/g) || []).length, 4);
   assert.doesNotMatch(html, /id="step5"/);
   assert.equal((html.match(/class="indicator-dot/g) || []).length, 4);
@@ -29,6 +29,10 @@ test('onboarding: quatre étapes, première Trace, objectif et thème libre', as
   assert.match(script, /BT\.store\.saveTrace/);
   assert.match(script, /setTimeout\(finishOnboarding/);
   assert.match(script, /const visibility = 'private'/);
+  for (const title of ['La Sainte Bible', 'L’Étranger', 'La Femme de ménage', 'Shining', 'Hunger Games', 'La Dernière Allumette']) {
+    assert.match(script, new RegExp(title));
+    assert.match(store, new RegExp(title));
+  }
 });
 
 test('mémoire, communauté et parcours exposent les fonctions demandées', async () => {
@@ -60,7 +64,11 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.match(store, /mediaType/);
   assert.match(store, /collapsedLibraryGenres/);
   assert.match(store, /genre: genres\[0\]/);
-  assert.match(css, /\.memory-list \{ display: grid; gap:/);
+  assert.match(app, /data-action="memory-card-color"/);
+  assert.match(app, /memory-list--\$\{memoryColor\}/);
+  assert.match(store, /memoryCardColor: 'sage'/);
+  assert.match(css, /\.memory-list \{[^}]*display: grid;[^}]*gap: 10px/);
+  assert.match(css, /\.memory-list--black/);
   assert.match(css, /\.book-spine span/);
   assert.match(css, /\.book-spine\.is-selected/);
   assert.match(css, /translateY\(-19px\)/);
@@ -68,6 +76,25 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.doesNotMatch(css, /\.memory-list \{[^}]*overflow-y: auto/);
   assert.doesNotMatch(css, /\.public-feed \{[^}]*overflow-y: auto/);
   assert.doesNotMatch(css, /\.physical-shelf \{[^}]*overflow-y: auto/);
+});
+
+test('lecture: dates éditables, étoiles et sélection de bibliothèque sans friction', async () => {
+  const [app, store, css] = await Promise.all([read('js/mvp-app.js'), read('js/store.js'), read('css/mvp-v5.css')]);
+  const sessionView = app.slice(app.indexOf('function renderSession()'), app.indexOf('function tickSessionClock'));
+  assert.match(app, /name="startedAt"/);
+  assert.match(app, /name="completedAt"/);
+  assert.match(app, /Date de fin de lecture/);
+  assert.match(app, /ratingPicker\(book\?\.rating, 'book-rating'\)/);
+  assert.match(app, /Note de 1 à 5 étoiles/);
+  assert.match(app, /ratingStars\(book\.rating\)/);
+  assert.doesNotMatch(app, /🔖|Choisissez un signet/);
+  assert.doesNotMatch(sessionView, /data-action="quick-trace"/);
+  assert.match(sessionView, /data-action="session-lexicon"/);
+  assert.match(app, /function clearLibraryBookSelection/);
+  assert.match(app, /clickedSpine\?\.dataset\.id !== ui\.selectedLibraryBookId/);
+  assert.match(store, /normalizeBookDate/);
+  assert.match(css, /\.rating-button\.is-filled/);
+  assert.match(css, /\.book-rating-stars/);
 });
 
 test('lexique: dictionnaire, questions ciblées et répétition espacée', async () => {
@@ -104,16 +131,19 @@ test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
   const [app, css] = await Promise.all([read('js/mvp-app.js'), read('css/mvp-v5.css')]);
   assert.match(app, /label: 'Galerie'/);
   assert.match(app, /class="gallery-nav-glyph"/);
-  assert.match(css, /\.gallery-nav-glyph/);
+  assert.match(css, /\.nav-link__icon \{ display: grid; width: 24px; height: 24px; place-items: center;/);
+  assert.match(css, /\.gallery-nav-glyph \{[^}]*transform: translate\(-4px,-4px\)/);
   assert.match(app, /\['library','Bibliothèque'\]/);
   assert.match(app, /\['trail','Sentier'\]/);
   assert.match(app, /\['lexicon','Lexiques'\]/);
   assert.match(app, /const tabs = \[\['overview','Profil'\],\['goals','Objectifs'\]\]/);
   assert.match(app, /href="#profile\?tab=goals"/);
-  assert.match(app, /filter\(book => book\.libraryState === 'library' && book\.status === 'lu'\)/);
-  assert.match(app, /sans filtre d’année/);
-  assert.match(app, /class="trail-map mind-map"/);
-  assert.match(app, /class="trail-book-trunk"/);
+  assert.match(app, /filter\(book => book\.libraryState === 'library'\)/);
+  assert.match(app, /data-change="trail-year"/);
+  assert.match(app, /data-change="trail-status"/);
+  assert.match(app, /class="trail-canvas-shell"/);
+  assert.match(app, /class="trail-canvas-book/);
+  assert.match(app, /window\.BT\.trailMindmap/);
   assert.match(app, /data-action="lexicon-filter"/);
   assert.match(css, /\.trail-branches/);
   assert.match(css, /\.lexicon-filter-fab/);
@@ -306,6 +336,49 @@ test('Supabase: notifications sociales privées et temps réel', async () => {
   assert.match(worker, /js\/notifications-api\.js/);
 });
 
+test('mode invité: essai complet local et lecture publique sans mutation anonyme', async () => {
+  const [index, appHtml, landing, auth, app, community, migration] = await Promise.all([
+    read('index.html'), read('app.html'), read('js/landing.js'), read('js/auth.js'), read('js/mvp-app.js'),
+    read('js/community-api.js'), read('supabase/migrations/20260825223307_user_data_sync_and_guest_public_reads.sql')
+  ]);
+  assert.match(index, /data-guest-open/);
+  assert.match(appHtml, /id="guest-banner"/);
+  assert.match(landing, /enterGuestMode/);
+  assert.match(auth, /function isGuest/);
+  assert.match(app, /localOwner = guest \? 'guest'/);
+  assert.match(app, /Trace conservée uniquement sur cet appareil/);
+  assert.match(community, /if \(window\.BT\.auth\?\.isGuest\?\.\(\)\) return null/);
+  assert.match(migration, /community_posts_select_public_anon/);
+  assert.match(migration, /revoke all on table public\.user_books/);
+});
+
+test('synchronisation: bibliothèque, sessions, Traces, lexiques et objectifs sont privés', async () => {
+  const [appHtml, app, store, api, migration] = await Promise.all([
+    read('app.html'), read('js/mvp-app.js'), read('js/store.js'), read('js/user-data-sync-api.js'),
+    read('supabase/migrations/20260825223307_user_data_sync_and_guest_public_reads.sql')
+  ]);
+  assert.match(appHtml, /js\/user-data-sync-api\.js/);
+  assert.match(app, /bootstrapUserDataSync/);
+  assert.match(app, /replaceRemote:true/);
+  assert.match(store, /function replaceSyncedData/);
+  assert.match(store, /function markDataSynced/);
+  assert.match(api, /user_books/);
+  assert.match(api, /user_reading_sessions/);
+  assert.match(api, /user_traces/);
+  assert.match(api, /user_lexicon_entries/);
+  assert.match(api, /user_reading_goals/);
+  assert.match(migration, /enable row level security/g);
+  assert.match(migration, /auth\.uid\(\)\) = user_id/);
+});
+
+test('notifications: un lecteur endormi accompagne l’état vide', async () => {
+  const [app, css] = await Promise.all([read('js/mvp-app.js'), read('css/mvp-v5.css')]);
+  assert.match(app, /class="notification-sleeper"/);
+  assert.match(app, /notification-sleeper__head/);
+  assert.match(css, /\.notification-sleeper__body/);
+  assert.match(css, /@keyframes sleeper-z/);
+});
+
 test('ajout de livre: photo du code ISBN et saisie manuelle restent disponibles', async () => {
   const [html, app, lookup, store, proxy] = await Promise.all([
     read('app.html'), read('js/mvp-app.js'), read('js/book-lookup.js'), read('js/store.js'),
@@ -478,6 +551,11 @@ test('modèle local: plusieurs sessions, un seul chrono et rappels persistants',
   assert.equal(store.getSettings().collapsedLibraryGenres.join(','), 'essais');
   const monthKey = store.localDateKey().slice(0, 7);
   const finished = store.addBook({ title:'Objectif terminé', author:'Lectrice test', status:'lu', completedAt:`${monthKey}-10T12:00:00.000Z` });
+  const dated = store.addBook({ title:'Lecture datée', author:'Lectrice test', status:'lu', startedAt:'2024-02-02T12:00:00.000Z', completedAt:'2024-03-03T12:00:00.000Z', rating:4 });
+  assert.equal(dated.startedAt.slice(0,10), '2024-02-02');
+  assert.equal(dated.completedAt.slice(0,10), '2024-03-03');
+  assert.equal(dated.rating, 4);
+  assert.equal(store.updateBook(dated.id, { rating:8 }).rating, null);
   const planned = store.addBook({ title:'Objectif à venir', author:'Lectrice test', status:'a-lire' });
   store.updateGoal('month', { targetBooks:2, bookIds:[finished.id] });
   assert.equal(store.getGoalProgress().month.value, 1);
@@ -554,10 +632,12 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v20/);
+  assert.match(worker, /boo-p-webapp-v25/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);
+  assert.match(worker, /js\/user-data-sync-api\.js/);
+  assert.match(worker, /js\/components\/trail-mindmap\.js/);
   assert.match(worker, /\['script', 'style', 'worker'\]/);
   assert.match(worker, /ignoreSearch: true/);
   assert.match(workflow, /actions\/deploy-pages@v4/);

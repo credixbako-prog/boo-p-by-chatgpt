@@ -17,13 +17,13 @@
     { id:'origin-bible', title:'La Sainte Bible', author:'', totalPages:0, coverUrl:'https://covers.openlibrary.org/b/isbn/9780310446619-L.jpg', gradient:'linear-gradient(135deg,#1A2980,#26D0CE)' },
     { id:'origin-prince', title:'Le Petit Prince', author:'Antoine de Saint-Exupéry', totalPages:96, coverUrl:'https://covers.openlibrary.org/b/isbn/9782070612758-L.jpg', gradient:'linear-gradient(135deg,#FFB75E,#ED8F03)' },
     { id:'origin-etranger', title:'L’Étranger', author:'Albert Camus', totalPages:185, coverUrl:'https://covers.openlibrary.org/b/isbn/9782070360024-L.jpg', gradient:'linear-gradient(135deg,#4b6cb7,#182848)' },
-    { id:'origin-karamazov', title:'Les Frères Karamazov', author:'Fiodor Dostoïevski', totalPages:796, coverUrl:'https://covers.openlibrary.org/b/isbn/9782070389629-L.jpg', gradient:'linear-gradient(135deg,#5C258D,#4389A2)' },
-    { id:'origin-meditations', title:'Méditations', author:'Marc Aurèle', totalPages:224, coverUrl:'https://covers.openlibrary.org/b/isbn/9782080710819-L.jpg', gradient:'linear-gradient(135deg,#3CA55C,#B5AC49)' },
-    { id:'origin-miserables', title:'Les Misérables', author:'Victor Hugo', totalPages:1664, coverUrl:'https://covers.openlibrary.org/b/isbn/9782253096337-L.jpg', gradient:'linear-gradient(135deg,#870000,#190A05)' },
-    { id:'origin-zarathoustra', title:'Ainsi parlait Zarathoustra', author:'Friedrich Nietzsche', totalPages:416, coverUrl:'https://covers.openlibrary.org/b/isbn/9782253005643-L.jpg', gradient:'linear-gradient(135deg,#111,#b33b32)' },
-    { id:'origin-guerre', title:'L’Art de la guerre', author:'Sun Tzu', totalPages:160, coverUrl:'https://covers.openlibrary.org/b/isbn/9782081421998-L.jpg', gradient:'linear-gradient(135deg,#114357,#F29492)' },
-    { id:'origin-candide', title:'Candide', author:'Voltaire', totalPages:176, coverUrl:'https://covers.openlibrary.org/b/isbn/9782070360374-L.jpg', gradient:'linear-gradient(135deg,#1D976C,#93F9B9)' },
-    { id:'origin-1984', title:'1984', author:'George Orwell', totalPages:328, coverUrl:'https://covers.openlibrary.org/b/isbn/9782070368228-L.jpg', gradient:'linear-gradient(135deg,#141E30,#243B55)' }
+    { id:'origin-femme-menage', title:'La Femme de ménage', author:'Freida McFadden', totalPages:416, coverUrl:'https://covers.openlibrary.org/b/isbn/9782298195453-L.jpg', gradient:'linear-gradient(135deg,#355C7D,#C06C84)' },
+    { id:'origin-shining', title:'Shining', author:'Stephen King', totalPages:757, coverUrl:'https://covers.openlibrary.org/b/isbn/9782253909071-L.jpg', gradient:'linear-gradient(135deg,#111827,#8B1E2D)' },
+    { id:'origin-hunger-games', title:'Hunger Games', author:'Suzanne Collins', totalPages:398, coverUrl:'https://covers.openlibrary.org/b/isbn/9782266182690-L.jpg', gradient:'linear-gradient(135deg,#1F2937,#C58B2A)' },
+    { id:'origin-derniere-allumette', title:'La Dernière Allumette', author:'Marie Vareille', totalPages:336, coverUrl:'https://covers.openlibrary.org/b/isbn/9782368129531-L.jpg', gradient:'linear-gradient(135deg,#8C3B31,#E8AA6B)' },
+    { id:'origin-dune', title:'Dune', author:'Frank Herbert', totalPages:688, coverUrl:'https://covers.openlibrary.org/b/isbn/9782266320481-L.jpg', gradient:'linear-gradient(135deg,#6F3F1E,#D49442)' },
+    { id:'origin-one-piece', title:'One Piece · Tome 1', author:'Eiichiro Oda', totalPages:192, coverUrl:'https://covers.openlibrary.org/b/isbn/9782723488525-L.jpg', gradient:'linear-gradient(135deg,#1773A8,#E8B23F)' },
+    { id:'origin-harry-potter', title:'Harry Potter à l’école des sorciers', author:'J. K. Rowling', totalPages:320, coverUrl:'https://covers.openlibrary.org/b/isbn/9782070643028-L.jpg', gradient:'linear-gradient(135deg,#243B55,#C19B4A)' }
   ];
   const selectedBooks = [];
   const initialTraces = new Map();

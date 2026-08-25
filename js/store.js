@@ -20,6 +20,12 @@ BT.store = (() => {
   const clone = value => JSON.parse(JSON.stringify(value));
   const uid = prefix => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const nowISO = () => new Date().toISOString();
+  const normalizeText = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr').trim();
+  const normalizeBookDate = value => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  };
   const localDateKey = (value = new Date()) => {
     const date = value instanceof Date ? value : new Date(value);
     return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -39,13 +45,17 @@ BT.store = (() => {
     'book-etranger':'https://covers.openlibrary.org/b/isbn/9782070360024-L.jpg',
     'book-peste':'https://covers.openlibrary.org/b/isbn/9782070360420-L.jpg',
     'book-dune':'https://covers.openlibrary.org/b/isbn/9782266320481-L.jpg',
-    'book-1984':'https://covers.openlibrary.org/b/isbn/9782070368228-L.jpg',
-    'book-sisyphe':'https://covers.openlibrary.org/b/isbn/9782070322886-L.jpg',
-    'book-origines':'https://covers.openlibrary.org/b/isbn/9782070117505-L.jpg'
+    'book-bible':'https://covers.openlibrary.org/b/isbn/9780310446619-L.jpg',
+    'book-femme-menage':'https://covers.openlibrary.org/b/isbn/9782298195453-L.jpg',
+    'book-shining':'https://covers.openlibrary.org/b/isbn/9782253909071-L.jpg',
+    'book-hunger-games':'https://covers.openlibrary.org/b/isbn/9782266182690-L.jpg',
+    'book-derniere-allumette':'https://covers.openlibrary.org/b/isbn/9782368129531-L.jpg',
+    'book-petit-prince':'https://covers.openlibrary.org/b/isbn/9782070612758-L.jpg'
   };
   const DEFAULT_BOOK_GENRES = {
     'book-etranger':'Romans', 'book-peste':'Romans', 'book-dune':'Science-fiction',
-    'book-1984':'Science-fiction', 'book-sisyphe':'Philosophie', 'book-origines':'Histoire'
+    'book-bible':'Spiritualité', 'book-femme-menage':'Thriller', 'book-shining':'Fantastique',
+    'book-hunger-games':'Jeunesse', 'book-derniere-allumette':'Romans', 'book-petit-prince':'Jeunesse'
   };
 
   function readJSON(key, fallback = null) {
@@ -71,6 +81,7 @@ BT.store = (() => {
     const currentMinute = Math.min(durationMinutes || Number.MAX_SAFE_INTEGER, Math.max(0, Number(data.currentMinute) || 0));
     const genreValues = Array.isArray(data.genres) && data.genres.length ? data.genres : [data.genre || DEFAULT_BOOK_GENRES[data.id]];
     const genres = [...new Set(genreValues.map(value => String(value || '').trim()).filter(Boolean))].slice(0, 8);
+    const numericRating = Math.round(Number(data.rating));
     return {
       id: data.id || uid('book'), title: String(data.title || 'Sans titre'),
       authors: Array.isArray(data.authors) ? data.authors : [data.author || 'Auteur inconnu'].filter(Boolean),
@@ -82,9 +93,9 @@ BT.store = (() => {
       libraryState: data.libraryState === 'wishlist' ? 'wishlist' : 'library',
       situation: data.situation || (data.status === 'transmis' ? 'donne' : 'possede'),
       coverColor: data.coverColor || 'linear-gradient(145deg,#17324d,#6f927c)', coverUrl: data.coverUrl || DEFAULT_BOOK_COVERS[data.id] || '',
-      addedAt: data.addedAt || nowISO(), startedAt: data.startedAt || null, completedAt: data.completedAt || null,
+      addedAt: data.addedAt || nowISO(), startedAt: normalizeBookDate(data.startedAt), completedAt: normalizeBookDate(data.completedAt),
       historicalBeforeJoin: Boolean(data.historicalBeforeJoin || (data.isADN && !data.completedAt)),
-      rating: Number(data.rating) || null, isADN: Boolean(data.isADN),
+      rating: numericRating >= 1 && numericRating <= 5 ? numericRating : null, isADN: Boolean(data.isADN),
       adnOrder: Number.isFinite(Number(data.adnOrder)) ? Number(data.adnOrder) : null,
       lastUsedAt: data.lastUsedAt || null, customCover: Boolean(data.customCover)
     };
@@ -96,9 +107,12 @@ BT.store = (() => {
       makeBook({ id: 'book-etranger', title: 'L’Étranger', author: 'Albert Camus', genre:'Romans', publisher: 'Gallimard', edition: 'Folio', format: 'Poche', totalPages: 185, currentPage: 78, status: 'en-cours', description: 'À Alger, Meursault traverse les événements avec une étrange distance au monde.', coverColor: 'linear-gradient(145deg,#14243a,#59718d)', startedAt: daysAgo(12), lastUsedAt: minutesAgo(48) }),
       makeBook({ id: 'book-peste', title: 'La Peste', author: 'Albert Camus', genre:'Romans', publisher: 'Gallimard', edition: 'Folio', format: 'Poche', totalPages: 308, currentPage: 308, status: 'lu', description: 'La ville d’Oran se ferme sur elle-même face à une épidémie.', coverColor: 'linear-gradient(145deg,#29483c,#86aa93)', completedAt: `${year}-07-18T19:10:00.000Z`, rating: 4 }),
       makeBook({ id: 'book-dune', title: 'Dune', author: 'Frank Herbert', genre:'Science-fiction', publisher: 'Robert Laffont', edition: 'Ailleurs et Demain', totalPages: 688, currentPage: 112, status: 'en-cours', situation: 'emprunte', description: 'Sur Arrakis, le destin de Paul Atréides se noue autour de l’Épice.', coverColor: 'linear-gradient(145deg,#6f3f1e,#d49442)', startedAt: daysAgo(26), lastUsedAt: daysAgo(3) }),
-      makeBook({ id: 'book-1984', title: '1984', author: 'George Orwell', genre:'Science-fiction', publisher: 'Gallimard', edition: 'Du monde entier', format: 'Poche', totalPages: 328, currentPage: 328, status: 'lu', situation: 'donne', description: 'Winston Smith tente de préserver une pensée libre sous le regard de Big Brother.', coverColor: 'linear-gradient(145deg,#5e191c,#c35b4b)', completedAt: `${year}-03-12T20:00:00.000Z`, rating: 5 }),
-      makeBook({ id: 'book-sisyphe', title: 'Le Mythe de Sisyphe', author: 'Albert Camus', genre:'Philosophie', publisher: 'Gallimard', edition: 'Folio essais', totalPages: 192, status: 'a-lire', description: 'Un essai sur l’absurde, la révolte et la liberté.', coverColor: 'linear-gradient(145deg,#25211e,#9c6a36)' }),
-      makeBook({ id: 'book-origines', title: 'Les Origines du totalitarisme', author: 'Hannah Arendt', genre:'Histoire', publisher: 'Gallimard', edition: 'Quarto', format: 'Relié', totalPages: 832, currentPage: 214, status: 'en-pause', situation: 'prete', description: 'Une enquête majeure sur l’antisémitisme, l’impérialisme et le totalitarisme.', coverColor: 'linear-gradient(145deg,#1d3135,#66888a)', startedAt: daysAgo(80) })
+      makeBook({ id: 'book-bible', title: 'La Sainte Bible', author: '', genre:'Spiritualité', totalPages: 0, status: 'a-lire', description: 'Un texte fondateur transmis et relu de génération en génération.', coverColor: 'linear-gradient(145deg,#1a2980,#26d0ce)' }),
+      makeBook({ id: 'book-femme-menage', title: 'La Femme de ménage', author: 'Freida McFadden', genre:'Thriller', publisher:'J’ai lu', format:'Poche', totalPages:416, currentPage:416, status:'lu', description:'Millie croit trouver un nouveau départ dans une maison où chacun dissimule ses secrets.', coverColor:'linear-gradient(145deg,#355c7d,#c06c84)', completedAt:`${year}-06-07T20:30:00.000Z`, rating:4 }),
+      makeBook({ id: 'book-shining', title: 'Shining', author: 'Stephen King', genre:'Fantastique', publisher:'Le Livre de Poche', format:'Poche', totalPages:757, currentPage:268, status:'en-pause', description:'L’Overlook referme lentement son huis clos sur la famille Torrance.', coverColor:'linear-gradient(145deg,#111827,#8b1e2d)', startedAt:daysAgo(64) }),
+      makeBook({ id: 'book-hunger-games', title: 'Hunger Games', author: 'Suzanne Collins', genre:'Jeunesse', publisher:'Pocket Jeunesse', totalPages:398, status:'a-lire', description:'À seize ans, Katniss doit survivre à un jeu télévisé imposé par le Capitole.', coverColor:'linear-gradient(145deg,#1f2937,#c58b2a)' }),
+      makeBook({ id: 'book-derniere-allumette', title: 'La Dernière Allumette', author: 'Marie Vareille', genre:'Romans', publisher:'Charleston', totalPages:336, currentPage:336, status:'lu', description:'Une histoire familiale sensible qui avance entre silences, mémoire et reconstruction.', coverColor:'linear-gradient(145deg,#8c3b31,#e8aa6b)', completedAt:`${year}-02-16T18:45:00.000Z`, rating:5 }),
+      makeBook({ id: 'book-petit-prince', title: 'Le Petit Prince', author: 'Antoine de Saint-Exupéry', genre:'Jeunesse', publisher:'Gallimard', totalPages:96, currentPage:96, status:'lu', description:'Un voyage bref et universel sur les liens, l’enfance et ce qui compte vraiment.', coverColor:'linear-gradient(145deg,#ffb75e,#ed8f03)', completedAt:`${year - 1}-11-22T17:00:00.000Z`, rating:5 })
     ];
   }
 
@@ -162,7 +176,7 @@ BT.store = (() => {
       community: demoCommunity(),
       notifications: [],
       badges: { unlocked: {} },
-      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
+      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, memoryCardColor: 'sage', dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
       outbox: [], timeline: [], meta: { initializedAt: nowISO(), updatedAt: nowISO(), simulated: true }
     };
   }
@@ -216,6 +230,7 @@ BT.store = (() => {
     state.badges = { ...base.badges, ...(state.badges || {}), unlocked: state.badges?.unlocked || {} };
     state.settings = { ...base.settings, ...(state.settings || {}), notifications: { ...base.settings.notifications, ...(state.settings?.notifications || {}) }, blockedUsers: state.settings?.blockedUsers || [], recentSearches: state.settings?.recentSearches || [], dismissedRecommendationIds: state.settings?.dismissedRecommendationIds || [], collapsedLibraryGenres:state.settings?.collapsedLibraryGenres || [] };
     state.settings.libraryFinish = ['terracotta','blue','sage','red','black','white'].includes(state.settings.libraryFinish) ? state.settings.libraryFinish : 'terracotta';
+    state.settings.memoryCardColor = ['terracotta','blue','sage','red','black','white'].includes(state.settings.memoryCardColor) ? state.settings.memoryCardColor : 'sage';
     state.outbox = Array.isArray(state.outbox) ? state.outbox : [];
     state.timeline = Array.isArray(state.timeline) ? state.timeline : [];
     state.meta = { ...base.meta, ...(state.meta || {}) };
@@ -232,6 +247,67 @@ BT.store = (() => {
     writeJSON(STATE_KEY, state); emit();
   }
   function getState() { return clone(state); }
+  function getSyncedData() {
+    return clone({
+      books:state.books,
+      sessions:state.sessions,
+      traces:state.traces,
+      lexicon:state.lexicon,
+      goals:state.goals
+    });
+  }
+  function syncedFingerprint() {
+    const serialized = JSON.stringify({ books:state.books, sessions:state.sessions, traces:state.traces, lexicon:state.lexicon, goals:state.goals });
+    let hash = 2166136261;
+    for (let index = 0; index < serialized.length; index += 1) {
+      hash ^= serialized.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+  function getDataSyncStatus() {
+    const fingerprint = syncedFingerprint();
+    return clone({
+      fingerprint,
+      lastSyncedFingerprint:state.meta.lastSyncedFingerprint || '',
+      lastSyncedAt:state.meta.lastSyncedAt || null,
+      dirty:Boolean(state.meta.lastSyncedFingerprint && state.meta.lastSyncedFingerprint !== fingerprint)
+    });
+  }
+  function markDataSynced(value = nowISO()) {
+    state.meta.lastSyncedFingerprint = syncedFingerprint();
+    state.meta.lastSyncedAt = value;
+    writeJSON(STATE_KEY, state);
+    return getDataSyncStatus();
+  }
+  function replaceSyncedData(snapshot = {}) {
+    if (!snapshot || typeof snapshot !== 'object') return getSyncedData();
+    if (Array.isArray(snapshot.books)) state.books = snapshot.books.map(makeBook);
+    if (Array.isArray(snapshot.sessions)) state.sessions = clone(snapshot.sessions);
+    if (Array.isArray(snapshot.traces)) state.traces = clone(snapshot.traces);
+    if (Array.isArray(snapshot.lexicon)) state.lexicon = snapshot.lexicon.map(normalizeLexiconEntry);
+    if (snapshot.goals && typeof snapshot.goals === 'object' && !Array.isArray(snapshot.goals)) {
+      const defaults = makeDefaultState().goals;
+      state.goals = {
+        ...defaults,
+        ...snapshot.goals,
+        week:{ ...defaults.week, ...(snapshot.goals.week || {}) },
+        month:{ ...defaults.month, ...(snapshot.goals.month || {}) },
+        year:{ ...defaults.year, ...(snapshot.goals.year || {}) },
+        celebrated:snapshot.goals.celebrated || {}
+      };
+    }
+    const bookIds = new Set(state.books.map(book => book.id));
+    state.sessions = state.sessions.filter(session => session?.id && bookIds.has(session.bookId));
+    state.traces = state.traces.filter(trace => trace?.id && (!trace.bookId || bookIds.has(trace.bookId)));
+    state.lexicon = state.lexicon.filter(item => item?.id && (!item.bookId || bookIds.has(item.bookId)));
+    state.activeSessions = state.activeSessions.filter(session => bookIds.has(session.bookId));
+    if (!bookIds.has(state.activeBookId)) state.activeBookId = state.books.find(book => book.status === 'en-cours' && book.libraryState === 'library')?.id || null;
+    if (!state.activeSessions.some(session => session.id === state.focusedSessionId)) state.focusedSessionId = state.activeSessions[0]?.id || null;
+    state.meta.lastRemoteHydrationAt = nowISO();
+    commit();
+    return getSyncedData();
+  }
   function subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); }
   function useUser(userId) {
     const cleanId = String(userId || '').trim();
@@ -240,7 +316,7 @@ BT.store = (() => {
     STATE_KEY = `${LEGACY_STATE_KEY}:${cleanId}`;
     ONBOARDING_KEY = `${LEGACY_ONBOARDING_KEY}:${cleanId}`;
     const legacyOwner = localStorage.getItem(LEGACY_OWNER_KEY);
-    const canMigrateLegacy = !legacyOwner || legacyOwner === cleanId;
+    const canMigrateLegacy = cleanId !== 'guest' && (!legacyOwner || legacyOwner === cleanId);
     if (!localStorage.getItem(STATE_KEY) && localStorage.getItem(LEGACY_STATE_KEY) && canMigrateLegacy) {
       localStorage.setItem(STATE_KEY, localStorage.getItem(LEGACY_STATE_KEY));
       localStorage.setItem(LEGACY_OWNER_KEY, cleanId);
@@ -267,11 +343,11 @@ BT.store = (() => {
 
   function getBooks() { return clone(state.books); }
   function getBookById(id) { const book = state.books.find(item => item.id === id); return book ? clone(book) : null; }
-  function addBook(book) { const record = makeBook(book); if (record.status === 'lu' && !record.completedAt && !record.historicalBeforeJoin) record.completedAt = nowISO(); if (record.status === 'en-cours' && !record.startedAt) record.startedAt = nowISO(); state.books.push(record); if (!state.activeBookId && record.status === 'en-cours') state.activeBookId = record.id; addTimelineEvent(record.libraryState === 'wishlist' ? 'wishlist-added' : 'book-added', record.id, `« ${record.title} » ajouté ${record.libraryState === 'wishlist' ? 'à la wishlist' : 'à la bibliothèque'}`); commit({ queue: 'book.create' }); return clone(record); }
+  function addBook(book) { const record = makeBook(book); if (record.status === 'lu' && !record.completedAt && !record.historicalBeforeJoin) record.completedAt = nowISO(); if (['en-cours','en-pause','lu'].includes(record.status) && !record.startedAt && !record.historicalBeforeJoin) record.startedAt = record.completedAt || nowISO(); state.books.push(record); if (!state.activeBookId && record.status === 'en-cours') state.activeBookId = record.id; addTimelineEvent(record.libraryState === 'wishlist' ? 'wishlist-added' : 'book-added', record.id, `« ${record.title} » ajouté ${record.libraryState === 'wishlist' ? 'à la wishlist' : 'à la bibliothèque'}`); commit({ queue: 'book.create' }); return clone(record); }
   function updateBook(id, updates) {
     const index = state.books.findIndex(book => book.id === id); if (index < 0) return null;
     const previous = state.books[index]; const next = makeBook({ ...previous, ...updates, id });
-    if (updates.status === 'en-cours' && !next.startedAt) next.startedAt = nowISO();
+    if (['en-cours','en-pause','lu'].includes(updates.status) && !next.startedAt && !next.historicalBeforeJoin) next.startedAt = next.completedAt || nowISO();
     if (updates.status === 'lu' && !next.completedAt && !next.historicalBeforeJoin) next.completedAt = nowISO();
     if (updates.status && updates.status !== previous.status) addTimelineEvent(`status-${updates.status}`, id, `« ${next.title} » : ${statusLabel(updates.status)}`);
     if (updates.situation && updates.situation !== previous.situation) addTimelineEvent(`situation-${updates.situation}`, id, `« ${next.title} » : ${situationLabel(updates.situation)}`);
@@ -289,7 +365,7 @@ BT.store = (() => {
   function saveSession(session) {
     const record = { id: session.id || uid('session'), manual: Boolean(session.manual), startedAt: session.startedAt || nowISO(), endedAt: session.endedAt || nowISO(), durationSeconds: Math.max(0, Number(session.durationSeconds ?? session.duration) || 0), startPage: Math.max(0, Number(session.startPage) || 0), endPage: Math.max(0, Number(session.endPage) || 0), note: session.note || '', bookId: session.bookId };
     const index = state.sessions.findIndex(item => item.id === record.id); if (index >= 0) state.sessions[index] = record; else state.sessions.push(record);
-    const book = state.books.find(item => item.id === record.bookId); if (book) { if (book.mediaType === 'audio') book.currentMinute = Math.min(book.durationMinutes || Number.MAX_SAFE_INTEGER, record.endPage); else book.currentPage = Math.min(book.totalPages || Number.MAX_SAFE_INTEGER, record.endPage); book.lastUsedAt = record.endedAt; const completed = book.mediaType === 'audio' ? (book.durationMinutes && book.currentMinute >= book.durationMinutes) : (book.totalPages && book.currentPage >= book.totalPages); if (completed) { book.status = 'lu'; book.completedAt ||= record.endedAt; } }
+    const book = state.books.find(item => item.id === record.bookId); if (book) { if (book.mediaType === 'audio') book.currentMinute = Math.min(book.durationMinutes || Number.MAX_SAFE_INTEGER, record.endPage); else book.currentPage = Math.min(book.totalPages || Number.MAX_SAFE_INTEGER, record.endPage); book.startedAt ||= record.startedAt; book.lastUsedAt = record.endedAt; const completed = book.mediaType === 'audio' ? (book.durationMinutes && book.currentMinute >= book.durationMinutes) : (book.totalPages && book.currentPage >= book.totalPages); if (completed) { book.status = 'lu'; book.completedAt ||= record.endedAt; } }
     addTimelineEvent(record.manual ? 'manual-session' : 'session', record.bookId, `${Math.max(1, Math.round(record.durationSeconds / 60))} min de lecture`); commit({ queue: 'session.save' }); return clone(record);
   }
   function updateSession(id, updates) { const existing = state.sessions.find(item => item.id === id); return existing ? saveSession({ ...existing, ...updates, id }) : null; }
@@ -421,9 +497,17 @@ BT.store = (() => {
   function updateFriend(userId, action) { const user = state.community.users.find(item => item.id === userId); if (!user) return null; user.friendState = ({ send: 'sent', cancel: 'none', accept: 'friend', refuse: 'none', remove: 'none' })[action] || user.friendState; commit({ queue: `friend.${action}` }); return clone(user); }
   function blockUser(userId) { if (!state.settings.blockedUsers.includes(userId)) state.settings.blockedUsers.push(userId); state.community.posts = state.community.posts.filter(post => post.authorId !== userId); const user = state.community.users.find(item => item.id === userId); if (user) user.friendState = 'blocked'; commit({ queue: 'user.block' }); }
   function unblockUser(userId) { state.settings.blockedUsers = state.settings.blockedUsers.filter(id => id !== userId); const user = state.community.users.find(item => item.id === userId); if (user?.friendState === 'blocked') user.friendState = 'none'; commit({ queue: 'user.unblock' }); }
-  function addGroup(group) { const record = { id: group.id || uid('club'), remoteId: group.remoteId || null, name: group.name, description: group.description || '', visibility: group.visibility || 'private', access: group.access || 'approval', bookTitle: group.bookTitle || '', membersCount: 1, role: 'owner', joined: true, color: group.color || '#6f927c' }; const existing = state.community.clubs.findIndex(item => item.id === record.id || (record.remoteId && item.remoteId === record.remoteId)); if (existing >= 0) state.community.clubs[existing] = { ...state.community.clubs[existing], ...record }; else state.community.clubs.unshift(record); commit({ queue: 'club.create' }); return clone(record); }
+  function addGroup(group) { const id = group.id || uid('club'), bookTitle = group.bookTitle || ''; const record = { id, remoteId: group.remoteId || null, name: group.name, description: group.description || '', visibility: group.visibility || 'private', access: group.access || 'approval', bookTitle, membersCount: 1, role: 'owner', joined: true, color: group.color || '#6f927c', members:[{ userId:'me', name:state.profile.name, role:'owner', status:'active' }], posts:[], books:bookTitle ? [{ id:uid('club-book'), title:bookTitle, status:'current', updated_at:nowISO() }] : [] }; const existing = state.community.clubs.findIndex(item => item.id === record.id || (record.remoteId && item.remoteId === record.remoteId)); if (existing >= 0) state.community.clubs[existing] = { ...state.community.clubs[existing], ...record }; else state.community.clubs.unshift(record); commit({ queue: 'club.create' }); return clone(record); }
   function getGroups() { return clone(state.community.clubs); }
-  function toggleClub(clubId) { const club = state.community.clubs.find(item => item.id === clubId); if (!club) return null; club.joined = !club.joined; club.role = club.joined ? 'member' : null; club.membersCount = Math.max(0, Number(club.membersCount) + (club.joined ? 1 : -1)); commit({ queue: club.joined ? 'club.join' : 'club.leave' }); return clone(club); }
+  function updateGroup(clubId, updates = {}) { const club = state.community.clubs.find(item => item.id === clubId); if (!club) return null; Object.assign(club, updates); if (updates.bookTitle != null) { club.books ||= []; club.books.forEach(book => { if (book.status === 'current') book.status = 'planned'; }); if (updates.bookTitle) { const existing = club.books.find(book => normalizeText(book.title) === normalizeText(updates.bookTitle)); if (existing) { existing.status = 'current'; existing.updated_at = nowISO(); } else club.books.push({ id:uid('club-book'), title:updates.bookTitle, status:'current', updated_at:nowISO() }); } } commit({ queue:'club.update' }); return clone(club); }
+  function toggleClub(clubId) { const club = state.community.clubs.find(item => item.id === clubId); if (!club) return null; club.joined = !club.joined; club.role = club.joined ? 'member' : null; club.members ||= []; const mine = club.members.find(member => member.userId === 'me'); if (club.joined && !mine) club.members.push({ userId:'me', name:state.profile.name, role:'member', status:'active' }); if (!club.joined && mine) club.members = club.members.filter(member => member !== mine); club.membersCount = Math.max(0, Number(club.membersCount) + (club.joined ? 1 : -1)); commit({ queue: club.joined ? 'club.join' : 'club.leave' }); return clone(club); }
+  function addGroupMember(clubId, user, role = 'member') { const club = state.community.clubs.find(item => item.id === clubId); if (!club || !user?.id) return null; club.members ||= []; const record = { userId:user.id, name:user.name || 'Lecteur BOO-P', role:['moderator','member'].includes(role) ? role : 'member', status:'active' }; const index = club.members.findIndex(member => member.userId === user.id); if (index >= 0) club.members[index] = record; else club.members.push(record); club.membersCount = club.members.filter(member => member.status === 'active').length; commit({ queue:'club.member' }); return clone(record); }
+  function removeGroupMember(clubId, userId) { const club = state.community.clubs.find(item => item.id === clubId); if (!club) return false; club.members = (club.members || []).filter(member => member.userId !== userId); club.membersCount = club.members.filter(member => member.status === 'active').length; commit({ queue:'club.member' }); return true; }
+  function addGroupPost(clubId, text, type = 'discussion') { const club = state.community.clubs.find(item => item.id === clubId); if (!club || !String(text).trim()) return null; club.posts ||= []; const record = { id:uid('club-post'), authorId:'me', authorName:state.profile.name, type:type === 'announcement' ? 'announcement' : 'discussion', text:String(text).trim(), date:nowISO(), encouraged:false, encouragements:0, comments:[] }; club.posts.unshift(record); commit({ queue:'club.post' }); return clone(record); }
+  function addGroupComment(clubId, postId, text) { const club = state.community.clubs.find(item => item.id === clubId), post = club?.posts?.find(item => item.id === postId); if (!post || !String(text).trim()) return null; const record = { id:uid('club-comment'), authorId:'me', authorName:state.profile.name, text:String(text).trim(), date:nowISO() }; post.comments ||= []; post.comments.push(record); commit({ queue:'club.comment' }); return clone(record); }
+  function toggleGroupPostEncouragement(clubId, postId) { const club = state.community.clubs.find(item => item.id === clubId), post = club?.posts?.find(item => item.id === postId); if (!post) return null; post.encouraged = !post.encouraged; post.encouragements = Math.max(0, Number(post.encouragements) + (post.encouraged ? 1 : -1)); commit({ queue:'club.encouragement' }); return clone(post); }
+  function addGroupBook(clubId, title, status = 'planned') { const club = state.community.clubs.find(item => item.id === clubId); if (!club || !String(title).trim()) return null; club.books ||= []; const safeStatus = ['planned','current','read'].includes(status) ? status : 'planned'; if (safeStatus === 'current') club.books.forEach(book => { if (book.status === 'current') book.status = 'planned'; }); const record = { id:uid('club-book'), title:String(title).trim(), status:safeStatus, completed_at:safeStatus === 'read' ? nowISO() : null, updated_at:nowISO() }; club.books.push(record); if (safeStatus === 'current') club.bookTitle = record.title; commit({ queue:'club.book' }); return clone(record); }
+  function updateGroupBook(clubId, bookId, updates = {}) { const club = state.community.clubs.find(item => item.id === clubId), book = club?.books?.find(item => item.id === bookId); if (!book) return null; if (updates.status === 'current') club.books.forEach(item => { if (item.id !== bookId && item.status === 'current') item.status = 'planned'; }); Object.assign(book, updates, { updated_at:nowISO() }); book.completed_at = book.status === 'read' ? (book.completed_at || nowISO()) : null; if (book.status === 'current') club.bookTitle = book.title; else if (club.bookTitle === book.title) club.bookTitle = ''; commit({ queue:'club.book' }); return clone(book); }
   function updateSalon(salonId, updates) { const salon = state.community.salons.find(item => item.id === salonId); if (!salon) return null; Object.assign(salon, updates); commit({ queue: 'salon.update' }); return clone(salon); }
   function addSalon(salon) { const record = { id: uid('salon'), clubId: salon.clubId, clubName: salon.clubName, title: salon.title, bookTitle: salon.bookTitle, scheduledAt: salon.scheduledAt || nowISO(), status: 'scheduled', joined: true, myStatus: 'waiting', sharePages: false, participants: [], messages: [] }; state.community.salons.unshift(record); commit({ queue: 'salon.create' }); return clone(record); }
   function addSalonMessage(salonId, text) { const salon = state.community.salons.find(item => item.id === salonId); if (!salon || !String(text).trim()) return null; const message = { id: uid('message'), authorName: state.profile.name, text: String(text).trim(), date: nowISO() }; salon.messages.push(message); commit({ queue: 'salon.message' }); return clone(message); }
@@ -474,13 +558,13 @@ BT.store = (() => {
   window.addEventListener?.('online', flushOutbox);
 
   return {
-    getState, subscribe, useUser, getOnboarding, saveOnboarding, isOnboardingComplete, getProfile, saveProfile, getSettings, saveSettings,
+    getState, getSyncedData, replaceSyncedData, getDataSyncStatus, markDataSynced, subscribe, useUser, getOnboarding, saveOnboarding, isOnboardingComplete, getProfile, saveProfile, getSettings, saveSettings,
     getBooks, getBookById, addBook, updateBook, deleteBook, getCurrentBook, setActiveBook, setCurrentBook, clearActiveBook, completeBook,
     getSessions, getSessionsForBook, saveSession, updateSession, deleteSession, getTodaySessions, getTodayReadingTime,
     getActiveSession, getActiveSessions, getActiveSessionForBook, focusActiveSession, startActiveSession, recoverActiveSession, heartbeatActiveSession, activeDuration, updateActiveSession, pauseActiveSession, resumeActiveSession, finishActiveSession,
     getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, reviewLexiconWord, deleteLexiconWord,
     getGoal, saveGoal, getGoalProgress, updateGoal, markGoalCelebrated, isGoalCelebrated,
-    getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, addGroup, getGroups, toggleClub, updateSalon, addSalon, addSalonMessage,
+    getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, addGroup, getGroups, updateGroup, toggleClub, addGroupMember, removeGroupMember, addGroupPost, addGroupComment, toggleGroupPostEncouragement, addGroupBook, updateGroupBook, updateSalon, addSalon, addSalonMessage,
     getNotifications, replaceNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getStats, getBadges, exportData, flushOutbox, clearAll, loadDemoData,
     statusLabel, situationLabel, localDateKey
   };
