@@ -12,7 +12,8 @@
     pendingPostPhotoUrl: '', searchQuery: '', communityLoaded: false,
     friendResults: [], friendSearchBusy: false, friendSearchTimer: null,
     catalogRecommendations: [], recommendationsBusy: false, currentRecommendations: [],
-    monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null
+    monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
+    selectedLibraryBookId: null, memoryDeckKeys: [], memoryDeckSignature: '', memorySessionTotal: 0, memorySessionComplete: false
   };
 
   const NAV = [
@@ -146,6 +147,7 @@
   function render(shouldFocus = false) {
     const previousRoute = ui.renderedRoute;
     parseRoute();
+    if (ui.route !== 'path' || ui.pathTab !== 'library') ui.selectedLibraryBookId = null;
     if (ui.route === 'session' && !store.getActiveSession()) { location.hash = '#home'; return; }
     const view = document.getElementById('main-view');
     const renderers = { home: renderHome, community: renderCommunity, path: renderPath, profile: renderProfile, session: renderSession, book: renderBookDetail };
@@ -231,7 +233,7 @@
     const inProgress = store.getBooks().filter(book => book.status === 'en-cours' && book.libraryState === 'library');
     const openSessions = store.getActiveSessions();
     const progress = active ? bookProgress(active) : null;
-    const memory = getMemoryItems();
+    const memoryItems = getMemoryItems(), memory = getMemoryDeck(memoryItems), memoryCard = memory[0] || null;
     const weekPct = pct(goals.week.value, goals.week.target), monthPct = pct(goals.month.value, goals.month.target), yearPct = pct(goals.year.value, goals.year.target);
     return `
       <section class="page-head"><div><p class="eyebrow">Bonjour ${esc(profile.name)}</p><h1>Où en est votre lecture&nbsp;?</h1><p>Un regard calme sur votre régularité, vos livres et ce que vous souhaitez garder.</p></div><span class="privacy-badge">Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</span></section>
@@ -271,9 +273,9 @@
       </section>
 
       <section class="section-block" aria-labelledby="memory-title">
-        <div class="section-heading"><div><p class="eyebrow">${memory.length} devinettes à réviser</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Ouvrez une carte pour révéler le mot, l’expression ou la Trace.</p></div><a class="text-link" href="#path?tab=lexicon">Mon lexique</a></div>
-        <div class="memory-list" aria-label="Devinettes de la mémoire active">${memory.map((item,index) => renderMemoryQuiz(item,index)).join('')}</div>
-        <p class="memory-reminder small muted">Révisions préparées à J+1, J+3, J+5 et J+30. Les rappels distants seront activés ultérieurement.</p>
+        <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} dans cette séance</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez d’abord la réponse, puis touchez la carte pour la retourner.</p></div><a class="text-link" href="#path?tab=lexicon">Mon lexique</a></div>
+        <div class="memory-list" aria-label="Cartes de la mémoire active">${memoryCard ? renderMemoryQuiz(memoryCard, ui.memorySessionTotal - memory.length + 1, ui.memorySessionTotal) : renderMemoryComplete()}</div>
+        <p class="memory-reminder small muted">Cinq cartes maximum · rappels adaptés à votre réponse, puis espacés jusqu’à 30 jours.</p>
       </section>`;
   }
 
@@ -281,14 +283,14 @@
     return `<a class="goal-mini" href="#path?tab=goals" aria-label="${label}, ${value}"><span class="progress-ring" style="--pct:${progress}"><span>${progress}%</span></span><span><strong>${label}</strong><small>${value}</small></span></a>`;
   }
 
-  function makeClozeMemory(text, source, kind = 'Trace personnelle', date = new Date().toISOString()) {
+  function makeClozeMemory(text, source, kind = 'Citation à compléter', date = new Date().toISOString(), memoryKey = '', detail = '') {
     const stopWords = new Set(['alors','après','avant','avec','avoir','cette','comme','dans','depuis','entre','était','faire','leurs','livre','mais','même','notre','parce','pour','quand','sans','sous','toute','très','votre']);
     const words = String(text || '').match(/[A-Za-zÀ-ÖØ-öø-ÿŒœ'-]{5,}/g) || [];
     const answer = words.filter(word => !stopWords.has(normalize(word))).sort((a, b) => b.length - a.length)[0] || words[0];
     if (!answer) return null;
     const escaped = answer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const clue = String(text).replace(new RegExp(`\\b${escaped}\\b`, 'i'), '_____');
-    return { kind, question:`Quel mot manque dans ce passage : « ${clue} » ?`, answer, detail:String(text), source, date };
+    const clue = String(text).replace(new RegExp(escaped, 'i'), '_____');
+    return { kind, question:`Complétez cette citation : « ${clue} »`, answer:String(text), solution:answer, detail, source, date, memoryKey };
   }
 
   function memoryDefinitionClue(definition, answer) {
@@ -298,19 +300,32 @@
 
   function lexiconMemoryMeta(item) {
     const next = (item.reviewSchedule || []).find(stage => !stage.completedAt);
-    if (!next) return { memoryId:item.id, memoryType:'lexicon', reviewLabel:'Cycle initial terminé · révisions aléatoires à venir' };
+    if (!next) return { memoryId:item.id, memoryType:'lexicon', reviewLabel:'Cycle initial terminé · entretien adaptatif à venir', nextDueAt:null };
     const due = new Date(next.dueAt), dueToday = due.getTime() <= Date.now();
-    const step = next.random ? 'Révision aléatoire' : `Étape J+${next.day}`;
-    return { memoryId:item.id, memoryType:'lexicon', reviewLabel:dueToday ? `${step} · à revoir maintenant` : `${step} · prévue le ${formatDate(next.dueAt)}` };
+    const step = next.adaptive ? 'Entretien adaptatif' : `Étape J+${next.day}`;
+    return { memoryId:item.id, memoryType:'lexicon', reviewLabel:dueToday ? `${step} · à revoir maintenant` : `${step} · prévue le ${formatDate(next.dueAt)}`, nextDueAt:next.dueAt };
   }
 
   function getMemoryItems() {
-    const books = store.getBooks();
-    const personal = [
-      ...store.getLexicon().map(item => ({ ...(item.kind === 'citation' ? makeClozeMemory(item.word, item.bookTitle || 'Citation personnelle', 'Citation à compléter', item.updatedAt) : { kind:item.kind === 'expression' ? 'Expression à retrouver' : 'Mot à retrouver', question:`${item.kind === 'expression' ? 'Quelle expression' : 'Quel mot'} correspond à cette explication : « ${memoryDefinitionClue(item.definition, item.word)} » ?`, answer:item.word, detail:item.definition, source:item.bookTitle || 'Note personnelle', date:item.updatedAt }), ...lexiconMemoryMeta(item) })),
-      ...store.getTraces().map(item => makeClozeMemory(item.text, books.find(book => book.id === item.bookId)?.title || 'Trace personnelle', 'Trace à compléter', item.createdAt))
-    ].filter(Boolean).sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+    const personal = store.getLexicon().map(item => {
+      const memoryKey = `lexicon:${item.id}`;
+      const source = [item.bookTitle || 'Note personnelle', item.author, item.page ? `p. ${item.page}` : ''].filter(Boolean).join(' · ');
+      const clue = memoryDefinitionClue(item.definition, item.word).trim().replace(/[.!?]+$/, '');
+      const riddle = clue ? `${clue.charAt(0).toLowerCase()}${clue.slice(1)}` : 'une idée rencontrée pendant votre lecture';
+      const wordQuestion = /^(un|une|le|la|les|l['’]|du|des|de la)\b/i.test(clue)
+        ? `Je suis ${riddle}. Qui suis-je ?`
+        : `Je désigne l’idée suivante : « ${clue || 'une idée rencontrée pendant votre lecture'} ». Quel mot suis-je ?`;
+      const content = item.kind === 'citation'
+        ? makeClozeMemory(item.word, source, 'Citation à compléter', item.updatedAt, memoryKey, item.definition)
+        : { kind:item.kind === 'expression' ? 'Expression à retrouver' : 'Mot à retrouver', question:item.kind === 'expression' ? `Cette situation correspond à : « ${clue || item.note || 'un sens rencontré dans votre lecture'} ». Quelle expression utiliseriez-vous ?` : wordQuestion, answer:item.word, detail:item.definition, source, date:item.updatedAt, memoryKey };
+      return { ...content, ...lexiconMemoryMeta(item) };
+    }).filter(Boolean).sort((a,b) => {
+      const aDue = a.nextDueAt ? new Date(a.nextDueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const bDue = b.nextDueAt ? new Date(b.nextDueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      return aDue - bDue || new Date(b.date) - new Date(a.date);
+    }).slice(0, 10);
     const examples = [
+      { kind:'Mot à retrouver', question:'Je suis une découverte inattendue et fructueuse faite par hasard, grâce à la curiosité et à l’esprit d’observation. Qui suis-je ?', answer:'Sérendipité', detail:'Une découverte heureuse réalisée alors que l’on cherchait autre chose.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je suis un manuscrit ancien dont le texte visible recouvre une écriture effacée. Qui suis-je ?', answer:'Palimpseste', detail:'Un manuscrit réutilisé après effacement d’un premier texte.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je suis une révélation soudaine qui fait apparaître le sens d’une situation. Qui suis-je ?', answer:'Épiphanie', detail:'Une manifestation ou une compréhension soudaine et lumineuse.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je suis une intention fragile qui ne se transforme presque jamais en action. Qui suis-je ?', answer:'Velléité', detail:'Une volonté faible ou passagère, sans effet réel.', source:'Exemple BOO-P' },
@@ -321,13 +336,40 @@
       { kind:'Mot à retrouver', question:'Je me situe au seuil d’un ouvrage et j’en ouvre la lecture. Qui suis-je ?', answer:'Liminaire', detail:'Ce qui est placé au commencement d’un texte ou sert d’introduction.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je ne peux pas être exprimé avec des mots tant je dépasse le langage. Qui suis-je ?', answer:'Indicible', detail:'Ce qu’on ne peut pas dire ou décrire.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je suis la capacité à se reconstruire après une épreuve. Qui suis-je ?', answer:'Résilience', detail:'La faculté de retrouver un équilibre après un choc ou une difficulté.', source:'Exemple BOO-P' }
-    ];
+    ].map((item,index) => ({ ...item, memoryKey:`example:${index}:${normalize(item.answer)}`, date:new Date(0).toISOString() }));
     return personal.concat(examples.slice(0, Math.max(0, 10 - personal.length))).slice(0, 10);
   }
 
-  function renderMemoryQuiz(item, index) {
-    const review = item.memoryType === 'lexicon' ? `<div class="memory-review-actions"><small class="muted">${esc(item.reviewLabel)}</small><div class="button-row"><button class="button button--sage button--small" type="button" data-action="memory-recalled" data-id="${attr(item.memoryId)}">Je l’ai retrouvé</button><button class="button button--ghost button--small" type="button" data-action="memory-retry" data-id="${attr(item.memoryId)}">À revoir demain</button></div></div>` : '';
-    return `<details class="card memory-quiz"><summary><span class="memory-quiz__index">${String(index + 1).padStart(2,'0')}</span><span><span class="status-chip">${esc(item.kind)}</span><strong>${esc(item.question)}</strong></span><span class="memory-quiz__hint">Voir la réponse</span></summary><div class="memory-quiz__answer"><p class="eyebrow">Réponse</p><h3>${esc(item.answer)}</h3><p>${esc(item.detail || '')}</p><small class="muted">${esc(item.source)}</small>${review}</div></details>`;
+  function getMemoryDeck(items) {
+    const signature = items.map(item => item.memoryKey).sort().join('|');
+    if (signature !== ui.memoryDeckSignature) {
+      ui.memoryDeckSignature = signature;
+      ui.memoryDeckKeys = items.slice(0, 5).map(item => item.memoryKey);
+      ui.memorySessionTotal = ui.memoryDeckKeys.length;
+      ui.memorySessionComplete = false;
+    }
+    const byKey = new Map(items.map(item => [item.memoryKey, item]));
+    ui.memoryDeckKeys = ui.memoryDeckKeys.filter(key => byKey.has(key));
+    return ui.memoryDeckKeys.map(key => byKey.get(key));
+  }
+
+  function renderMemoryQuiz(item, position, total) {
+    const label = item.kind === 'Citation à compléter' ? 'Afficher la citation complète' : `Afficher la réponse à la devinette : ${item.question}`;
+    return `<article class="memory-card-shell" data-memory-key="${attr(item.memoryKey)}">
+      <div class="memory-deck-status"><span>Carte ${position} sur ${total}</span><span>${total - position + 1} restante${total - position + 1 > 1 ? 's' : ''}</span></div>
+      <button class="memory-flip-card" type="button" data-action="flip-memory" data-front-label="${attr(label)}" aria-pressed="false" aria-label="${attr(label)}">
+        <span class="memory-flip-card__inner">
+          <span class="memory-flip-card__face memory-flip-card__front" aria-hidden="false"><span class="status-chip">${esc(item.kind)}</span><span class="memory-flip-card__question">${esc(item.question)}</span><span class="memory-flip-card__gesture"><span aria-hidden="true">↻</span> Toucher pour retourner</span></span>
+          <span class="memory-flip-card__face memory-flip-card__back" aria-hidden="true"><span class="eyebrow">Réponse</span><strong class="memory-flip-card__answer ${item.kind === 'Citation à compléter' ? 'memory-flip-card__answer--quote' : ''}">${esc(item.answer)}</strong>${item.solution ? `<span class="memory-flip-card__solution">Mot masqué : ${esc(item.solution)}</span>` : ''}${item.detail ? `<span class="memory-flip-card__detail">${esc(item.detail)}</span>` : ''}<small>${esc(item.source)}</small></span>
+        </span>
+      </button>
+      <div class="memory-review-actions" hidden><small class="muted">${esc(item.reviewLabel || 'Exemple BOO-P · entraînement local')}</small><p>Avant de retourner la carte, aviez-vous retrouvé la réponse&nbsp;?</p><div class="memory-rating-row"><button class="button button--ghost button--small" type="button" data-action="memory-rate" data-quality="retry" data-id="${attr(item.memoryId || '')}" data-memory-key="${attr(item.memoryKey)}">À revoir</button><button class="button button--secondary button--small" type="button" data-action="memory-rate" data-quality="almost" data-id="${attr(item.memoryId || '')}" data-memory-key="${attr(item.memoryKey)}">Presque</button><button class="button button--sage button--small" type="button" data-action="memory-rate" data-quality="recalled" data-id="${attr(item.memoryId || '')}" data-memory-key="${attr(item.memoryKey)}">Retrouvé</button></div></div>
+    </article>`;
+  }
+
+  function renderMemoryComplete() {
+    if (!ui.memorySessionComplete) return '<div class="memory-complete"><p class="eyebrow">Rien à réviser</p><h3>Votre mémoire est au calme</h3><p>Ajoutez un mot, une expression ou une citation dans votre lexique pour préparer une prochaine carte.</p><a class="button button--secondary" href="#path?tab=lexicon">Ouvrir mon lexique</a></div>';
+    return `<div class="memory-complete"><span class="memory-complete__mark" aria-hidden="true">✓</span><p class="eyebrow">Séance terminée</p><h3>${ui.memorySessionTotal} carte${ui.memorySessionTotal > 1 ? 's' : ''} travaillée${ui.memorySessionTotal > 1 ? 's' : ''}</h3><p>Les prochaines cartes reviendront selon vos réponses, sans surcharger votre journée.</p><button class="button button--secondary" type="button" data-action="restart-memory">Revoir cinq cartes</button></div>`;
   }
 
   function renderSession() {
@@ -483,21 +525,50 @@
       const isOpen = ui.libraryQuery || !collapsed.has(genreKey);
       return `<details class="genre-shelf" data-library-genre="${attr(genreKey)}" ${isOpen ? 'open' : ''}><summary><span>${esc(genre)}</span><small>${items.length} livre${items.length > 1 ? 's' : ''}</small></summary><div class="physical-shelf" role="group" aria-label="Rayon ${attr(genre)}">${items.map((book,index) => renderBookSpine(book,index)).join('')}</div></details>`;
     }).join('');
-    return `<div class="bookcase" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div>${shelves}</div>`;
+    return `<div class="bookcase" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↑</span> Touchez un livre pour le sélectionner, puis une seconde fois pour ouvrir sa fiche.</p>${shelves}</div>`;
   }
 
   function renderBookSpine(book, index) {
     let hash = index + 17; for (const character of `${book.genre}${book.title}`) hash = character.charCodeAt(0) + ((hash << 5) - hash);
     const hue = Math.abs(hash) % 360, width = 27 + Math.abs(hash % 13), height = 122 + Math.abs((hash >> 4) % 45);
     const peek = book.coverUrl ? `<img class="book-spine__peek" src="${attr(book.coverUrl)}" alt="" loading="lazy" aria-hidden="true">` : '';
-    return `<button class="book-spine" type="button" data-action="open-book" data-id="${attr(book.id)}" title="${attr(book.title)}" aria-label="Ouvrir ${attr(book.title)}, ${attr(book.authors.join(', '))}, rayon ${attr(book.genre || 'À classer')}" style="--spine-h:${height}px;--spine-w:${width}px;--spine-a:hsl(${hue} 46% 40%);--spine-b:hsl(${(hue + 24) % 360} 50% 56%)">${peek}<span>${esc(book.title)}</span></button>`;
+    const selected = ui.selectedLibraryBookId === book.id;
+    const label = selected ? `${book.title} sélectionné. Appuyez encore pour ouvrir sa fiche.` : `Sélectionner ${book.title}, ${book.authors.join(', ')}, rayon ${book.genre || 'À classer'}`;
+    return `<button class="book-spine ${selected ? 'is-selected' : ''}" type="button" data-action="select-book" data-id="${attr(book.id)}" title="${selected ? 'Appuyer encore pour ouvrir la fiche' : attr(book.title)}" aria-label="${attr(label)}" aria-pressed="${selected}" style="--spine-h:${height}px;--spine-w:${width}px;--spine-a:hsl(${hue} 46% 40%);--spine-b:hsl(${(hue + 24) % 360} 50% 56%)">${peek}<span>${esc(book.title)}</span></button>`;
+  }
+
+  function selectLibraryBook(trigger, id) {
+    if (!id) return;
+    if (ui.selectedLibraryBookId === id) {
+      ui.selectedLibraryBookId = null;
+      location.hash = `#book?id=${encodeURIComponent(id)}`;
+      return;
+    }
+    ui.selectedLibraryBookId = id;
+    document.querySelectorAll('.book-spine[data-action="select-book"]').forEach(spine => {
+      const selected = spine === trigger;
+      spine.classList.toggle('is-selected', selected);
+      spine.setAttribute('aria-pressed', String(selected));
+      const book = store.getBookById(spine.dataset.id);
+      if (!book) return;
+      spine.title = selected ? 'Appuyer encore pour ouvrir la fiche' : book.title;
+      spine.setAttribute('aria-label', selected
+        ? `${book.title} sélectionné. Appuyez encore pour ouvrir sa fiche.`
+        : `Sélectionner ${book.title}, ${book.authors.join(', ')}, rayon ${book.genre || 'À classer'}`);
+    });
+    const book = store.getBookById(id);
+    const message = `${book?.title || 'Livre'} sélectionné. Touchez-le encore pour ouvrir sa fiche.`;
+    document.getElementById('live-region').textContent = message;
   }
 
   function handleLibraryShelfToggle(event) {
     const shelf = event.target;
     if (!(shelf instanceof HTMLDetailsElement) || !shelf.matches('[data-library-genre]')) return;
     const settings = store.getSettings(), collapsed = new Set(settings.collapsedLibraryGenres || []), key = shelf.dataset.libraryGenre;
-    if (shelf.open) collapsed.delete(key); else collapsed.add(key);
+    if (shelf.open) collapsed.delete(key); else {
+      collapsed.add(key);
+      if (shelf.querySelector(`.book-spine[data-id="${CSS.escape(ui.selectedLibraryBookId || '')}"]`)) ui.selectedLibraryBookId = null;
+    }
     store.saveSettings({ collapsedLibraryGenres:[...collapsed] });
   }
 
@@ -724,7 +795,7 @@
 
   function openLexiconDialog(entry = null, bookId = null) {
     const book = store.getBookById(bookId || entry?.bookId);
-    openDialog({ title: entry ? 'Modifier l’entrée' : 'Ajouter au lexique', eyebrow: 'Comprendre puis mémoriser', body: `<form class="form-grid" data-form="lexicon"><input type="hidden" name="id" value="${attr(entry?.id || '')}"><input type="hidden" name="sourceLabel" value="${attr(entry?.sourceLabel || '')}"><input type="hidden" name="sourceUrl" value="${attr(entry?.sourceUrl || '')}"><div class="field-row"><label class="field">Type<select name="kind"><option value="word" ${entry?.kind !== 'expression' && entry?.kind !== 'citation' ? 'selected' : ''}>Mot</option><option value="expression" ${entry?.kind === 'expression' ? 'selected' : ''}>Expression</option><option value="citation" ${entry?.kind === 'citation' ? 'selected' : ''}>Citation</option></select></label><label class="field">Mot, expression ou citation<input name="word" required value="${attr(entry?.word || '')}"></label></div><button class="button button--sage" type="button" data-action="dictionary-lookup">Chercher une explication</button><div class="dictionary-result small" id="dictionary-result" role="status" aria-live="polite">${entry?.sourceLabel ? `Source actuelle : ${esc(entry.sourceLabel)}. Vous pouvez toujours corriger le texte.` : 'Pour un mot, BOO-P consulte le Wiktionnaire. Pour une expression ou une citation, la recherche est élargie.'}</div><label class="field">Définition ou explication modifiable<textarea name="definition" required>${esc(entry?.definition || '')}</textarea></label><label class="field">Livre facultatif<select name="bookId"><option value="">Sans livre</option>${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${(entry?.bookId || book?.id) === item.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><div class="field-row"><label class="field">Auteur<input name="author" value="${attr(entry?.author || book?.authors.join(', ') || '')}"></label><label class="field">${book?.mediaType === 'audio' ? 'Minute' : 'Page'}<input type="number" min="0" name="page" value="${entry?.page || ''}"></label></div><label class="field">Contexte ou note personnelle<textarea name="note">${esc(entry?.note || '')}</textarea></label><p class="small muted">Après l’enregistrement, cette entrée rejoint la Mémoire active avec des révisions J+1, J+3, J+5 et J+30.</p><button class="button button--primary" type="submit">Enregistrer et apprendre</button></form>` });
+    openDialog({ title: entry ? 'Modifier l’entrée' : 'Ajouter au lexique', eyebrow: 'Comprendre puis mémoriser', body: `<form class="form-grid" data-form="lexicon"><input type="hidden" name="id" value="${attr(entry?.id || '')}"><input type="hidden" name="sourceLabel" value="${attr(entry?.sourceLabel || '')}"><input type="hidden" name="sourceUrl" value="${attr(entry?.sourceUrl || '')}"><div class="field-row"><label class="field">Type<select name="kind"><option value="word" ${entry?.kind !== 'expression' && entry?.kind !== 'citation' ? 'selected' : ''}>Mot</option><option value="expression" ${entry?.kind === 'expression' ? 'selected' : ''}>Expression</option><option value="citation" ${entry?.kind === 'citation' ? 'selected' : ''}>Citation</option></select></label><label class="field">Mot, expression ou citation<input name="word" required value="${attr(entry?.word || '')}"></label></div><button class="button button--sage" type="button" data-action="dictionary-lookup">Chercher une explication</button><div class="dictionary-result small" id="dictionary-result" role="status" aria-live="polite">${entry?.sourceLabel ? `Source actuelle : ${esc(entry.sourceLabel)}. Vous pouvez toujours corriger le texte.` : 'Pour un mot, BOO-P consulte le Wiktionnaire. Pour une expression ou une citation, la recherche est élargie.'}</div><label class="field">Définition ou explication modifiable<textarea name="definition" required>${esc(entry?.definition || '')}</textarea></label><label class="field">Livre facultatif<select name="bookId"><option value="">Sans livre</option>${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${(entry?.bookId || book?.id) === item.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><div class="field-row"><label class="field">Auteur<input name="author" value="${attr(entry?.author || book?.authors.join(', ') || '')}"></label><label class="field">${book?.mediaType === 'audio' ? 'Minute' : 'Page'}<input type="number" min="0" name="page" value="${entry?.page || ''}"></label></div><label class="field">Contexte ou note personnelle<textarea name="note">${esc(entry?.note || '')}</textarea></label><p class="small muted">Après l’enregistrement, cette entrée rejoint la Mémoire active avec des rappels adaptés à J+1, J+3, J+7, J+14 et J+30.</p><button class="button button--primary" type="submit">Enregistrer et apprendre</button></form>` });
   }
 
   async function lookupDictionary(button) {
@@ -841,10 +912,9 @@
       case 'session-lexicon': openLexiconDialog(null, store.getActiveSession()?.bookId); break;
       case 'dictate-trace': startDictation(document.getElementById('session-trace-draft'), text => store.updateActiveSession({ traceDraft: text })); break;
       case 'dictate-dialog-trace': startDictation(document.getElementById('trace-dialog-text')); break;
-      case 'memory-prev': changeMemory(-1); break;
-      case 'memory-next': changeMemory(1); break;
-      case 'memory-recalled': reviewMemory(id, true); break;
-      case 'memory-retry': reviewMemory(id, false); break;
+      case 'flip-memory': flipMemoryCard(trigger); break;
+      case 'memory-rate': reviewMemory(id, trigger.dataset.quality, trigger.dataset.memoryKey); break;
+      case 'restart-memory': ui.memoryDeckSignature = ''; ui.memoryDeckKeys = []; ui.memorySessionComplete = false; render(); break;
       case 'show-day': showDayDetail(trigger.dataset.day); break;
       case 'show-week-detail': showWeekDetail(); break;
       case 'create-post': openPostDialog(); break;
@@ -864,9 +934,10 @@
       case 'toggle-salon': toggleSalon(id); break;
       case 'salon-thread': openSalonThread(id); break;
       case 'create-salon': openSalonCreateDialog(); break;
+      case 'select-book': selectLibraryBook(trigger, id); break;
       case 'open-book': location.hash = `#book?id=${encodeURIComponent(id)}`; break;
       case 'add-book': openBookDialog(); break;
-      case 'library-view': store.saveSettings({ libraryView: trigger.dataset.view }); render(); break;
+      case 'library-view': ui.selectedLibraryBookId = null; store.saveSettings({ libraryView: trigger.dataset.view }); render(); break;
       case 'refresh-recommendations': await refreshRecommendations(); break;
       case 'wishlist-recommendation': addRecommendationToWishlist(id); break;
       case 'dismiss-recommendation': dismissRecommendation(id); break;
@@ -905,8 +976,8 @@
     switch (control.dataset.change) {
       case 'active-book': if (control.value) { store.setActiveBook(control.value); showToast('Lecture affichée modifiée'); } render(); break;
       case 'focus-session': store.focusActiveSession(control.value); render(); break;
-      case 'library-status': ui.libraryStatus = control.value; render(); break;
-      case 'library-sort': store.saveSettings({ librarySort:control.value }); render(); break;
+      case 'library-status': ui.selectedLibraryBookId = null; ui.libraryStatus = control.value; render(); break;
+      case 'library-sort': ui.selectedLibraryBookId = null; store.saveSettings({ librarySort:control.value }); render(); break;
       case 'goal-all-books':
         if (control.checked) control.closest('form')?.querySelectorAll('input[name="bookIds"]').forEach(input => { input.checked = false; });
         break;
@@ -941,6 +1012,7 @@
     }
     const mappings = { 'library-search':['libraryQuery','library-search'], 'lexicon-search':['lexiconQuery','lexicon-search'] };
     if (mappings[type]) {
+      if (type === 'library-search') ui.selectedLibraryBookId = null;
       const [key,id] = mappings[type]; ui[key] = control.value; const position = control.selectionStart; render();
       const replacement = document.getElementById(id); replacement?.focus(); replacement?.setSelectionRange(position, position);
     }
@@ -967,14 +1039,38 @@
     location.hash = '#session';
   }
 
-  function changeMemory(direction) {
-    const items = getMemoryItems(); ui.memoryIndex = (ui.memoryIndex + direction + items.length) % items.length;
-    store.saveSettings({ memoryIndex: ui.memoryIndex }); render();
+  function flipMemoryCard(trigger) {
+    const shell = trigger.closest('.memory-card-shell'); if (!shell) return;
+    const flipped = !shell.classList.contains('is-flipped');
+    shell.classList.toggle('is-flipped', flipped);
+    trigger.setAttribute('aria-pressed', String(flipped));
+    trigger.setAttribute('aria-label', flipped ? 'Masquer la réponse et revenir à la devinette' : trigger.dataset.frontLabel);
+    trigger.querySelector('.memory-flip-card__front')?.setAttribute('aria-hidden', String(flipped));
+    trigger.querySelector('.memory-flip-card__back')?.setAttribute('aria-hidden', String(!flipped));
+    const actions = shell.querySelector('.memory-review-actions'); if (actions) actions.hidden = !flipped;
+    document.getElementById('live-region').textContent = flipped ? 'Réponse révélée. Indiquez maintenant votre niveau de rappel.' : 'Devinette affichée.';
   }
-  function reviewMemory(id, recalled) {
-    const updated = store.reviewLexiconWord(id, recalled);
-    if (!updated) return;
-    showToast(recalled ? 'Bien joué · la prochaine révision est programmée' : 'Cette entrée reviendra demain');
+
+  function reviewMemory(id, quality, memoryKey) {
+    const normalizedQuality = ['retry','almost','recalled'].includes(quality) ? quality : 'recalled';
+    if (id && !store.reviewLexiconWord(id, normalizedQuality)) return;
+    const index = ui.memoryDeckKeys.indexOf(memoryKey);
+    if (index >= 0) {
+      const [key] = ui.memoryDeckKeys.splice(index, 1);
+      if (normalizedQuality === 'retry') ui.memoryDeckKeys.splice(Math.min(2, ui.memoryDeckKeys.length), 0, key);
+    }
+    ui.memorySessionComplete = ui.memoryDeckKeys.length === 0;
+    const messages = {
+      retry:'La carte reviendra après deux autres cartes, puis demain.',
+      almost:'Presque · prochain rappel prévu sous trois jours.',
+      recalled:'Retrouvé · le prochain rappel sera davantage espacé.'
+    };
+    const exampleMessages = {
+      retry:'Cette carte d’entraînement reviendra après deux autres cartes.',
+      almost:'Presque · cette carte d’entraînement est terminée pour cette séance.',
+      recalled:'Retrouvé · cette carte d’entraînement est terminée pour cette séance.'
+    };
+    showToast(id ? messages[normalizedQuality] : exampleMessages[normalizedQuality]);
     render();
   }
   function showDayDetail(key) {

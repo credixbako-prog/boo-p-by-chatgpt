@@ -26,14 +26,14 @@ BT.store = (() => {
   };
   const daysAgo = count => new Date(Date.now() - count * 86400000).toISOString();
   const minutesAgo = count => new Date(Date.now() - count * 60000).toISOString();
-  const REVIEW_OFFSETS = [1, 3, 5, 30];
+  const REVIEW_OFFSETS = [1, 3, 7, 14, 30];
   function makeReviewSchedule(createdAt) {
     const origin = Number.isNaN(new Date(createdAt).getTime()) ? Date.now() : new Date(createdAt).getTime();
     return REVIEW_OFFSETS.map(day => ({ day, dueAt:new Date(origin + day * 86400000).toISOString(), completedAt:null, attempts:0 }));
   }
   function normalizeLexiconEntry(item = {}) {
     const createdAt = item.createdAt || item.updatedAt || nowISO();
-    return { ...item, kind:['word','expression','citation'].includes(item.kind) ? item.kind : 'word', createdAt, updatedAt:item.updatedAt || createdAt, reviewSchedule:Array.isArray(item.reviewSchedule) && item.reviewSchedule.length ? item.reviewSchedule : makeReviewSchedule(createdAt), reviewSuccesses:Math.max(0, Number(item.reviewSuccesses) || 0), reviewAttempts:Math.max(0, Number(item.reviewAttempts) || 0) };
+    return { ...item, kind:['word','expression','citation'].includes(item.kind) ? item.kind : 'word', createdAt, updatedAt:item.updatedAt || createdAt, reviewSchedule:Array.isArray(item.reviewSchedule) && item.reviewSchedule.length ? item.reviewSchedule : makeReviewSchedule(createdAt), reviewSuccesses:Math.max(0, Number(item.reviewSuccesses) || 0), reviewAlmosts:Math.max(0, Number(item.reviewAlmosts) || 0), reviewAttempts:Math.max(0, Number(item.reviewAttempts) || 0), lastReviewQuality:['retry','almost','recalled'].includes(item.lastReviewQuality) ? item.lastReviewQuality : null };
   }
   const DEFAULT_BOOK_COVERS = {
     'book-etranger':'https://covers.openlibrary.org/b/isbn/9782070360024-L.jpg',
@@ -327,28 +327,32 @@ BT.store = (() => {
   function saveTrace(trace) { const record = { id: trace.id || uid('trace'), bookId: trace.bookId || null, sessionId: trace.sessionId || null, text: String(trace.text || '').trim(), page: Math.max(0, Number(trace.page) || 0), privacy: trace.privacy || 'private', type: trace.type || 'trace', source: trace.source || 'personnel', createdAt: trace.createdAt || nowISO(), updatedAt: nowISO() }; const index = state.traces.findIndex(item => item.id === record.id); if (index >= 0) state.traces[index] = record; else state.traces.unshift(record); addTimelineEvent('trace', record.bookId, 'Nouvelle Trace personnelle'); commit({ queue: 'trace.save' }); return clone(record); }
   function deleteTrace(id) { state.traces = state.traces.filter(trace => trace.id !== id); commit({ queue: 'trace.delete' }); }
   function getLexicon() { return clone(state.lexicon.slice().sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))); }
-  function addLexiconWord(entry) { const book = state.books.find(item => item.id === entry.bookId); const createdAt = entry.createdAt || nowISO(); const existing = state.lexicon.find(item => item.id === entry.id); const record = normalizeLexiconEntry({ id: entry.id || uid('lex'), word: String(entry.word || '').trim(), kind: ['word','expression','citation'].includes(entry.kind) ? entry.kind : 'word', definition: String(entry.definition || '').trim(), sourceLabel: entry.sourceLabel || '', sourceUrl: entry.sourceUrl || '', bookId: entry.bookId || null, bookTitle: entry.bookTitle || book?.title || '', author: entry.author || book?.authors?.join(', ') || '', page: Math.max(0, Number(entry.page) || 0) || null, note: entry.note || '', createdAt:existing?.createdAt || createdAt, updatedAt:nowISO(), reviewSchedule:entry.reviewSchedule || existing?.reviewSchedule || makeReviewSchedule(createdAt), reviewSuccesses:existing?.reviewSuccesses || 0, reviewAttempts:existing?.reviewAttempts || 0, lastReviewedAt:existing?.lastReviewedAt || null }); const index = state.lexicon.findIndex(item => item.id === record.id); if (index >= 0) state.lexicon[index] = record; else state.lexicon.unshift(record); addTimelineEvent('lexicon', record.bookId, `« ${record.word} » ajouté au lexique`); commit({ queue: 'lexicon.save' }); return clone(record); }
-  function reviewLexiconWord(id, recalled = true) {
+  function addLexiconWord(entry) { const book = state.books.find(item => item.id === entry.bookId); const createdAt = entry.createdAt || nowISO(); const existing = state.lexicon.find(item => item.id === entry.id); const record = normalizeLexiconEntry({ id: entry.id || uid('lex'), word: String(entry.word || '').trim(), kind: ['word','expression','citation'].includes(entry.kind) ? entry.kind : 'word', definition: String(entry.definition || '').trim(), sourceLabel: entry.sourceLabel || '', sourceUrl: entry.sourceUrl || '', bookId: entry.bookId || null, bookTitle: entry.bookTitle || book?.title || '', author: entry.author || book?.authors?.join(', ') || '', page: Math.max(0, Number(entry.page) || 0) || null, note: entry.note || '', createdAt:existing?.createdAt || createdAt, updatedAt:nowISO(), reviewSchedule:entry.reviewSchedule || existing?.reviewSchedule || makeReviewSchedule(createdAt), reviewSuccesses:existing?.reviewSuccesses || 0, reviewAlmosts:existing?.reviewAlmosts || 0, reviewAttempts:existing?.reviewAttempts || 0, lastReviewQuality:existing?.lastReviewQuality || null, lastReviewedAt:existing?.lastReviewedAt || null }); const index = state.lexicon.findIndex(item => item.id === record.id); if (index >= 0) state.lexicon[index] = record; else state.lexicon.unshift(record); addTimelineEvent('lexicon', record.bookId, `« ${record.word} » ajouté au lexique`); commit({ queue: 'lexicon.save' }); return clone(record); }
+  function reviewLexiconWord(id, result = 'recalled') {
     const entry = state.lexicon.find(item => item.id === id); if (!entry) return null;
+    const quality = result === true ? 'recalled' : result === false ? 'retry' : ['retry','almost','recalled'].includes(result) ? result : 'recalled';
     entry.reviewSchedule = Array.isArray(entry.reviewSchedule) && entry.reviewSchedule.length ? entry.reviewSchedule : makeReviewSchedule(entry.createdAt);
     const now = new Date(), nowValue = now.getTime();
     let stage = entry.reviewSchedule.find(item => !item.completedAt && new Date(item.dueAt).getTime() <= nowValue) || entry.reviewSchedule.find(item => !item.completedAt);
     if (!stage) {
-      const randomDays = 7 + Math.floor(Math.random() * 24);
-      stage = { day:`aléatoire-${entry.reviewSchedule.length + 1}`, dueAt:new Date(nowValue + randomDays * 86400000).toISOString(), completedAt:null, attempts:0, random:true };
+      const maintenanceDays = entry.reviewSuccesses >= 8 ? 30 : entry.reviewSuccesses >= 4 ? 14 : 7;
+      stage = { day:`entretien-${entry.reviewSchedule.length + 1}`, dueAt:new Date(nowValue + maintenanceDays * 86400000).toISOString(), completedAt:null, attempts:0, adaptive:true };
       entry.reviewSchedule.push(stage);
     }
     entry.reviewAttempts = Math.max(0, Number(entry.reviewAttempts) || 0) + 1;
     stage.attempts = Math.max(0, Number(stage.attempts) || 0) + 1;
-    if (recalled) {
+    if (quality === 'recalled') {
       stage.completedAt = now.toISOString();
       entry.reviewSuccesses = Math.max(0, Number(entry.reviewSuccesses) || 0) + 1;
       if (!entry.reviewSchedule.some(item => !item.completedAt)) {
-        const randomDays = 7 + Math.floor(Math.random() * 24);
-        entry.reviewSchedule.push({ day:`aléatoire-${entry.reviewSchedule.length + 1}`, dueAt:new Date(nowValue + randomDays * 86400000).toISOString(), completedAt:null, attempts:0, random:true });
+        const maintenanceDays = entry.reviewSuccesses >= 8 ? 30 : entry.reviewSuccesses >= 4 ? 14 : 7;
+        entry.reviewSchedule.push({ day:`entretien-${entry.reviewSchedule.length + 1}`, dueAt:new Date(nowValue + maintenanceDays * 86400000).toISOString(), completedAt:null, attempts:0, adaptive:true });
       }
+    } else if (quality === 'almost') {
+      entry.reviewAlmosts = Math.max(0, Number(entry.reviewAlmosts) || 0) + 1;
+      stage.dueAt = new Date(nowValue + 3 * 86400000).toISOString();
     } else stage.dueAt = new Date(nowValue + 86400000).toISOString();
-    entry.lastReviewedAt = now.toISOString(); entry.updatedAt = now.toISOString();
+    entry.lastReviewQuality = quality; entry.lastReviewedAt = now.toISOString(); entry.updatedAt = now.toISOString();
     commit({ queue:'lexicon.review' }); return clone(entry);
   }
   function deleteLexiconWord(id) { state.lexicon = state.lexicon.filter(item => item.id !== id); commit({ queue: 'lexicon.delete' }); }

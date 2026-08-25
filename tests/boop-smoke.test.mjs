@@ -33,7 +33,7 @@ test('onboarding: quatre étapes, première Trace, objectif et thème libre', as
 
 test('mémoire, communauté et parcours exposent les fonctions demandées', async () => {
   const [app, store, css] = await Promise.all([read('js/mvp-app.js'), read('js/store.js'), read('css/mvp-v5.css')]);
-  assert.match(app, /\$\{memory\.length\} devinettes à réviser/);
+  assert.match(app, /\$\{memory\.length\} carte/);
   assert.match(app, /Trace · \$\{comments\.length\}/);
   assert.match(app, /Photo facultative/);
   assert.match(app, /customBookTitle/);
@@ -46,8 +46,11 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.match(app, /class="bookcase"/);
   assert.match(app, /class="genre-shelf"/);
   assert.match(app, /class="physical-shelf"/);
-  assert.match(app, /class="book-spine"/);
+  assert.match(app, /class="book-spine \$\{selected/);
   assert.match(app, /class="book-spine__peek"/);
+  assert.match(app, /data-action="select-book"/);
+  assert.match(app, /selectedLibraryBookId/);
+  assert.match(app, /Touchez un livre pour le sélectionner/);
   assert.match(app, /data-change="library-sort"/);
   assert.match(app, /Suggestions BOO-P · analyse locale/);
   assert.match(store, /post-10/);
@@ -59,6 +62,8 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.match(store, /genre: genres\[0\]/);
   assert.match(css, /\.memory-list \{ display: grid; gap:/);
   assert.match(css, /\.book-spine span/);
+  assert.match(css, /\.book-spine\.is-selected/);
+  assert.match(css, /translateY\(-19px\)/);
   assert.match(css, /writing-mode: vertical-rl/);
   assert.doesNotMatch(css, /\.memory-list \{[^}]*overflow-y: auto/);
   assert.doesNotMatch(css, /\.public-feed \{[^}]*overflow-y: auto/);
@@ -70,9 +75,14 @@ test('lexique: dictionnaire, questions ciblées et répétition espacée', async
   assert.match(html, /js\/dictionary\.js/);
   assert.match(app, /data-action="session-lexicon"/);
   assert.match(app, /data-action="dictionary-lookup"/);
-  assert.match(app, /Quel mot manque dans ce passage/);
-  assert.match(app, /data-action="memory-recalled"/);
-  assert.match(app, /data-action="memory-retry"/);
+  assert.match(app, /Complétez cette citation/);
+  assert.match(app, /data-action="flip-memory"/);
+  assert.match(app, /data-action="memory-rate"/);
+  assert.match(app, /data-quality="retry"/);
+  assert.match(app, /data-quality="almost"/);
+  assert.match(app, /data-quality="recalled"/);
+  assert.match(app, /Sérendipité/);
+  assert.match(app, /ui\.memoryDeckKeys\.splice\(Math\.min\(2/);
   assert.doesNotMatch(app, /Quel souvenir aviez-vous gardé/);
   assert.match(dictionary, /fr\.wiktionary/);
   assert.match(dictionary, /fr\.wikipedia/);
@@ -80,7 +90,7 @@ test('lexique: dictionnaire, questions ciblées et répétition espacée', async
   assert.match(dictionary, /wiktionary-search/);
   assert.match(dictionary, /getElementById\('Français'\)/);
   assert.match(dictionary, /REQUEST_TIMEOUT_MS = 9000/);
-  assert.match(store, /REVIEW_OFFSETS = \[1, 3, 5, 30\]/);
+  assert.match(store, /REVIEW_OFFSETS = \[1, 3, 7, 14, 30\]/);
   assert.match(store, /reviewLexiconWord/);
 });
 
@@ -348,6 +358,9 @@ test('modèle local: plusieurs sessions, un seul chrono et rappels persistants',
   store.resumeActiveSession(active[0].id);
   active = store.getActiveSessions();
   assert.equal(active.filter(session => session.status === 'running').length, 1);
+  const almost = store.reviewLexiconWord('lex-1', 'almost');
+  assert.equal(almost.lastReviewQuality, 'almost');
+  assert.equal(almost.reviewAlmosts, 1);
   const reviewed = store.reviewLexiconWord('lex-1', true);
   assert.ok(reviewed.reviewSchedule[0].completedAt);
   assert.equal(reviewed.reviewSchedule.find(stage => !stage.completedAt).day, 3);
@@ -413,6 +426,9 @@ test('design: papier, ombres colorées, monospace et transitions restent progres
   assert.match(css, /view-transition-name: boo-view/);
   assert.match(css, /::view-transition-new\(boo-view\)/);
   assert.match(css, /\.book-spine__peek/);
+  assert.match(css, /\.memory-card-shell\.is-flipped/);
+  assert.match(css, /rotateY\(180deg\)/);
+  assert.match(css, /backface-visibility: hidden/);
   assert.match(app, /document\.startViewTransition\(paint\)/);
   assert.match(app, /prefers-reduced-motion: reduce/);
 });
@@ -430,7 +446,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v15/);
+  assert.match(worker, /boo-p-webapp-v17/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);
