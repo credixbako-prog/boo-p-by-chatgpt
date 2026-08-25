@@ -14,7 +14,7 @@ BT.store = (() => {
   let STATE_KEY = LEGACY_STATE_KEY;
   let ONBOARDING_KEY = LEGACY_ONBOARDING_KEY;
   let activeUserId = null;
-  const SCHEMA_VERSION = 9;
+  const SCHEMA_VERSION = 10;
   const listeners = new Set();
 
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -162,7 +162,7 @@ BT.store = (() => {
       community: demoCommunity(),
       notifications: [],
       badges: { unlocked: {} },
-      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', collapsedLibraryGenres: [] },
+      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
       outbox: [], timeline: [], meta: { initializedAt: nowISO(), updatedAt: nowISO(), simulated: true }
     };
   }
@@ -215,6 +215,7 @@ BT.store = (() => {
     state.notifications = Array.isArray(state.notifications) ? state.notifications : base.notifications;
     state.badges = { ...base.badges, ...(state.badges || {}), unlocked: state.badges?.unlocked || {} };
     state.settings = { ...base.settings, ...(state.settings || {}), notifications: { ...base.settings.notifications, ...(state.settings?.notifications || {}) }, blockedUsers: state.settings?.blockedUsers || [], recentSearches: state.settings?.recentSearches || [], dismissedRecommendationIds: state.settings?.dismissedRecommendationIds || [], collapsedLibraryGenres:state.settings?.collapsedLibraryGenres || [] };
+    state.settings.libraryFinish = ['terracotta','blue','sage','red'].includes(state.settings.libraryFinish) ? state.settings.libraryFinish : 'terracotta';
     state.outbox = Array.isArray(state.outbox) ? state.outbox : [];
     state.timeline = Array.isArray(state.timeline) ? state.timeline : [];
     state.meta = { ...base.meta, ...(state.meta || {}) };
@@ -363,10 +364,37 @@ BT.store = (() => {
   function getGoalProgress() {
     const keys = currentPeriodKeys(), minutes = sessionMinutesByDay(), start = weekStart();
     const weekDays = Array.from({ length: 7 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); const key = localDateKey(date), value = Math.round(minutes[key] || 0); return { key, label: ['L','M','M','J','V','S','D'][index], minutes: value, target: state.goals.week.dailyMinutes, reached: value >= state.goals.week.dailyMinutes, today: key === localDateKey() }; });
-    const completed = state.books.filter(book => book.status === 'lu' && book.completedAt && !book.historicalBeforeJoin);
-    const filterBooks = (period, goal) => completed.filter(book => { if (goal.bookIds?.length && !goal.bookIds.includes(book.id)) return false; const date = new Date(book.completedAt); return period === 'month' ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === keys.month : String(date.getFullYear()) === keys.year; });
-    const daysReached = weekDays.filter(day => day.reached).length, monthBooks = filterBooks('month', state.goals.month), yearBooks = filterBooks('year', state.goals.year);
-    return { keys, week: { days: weekDays, value: daysReached, target: state.goals.week.daysTarget, todayMinutes: weekDays.find(day => day.today)?.minutes || 0, dailyTarget: state.goals.week.dailyMinutes }, month: { value: monthBooks.length, target: state.goals.month.targetBooks, bookIds: monthBooks.map(book => book.id) }, year: { value: yearBooks.length, target: state.goals.year.targetBooks, bookIds: yearBooks.map(book => book.id) } };
+    const goalProgress = (period, goal) => {
+      const target = Math.max(1, Number(goal.targetBooks) || 1);
+      const selectedIds = Array.isArray(goal.bookIds) ? goal.bookIds : [];
+      const candidates = state.books.filter(book => {
+        if (book.libraryState !== 'library') return false;
+        if (selectedIds.length) return selectedIds.includes(book.id);
+        if (book.status === 'en-cours') return true;
+        if (book.status !== 'lu' || !book.completedAt || book.historicalBeforeJoin) return false;
+        const date = new Date(book.completedAt);
+        return period === 'month'
+          ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === keys.month
+          : String(date.getFullYear()) === keys.year;
+      });
+      const readBooks = candidates.filter(book => book.status === 'lu').slice(0, target);
+      const readingBooks = candidates.filter(book => book.status === 'en-cours').slice(0, Math.max(0, target - readBooks.length));
+      const greenValue = readBooks.length, orangeValue = readingBooks.length;
+      const greenPct = Math.min(100, Math.round((greenValue / target) * 100));
+      const orangePct = Math.min(100 - greenPct, Math.round((orangeValue / target) * 100));
+      return {
+        value:greenValue, inProgress:orangeValue, filledValue:greenValue + orangeValue, target,
+        greenPct, orangePct, totalPct:greenPct + orangePct,
+        bookIds:[...readBooks, ...readingBooks].map(book => book.id), selectedBookIds:selectedIds
+      };
+    };
+    const daysReached = weekDays.filter(day => day.reached).length;
+    return {
+      keys,
+      week: { days: weekDays, value: daysReached, target: state.goals.week.daysTarget, todayMinutes: weekDays.find(day => day.today)?.minutes || 0, dailyTarget: state.goals.week.dailyMinutes },
+      month:goalProgress('month', state.goals.month),
+      year:goalProgress('year', state.goals.year)
+    };
   }
   function getGoal() { const progress = getGoalProgress(); return { dailyMinutes: state.goals.week.dailyMinutes, streak: getStats().streak, streakDays: progress.week.days.map(day => day.reached), ...clone(state.goals) }; }
   function saveGoal(goal) { if (goal.dailyMinutes) state.goals.week.dailyMinutes = Number(goal.dailyMinutes); commit(); return getGoal(); }

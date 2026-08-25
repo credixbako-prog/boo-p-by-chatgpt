@@ -14,19 +14,21 @@
     catalogRecommendations: [], recommendationsBusy: false, currentRecommendations: [],
     monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
     selectedLibraryBookId: null, memoryDeckKeys: [], memoryDeckSignature: '', memorySessionTotal: 0, memorySessionComplete: false,
-    memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all'
+    memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all',
+    expandedTrailBooks: new Set(), clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map()
   };
 
   const NAV = [
     { id: 'home', label: 'Accueil', icon: '⌂', href: '#home' },
     { id: 'community', label: 'Communauté', icon: '◎', href: '#community?tab=public' },
-    { id: 'path', label: 'Galerie', icon: '⌁', href: '#path?tab=library' },
+    { id: 'path', label: 'Galerie', icon: '🖼️', href: '#path?tab=library' },
     { id: 'profile', label: 'Profil', icon: '◉', href: '#profile' }
   ];
   const TITLES = {
     home: ['Votre espace', 'Accueil'], community: ['Échanges choisis', 'Communauté'],
     path: ['Votre cheminement', 'Galerie'], profile: ['Identité du lecteur', 'Profil'],
-    session: ['Mode immersif', 'Session de lecture'], book: ['Dans votre bibliothèque', 'Fiche du livre']
+    session: ['Mode immersif', 'Session de lecture'], book: ['Dans votre bibliothèque', 'Fiche du livre'],
+    club: ['Communauté à taille humaine', 'Club de lecture']
   };
   const STATUS_LABELS = { 'a-lire': 'À lire', 'en-cours': 'En cours', 'en-pause': 'En pause', lu: 'Lu', abandonne: 'Abandonné' };
   const SITUATION_LABELS = { possede: 'Possédé', emprunte: 'Emprunté', prete: 'Prêté', donne: 'Donné' };
@@ -82,7 +84,7 @@
   function parseRoute() {
     const raw = (location.hash || '#home').slice(1);
     const [route, query = ''] = raw.split('?');
-    ui.route = ['home','community','path','profile','session','book'].includes(route) ? route : 'home';
+    ui.route = ['home','community','path','profile','session','book','club'].includes(route) ? route : 'home';
     ui.params = new URLSearchParams(query);
     if (ui.route === 'community') ui.communityTab = ['public','clubs','salons','friends'].includes(ui.params.get('tab')) ? ui.params.get('tab') : 'public';
     if (ui.route === 'path') ui.pathTab = ['library','trail','lexicon','goals'].includes(ui.params.get('tab')) ? ui.params.get('tab') : 'library';
@@ -126,6 +128,8 @@
     }));
     document.addEventListener('keydown', event => {
       if (event.key === '/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) { event.preventDefault(); openSearch(); }
+      const clubCard = event.target.closest?.('.club-card[data-action="open-club"]');
+      if (clubCard && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); clubCard.click(); }
     });
   }
 
@@ -136,7 +140,9 @@
   }
 
   function updateNavigation() {
-    const active = ui.route === 'book' || ui.route === 'session' ? (ui.route === 'book' ? 'path' : 'home') : ui.route;
+    const active = ui.route === 'book' || ui.route === 'session' || ui.route === 'club'
+      ? (ui.route === 'book' ? 'path' : ui.route === 'club' ? 'community' : 'home')
+      : ui.route;
     document.querySelectorAll('[data-nav]').forEach(link => {
       if (link.dataset.nav === active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
     });
@@ -152,7 +158,7 @@
     if (ui.route !== 'path' || ui.pathTab !== 'library') ui.selectedLibraryBookId = null;
     if (ui.route === 'session' && !store.getActiveSession()) { location.hash = '#home'; return; }
     const view = document.getElementById('main-view');
-    const renderers = { home: renderHome, community: renderCommunity, path: renderPath, profile: renderProfile, session: renderSession, book: renderBookDetail };
+    const renderers = { home: renderHome, community: renderCommunity, path: renderPath, profile: renderProfile, session: renderSession, book: renderBookDetail, club: renderClubSpace };
     const paint = () => {
       updateNavigation(); updateHeader();
       try { view.innerHTML = renderers[ui.route](); }
@@ -166,6 +172,7 @@
       requestAnimationFrame(() => {
         const carousel = document.querySelector('[data-memory-carousel]');
         if (carousel) carousel.scrollLeft = Math.min(ui.memoryCursor, carousel.children.length - 1) * carousel.clientWidth;
+        if (ui.route === 'club') loadClubSpace(ui.params.get('id'));
       });
     };
     const routeChanged = Boolean(previousRoute && previousRoute !== ui.route);
@@ -249,7 +256,7 @@
     const openSessions = store.getActiveSessions();
     const progress = active ? bookProgress(active) : null;
     const memoryItems = getMemoryItems(), memory = getMemoryDeck(memoryItems);
-    const weekPct = pct(goals.week.value, goals.week.target), monthPct = pct(goals.month.value, goals.month.target), yearPct = pct(goals.year.value, goals.year.target);
+    const weekPct = pct(goals.week.value, goals.week.target);
     return `
       <section class="page-head"><div><p class="eyebrow">Bonjour ${esc(profile.name)}</p><h1>Où en est votre lecture&nbsp;?</h1><p>Un regard calme sur votre régularité, vos livres et ce que vous souhaitez garder.</p></div><span class="privacy-badge">Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</span></section>
 
@@ -263,8 +270,8 @@
         <div class="section-heading"><h2 id="home-goals-title">Objectifs</h2><a class="text-link" href="#path?tab=goals">Ajuster dans Galerie</a></div>
         <div class="goal-grid">
           ${goalMini('Semaine', `${goals.week.value}/${goals.week.target} jours`, weekPct)}
-          ${goalMini('Mois', `${goals.month.value}/${goals.month.target} livres`, monthPct)}
-          ${goalMini('Année', `${goals.year.value}/${goals.year.target} livres`, yearPct)}
+          ${goalMini('Mois', goalStatusText(goals.month), goals.month)}
+          ${goalMini('Année', goalStatusText(goals.year), goals.year)}
         </div>
       </section>
 
@@ -295,7 +302,13 @@
   }
 
   function goalMini(label, value, progress) {
-    return `<a class="goal-mini" href="#path?tab=goals" aria-label="${label}, ${value}"><span class="progress-ring" style="--pct:${progress}"><span>${progress}%</span></span><span><strong>${label}</strong><small>${value}</small></span></a>`;
+    const mixed = typeof progress === 'object';
+    const green = mixed ? progress.greenPct : progress, orange = mixed ? progress.orangePct : 0, total = Math.min(100, green + orange);
+    return `<a class="goal-mini" href="#path?tab=goals" aria-label="${label}, ${value}"><span class="progress-ring ${mixed ? 'progress-ring--mixed' : ''}" style="--pct:${green};--green-pct:${green};--orange-pct:${orange};--total-pct:${total}"><span>${total}%</span></span><span><strong>${label}</strong><small>${value}</small></span></a>`;
+  }
+
+  function goalStatusText(progress) {
+    return `${progress.value} lu${progress.value > 1 ? 's' : ''}${progress.inProgress ? ` · ${progress.inProgress} en cours` : ''} / ${progress.target}`;
   }
 
   function makeClozeMemory(text, source, kind = 'Citation à compléter', date = new Date().toISOString(), memoryKey = '', detail = '') {
@@ -467,13 +480,61 @@
 
   function renderClubs() {
     const clubs = store.getCommunity().clubs;
-    return `<div class="section-heading"><div><h2>Clubs</h2><p class="small muted">Membres, livre en cours et salons sont maintenant synchronisés avec BOO-P.</p></div><button class="button button--primary button--small" type="button" data-action="create-club">Créer un club</button></div>
+    return `<div class="section-heading"><div><h2>Clubs</h2><p class="small muted">Chaque club possède désormais son espace : lectures, annonces, membres, salons et échanges.</p></div><button class="button button--primary button--small" type="button" data-action="create-club">Créer un club</button></div>
       ${clubs.length ? `<div class="grid-2">${clubs.map(club => {
         const pending = club.membershipStatus === 'pending';
         const membershipButton = club.role === 'owner' ? ''
           : `<button class="button ${club.joined || pending ? 'button--secondary' : 'button--sage'} button--small" type="button" data-action="toggle-club" data-id="${attr(club.id)}" data-current="${Boolean(club.membershipStatus)}">${club.joined ? 'Quitter le club' : pending ? 'Annuler la demande' : club.access === 'open' ? 'Rejoindre' : 'Demander à rejoindre'}</button>`;
-        return `<article class="card club-card"><span class="club-mark" style="--club-color:${attr(club.color)}"></span><div class="card-content"><div class="button-row"><span class="privacy-badge">${club.visibility === 'private' ? 'Privé' : 'Public'}</span>${club.role ? `<span class="status-chip">${club.role === 'owner' ? 'Propriétaire' : club.role === 'moderator' ? 'Modérateur' : 'Membre'}</span>` : pending ? '<span class="status-chip status-chip--warning">Demande en attente</span>' : ''}</div><h3>${esc(club.name)}</h3><p class="small muted">${esc(club.description)}</p><p class="small"><strong>Livre actuel :</strong> ${esc(club.bookTitle || 'À choisir')}</p><p class="micro muted">${club.membersCount} membre${club.membersCount > 1 ? 's' : ''} · ${club.access === 'open' ? 'accès libre' : 'sur approbation'}</p><div class="card-actions">${membershipButton}<button class="button button--ghost button--small" type="button" data-action="club-details" data-id="${attr(club.id)}">${club.role === 'owner' ? 'Gérer le club' : 'Ouvrir le club'}</button></div></div></article>`;
+        return `<article class="card club-card ${club.joined ? 'club-card--member' : ''}" data-action="open-club" data-id="${attr(club.id)}" tabindex="0" role="link" aria-label="Entrer dans le club ${attr(club.name)}"><span class="club-mark" style="--club-color:${attr(club.color)}"></span><div class="card-content"><div class="button-row"><span class="privacy-badge">${club.visibility === 'private' ? 'Privé' : 'Public'}</span>${club.role ? `<span class="status-chip">${club.role === 'owner' ? 'Propriétaire' : club.role === 'moderator' ? 'Modérateur' : 'Membre'}</span>` : pending ? '<span class="status-chip status-chip--warning">Demande en attente</span>' : ''}</div><h3>${esc(club.name)}</h3><p class="small muted">${esc(club.description)}</p><p class="small"><strong>Livre actuel :</strong> ${esc(club.bookTitle || 'À choisir')}</p><p class="micro muted">${club.membersCount} membre${club.membersCount > 1 ? 's' : ''} · ${club.access === 'open' ? 'accès libre' : 'sur approbation'}</p><div class="card-actions">${membershipButton}<button class="button button--ghost button--small" type="button" data-action="open-club" data-id="${attr(club.id)}">Entrer dans le club →</button></div></div></article>`;
       }).join('')}</div>` : '<div class="empty-state"><h3>Aucun club accessible</h3><p>Créez un club ou rejoignez un club public lorsque d’autres lecteurs en auront publié.</p></div>'}`;
+  }
+
+  function renderClubSpace() {
+    const id = ui.params.get('id');
+    const club = store.getCommunity().clubs.find(item => item.id === id);
+    if (!club) return `<a class="text-link" href="#community?tab=clubs">← Tous les clubs</a><div class="empty-state section-block"><h1>Club introuvable</h1><p>Ce club n’est peut-être plus accessible avec votre compte.</p></div>`;
+    if (!club.joined) {
+      const pending = club.membershipStatus === 'pending';
+      return `<a class="text-link" href="#community?tab=clubs">← Tous les clubs</a><section class="club-space-hero section-block" style="--club-color:${attr(club.color)}"><div><p class="eyebrow">${club.visibility === 'private' ? 'Club privé' : 'Club public'}</p><h1>${esc(club.name)}</h1><p>${esc(club.description)}</p></div><span class="club-space-hero__mark" aria-hidden="true">◌</span></section><div class="empty-state club-space-locked"><h2>La porte du club est encore fermée</h2><p>Les lectures, annonces et échanges sont réservés aux membres actifs.</p><button class="button button--sage" type="button" data-action="toggle-club" data-id="${attr(club.id)}" data-current="${Boolean(club.membershipStatus)}">${pending ? 'Annuler la demande' : club.access === 'open' ? 'Rejoindre ce club' : 'Demander à rejoindre'}</button></div>`;
+    }
+    const space = ui.clubSpaces.get(id), loadError = ui.clubSpaceErrors.get(id);
+    if (!space) return `<a class="text-link" href="#community?tab=clubs">← Tous les clubs</a><section class="club-space-hero section-block" style="--club-color:${attr(club.color)}"><div><p class="eyebrow">Espace du club</p><h1>${esc(club.name)}</h1><p>${esc(club.description)}</p></div><span class="club-space-hero__mark" aria-hidden="true">◌</span></section>${loadError ? `<div class="empty-state section-block"><h2>Le carnet partagé ne répond pas encore</h2><p>${esc(loadError)}</p><button class="button button--secondary" type="button" data-action="refresh-club" data-id="${attr(id)}">Réessayer</button></div>` : '<div class="view-loading" role="status"><span class="loader" aria-hidden="true"></span> Préparation du carnet partagé…</div>'}`;
+    const owner = club.role === 'owner', manager = ['owner','moderator'].includes(club.role);
+    const current = space.books.find(book => book.status === 'current') || (club.bookTitle ? { id:'', title:club.bookTitle, status:'current' } : null);
+    const booksRead = space.books.filter(book => book.status === 'read').sort((a,b) => new Date(b.completed_at || b.updated_at) - new Date(a.completed_at || a.updated_at));
+    const upcoming = space.salons.filter(salon => salon.status !== 'closed' && new Date(salon.scheduledAt) >= new Date(Date.now() - 3600000)).sort((a,b) => new Date(a.scheduledAt) - new Date(b.scheduledAt));
+    const members = (club.members || []).filter(member => member.status === 'active');
+    const renderClubPost = post => `<article class="club-post ${post.type === 'announcement' ? 'club-post--announcement' : ''}"><header><div><span class="avatar">${esc(initials(post.authorName))}</span><span><strong>${esc(post.authorName)}</strong><small>${post.type === 'announcement' ? 'Annonce du club' : 'Discussion'} · ${relativeDate(post.date)}</small></span></div>${post.type === 'announcement' ? '<span class="status-chip status-chip--warning">Annonce</span>' : ''}</header><p>${esc(post.text)}</p><div class="club-post__actions"><button class="text-link small" type="button" data-action="club-encourage" data-id="${attr(post.id)}" data-club-id="${attr(id)}" data-current="${post.encouraged}">${post.encouraged ? '♥ Encouragé' : '♡ Encourager'} · ${post.encouragements}</button><span class="small muted">${post.comments.length} commentaire${post.comments.length > 1 ? 's' : ''}</span></div>${post.comments.length ? `<div class="club-comments">${post.comments.map(comment => `<div class="comment"><strong>${esc(comment.authorName)}</strong><p>${esc(comment.text)}</p><span class="micro muted">${relativeDate(comment.date)}</span></div>`).join('')}</div>` : ''}<form class="inline-form" data-form="club-comment" data-club-id="${attr(id)}" data-post-id="${attr(post.id)}"><label class="sr-only" for="club-comment-${attr(post.id)}">Commenter</label><input id="club-comment-${attr(post.id)}" name="text" required maxlength="500" placeholder="Ajouter un commentaire bienveillant…"><button class="button button--sage button--small" type="submit">Envoyer</button></form></article>`;
+    return `<a class="text-link" href="#community?tab=clubs">← Tous les clubs</a>
+      <section class="club-space-hero section-block" style="--club-color:${attr(club.color)}"><div><p class="eyebrow">${club.visibility === 'private' ? 'Club privé' : 'Club public'} · ${club.membersCount} membre${club.membersCount > 1 ? 's' : ''}</p><h1>${esc(club.name)}</h1><p>${esc(club.description)}</p><div class="button-row">${owner ? `<button class="button button--secondary button--small" type="button" data-action="club-details" data-id="${attr(id)}">Réglages et membres</button><button class="button button--ghost button--small" type="button" data-action="create-salon" data-club-id="${attr(id)}">Programmer un salon</button>` : ''}</div></div><span class="club-space-hero__mark" aria-hidden="true">◌</span></section>
+      <div class="club-space-layout">
+        <main class="club-space-feed">
+          <section class="card club-current-book"><div><p class="eyebrow">Lecture en cours</p><h2>${esc(current?.title || 'Le prochain livre reste à choisir')}</h2><p class="small muted">${current ? 'Le point de rencontre actuel du club.' : 'Un modérateur pourra bientôt ouvrir une nouvelle lecture.'}</p></div>${current?.id && manager ? `<button class="button button--sage button--small" type="button" data-action="club-book-read" data-id="${attr(current.id)}" data-club-id="${attr(id)}">Marquer comme lu</button>` : ''}</section>
+          <section class="section-block" aria-labelledby="club-feed-title"><div class="section-heading"><div><p class="eyebrow">Carnet partagé</p><h2 id="club-feed-title">Annonces et échanges</h2></div><button class="button button--ghost button--small" type="button" data-action="refresh-club" data-id="${attr(id)}">↻ Actualiser</button></div><form class="card club-composer form-grid" data-form="club-post" data-club-id="${attr(id)}"><label class="field">Partager avec le club<textarea name="text" required maxlength="1200" placeholder="Une pensée, une question ou une information pour le club…"></textarea></label>${manager ? '<label class="field">Type<select name="type"><option value="discussion">Discussion</option><option value="announcement">Annonce du club</option></select></label>' : '<input type="hidden" name="type" value="discussion">'}<button class="button button--primary button--small" type="submit">Publier dans le club</button></form><div class="club-post-list">${space.posts.length ? space.posts.map(renderClubPost).join('') : '<div class="empty-state"><h3>Le carnet partagé est prêt</h3><p>Publiez la première pensée ou annonce du club.</p></div>'}</div></section>
+        </main>
+        <aside class="club-space-aside">
+          <section class="card card-pad"><div class="section-heading"><h2>Prochains salons</h2>${owner ? `<button class="text-link small" type="button" data-action="create-salon" data-club-id="${attr(id)}">Ajouter</button>` : ''}</div>${upcoming.length ? upcoming.slice(0,4).map(salon => `<article class="club-aside-item"><span aria-hidden="true">◷</span><div><strong>${esc(salon.title)}</strong><small>${formatDateTime(salon.scheduledAt)} · ${esc(salon.bookTitle || 'Lecture du club')}</small><button class="text-link small" type="button" data-action="${salon.joined ? 'salon-thread' : 'toggle-salon'}" data-id="${attr(salon.id)}">${salon.joined ? 'Ouvrir le salon' : 'Rejoindre'}</button></div></article>`).join('') : '<p class="small muted">Aucun salon programmé.</p>'}</section>
+          <section class="card card-pad"><h2>Livres lus dans le club</h2>${booksRead.length ? `<div class="club-book-history">${booksRead.map(book => `<div class="club-aside-item"><span aria-hidden="true">✓</span><div><strong>${esc(book.title)}</strong><small>${book.completed_at ? `Terminé le ${formatDate(book.completed_at)}` : 'Lecture terminée'}</small></div></div>`).join('')}</div>` : '<p class="small muted">L’histoire de lecture du club commencera ici.</p>'}${manager ? `<details class="setting-card section-block"><summary>Ajouter une lecture</summary><div class="setting-card__body"><form class="form-grid" data-form="club-book" data-club-id="${attr(id)}"><label class="field">Titre<input name="title" required maxlength="240" list="club-library-books"></label><datalist id="club-library-books">${store.getBooks().map(book => `<option value="${attr(book.title)}">`).join('')}</datalist><label class="field">Place dans le club<select name="status"><option value="current">Livre en cours</option><option value="planned">À venir</option><option value="read">Déjà lu</option></select></label><button class="button button--sage button--small" type="submit">Ajouter</button></form></div></details>` : ''}</section>
+          <section class="card card-pad"><h2>Membres</h2><div class="club-member-cloud">${members.length ? members.map(member => `<span title="${attr(member.role)}"><span class="avatar">${esc(initials(member.name))}</span>${esc(member.name)}</span>`).join('') : '<p class="small muted">Aucun membre visible.</p>'}</div></section>
+        </aside>
+      </div>`;
+  }
+
+  async function loadClubSpace(id, { force = false } = {}) {
+    if (!id || !window.BT.community?.getClubSpace || ui.clubSpaceLoading.has(id) || (!force && (ui.clubSpaces.has(id) || ui.clubSpaceErrors.has(id)))) return;
+    ui.clubSpaceLoading.add(id);
+    ui.clubSpaceErrors.delete(id);
+    try {
+      const community = store.getCommunity();
+      const space = await window.BT.community.getClubSpace(id, community.clubs, community.salons);
+      ui.clubSpaces.set(id, space);
+      if (ui.route === 'club' && ui.params.get('id') === id) render();
+    } catch (error) {
+      ui.clubSpaceErrors.set(id, error.message || 'L’espace du club ne peut pas être chargé');
+      showToast(error.message || 'L’espace du club ne peut pas être chargé');
+      if (ui.route === 'club' && ui.params.get('id') === id) render();
+    }
+    finally { ui.clubSpaceLoading.delete(id); }
   }
 
   function renderSalons() {
@@ -540,14 +601,16 @@
     };
     if (view !== 'shelf') return `<div class="book-grid">${books.map(renderCard).join('')}</div>`;
     const settings = store.getSettings(), collapsed = new Set(settings.collapsedLibraryGenres || []), groups = new Map();
+    const finish = ['terracotta','blue','sage','red'].includes(settings.libraryFinish) ? settings.libraryFinish : 'terracotta';
     books.forEach(book => { const genre = String(book.genre || '').trim() || 'À classer'; if (!groups.has(genre)) groups.set(genre, []); groups.get(genre).push(book); });
     const ordered = [...groups.entries()].sort(([a],[b]) => a === 'À classer' ? 1 : b === 'À classer' ? -1 : a.localeCompare(b, 'fr'));
     const shelves = ordered.map(([genre, items]) => {
       const genreKey = normalize(genre).replace(/\s+/g, '-') || 'a-classer';
       const isOpen = ui.libraryQuery || !collapsed.has(genreKey);
-      return `<details class="genre-shelf" data-library-genre="${attr(genreKey)}" ${isOpen ? 'open' : ''}><summary><span>${esc(genre)}</span><small>${items.length} livre${items.length > 1 ? 's' : ''}</small></summary><div class="physical-shelf" role="group" aria-label="Rayon ${attr(genre)}">${items.map((book,index) => renderBookSpine(book,index)).join('')}</div></details>`;
+      return `<details class="genre-shelf" data-library-genre="${attr(genreKey)}" ${isOpen ? 'open' : ''}><summary><span>${esc(genre)}</span><small>${items.length} livre${items.length > 1 ? 's' : ''} · glissez horizontalement</small></summary><div class="physical-shelf" role="group" tabindex="0" aria-label="Rayon ${attr(genre)}, défilement horizontal">${items.map((book,index) => renderBookSpine(book,index)).join('')}</div></details>`;
     }).join('');
-    return `<div class="bookcase" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↑</span> Touchez un livre pour le sélectionner, puis une seconde fois pour ouvrir sa fiche.</p>${shelves}</div>`;
+    const finishes = [['terracotta','Terracotta'],['blue','Bleu'],['sage','Vert sauge'],['red','Rouge']];
+    return `<details class="bookcase-finish-picker"><summary aria-label="Choisir la couleur du meuble"><span aria-hidden="true">◐</span> Couleur du meuble</summary><div role="group" aria-label="Finitions de la bibliothèque">${finishes.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="library-finish" data-finish="${key}" aria-pressed="${finish === key}"><span aria-hidden="true"></span>${label}</button>`).join('')}</div></details><div class="bookcase bookcase--${finish}" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↔</span> Glissez un rayon pour parcourir les livres. Touchez une première fois pour sélectionner, puis une seconde fois pour ouvrir.</p>${shelves}</div>`;
   }
 
   function renderBookSpine(book, index) {
@@ -637,16 +700,28 @@
   }
 
   function renderTrail() {
-    const events = store.getTimeline(), books = store.getBooks().filter(book => book.libraryState === 'library');
-    const groups = books.map(book => {
-      const branches = events.filter(event => event.bookId === book.id);
-      const latest = branches[0]?.date || book.updatedAt || book.addedAt;
-      return { book, branches, latest };
-    }).sort((a,b) => new Date(b.latest) - new Date(a.latest));
-    const freeEvents = events.filter(event => !event.bookId);
-    const branchKind = type => type === 'lexicon' ? 'lexique' : type === 'trace' ? 'trace' : String(type).includes('session') ? 'séance' : String(type).includes('goal') ? 'objectif' : 'étape';
-    const renderBranch = event => `<article class="trail-branch trail-branch--${attr(branchKind(event.type))}"><span class="trail-branch__bud" aria-hidden="true"></span><div><span class="trail-branch__kind">${esc(branchKind(event.type))}</span><h4>${esc(event.label)}</h4><time datetime="${attr(event.date)}">${formatDate(event.date)}</time></div></article>`;
-    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Chaque livre forme une branche principale ; séances, Traces et lexiques deviennent ses ramifications.</p></div></div>${groups.length ? `<div class="trail-map" aria-label="Carte arborescente de vos lectures">${groups.map(({book,branches}) => `<section class="trail-book-node"><button class="trail-book-trunk" type="button" data-action="open-book" data-id="${attr(book.id)}"><span class="trail-book-trunk__mark" aria-hidden="true">▥</span><span><small>${esc(STATUS_LABELS[book.status] || 'Livre')}</small><strong>${esc(book.title)}</strong><em>${esc(book.authors.join(', '))}</em></span><span aria-hidden="true">→</span></button><div class="trail-branches">${branches.length ? branches.slice(0, 12).map(renderBranch).join('') : '<p class="trail-empty-branch">Ce livre attend sa première séance, Trace ou entrée de lexique.</p>'}</div></section>`).join('')}${freeEvents.length ? `<section class="trail-book-node trail-book-node--landmarks"><div class="trail-book-trunk"><span class="trail-book-trunk__mark" aria-hidden="true">◇</span><span><small>Hors livre</small><strong>Repères personnels</strong><em>Objectifs et encouragements</em></span></div><div class="trail-branches">${freeEvents.slice(0, 10).map(renderBranch).join('')}</div></section>` : ''}</div>` : `<div class="empty-state"><h3>Votre sentier commence ici</h3><p>Démarrez une lecture ou ajoutez une ancienne lecture.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
+    const year = new Date().getFullYear();
+    const books = store.getBooks().filter(book => book.libraryState === 'library' && book.status === 'lu' && book.completedAt && !book.historicalBeforeJoin && new Date(book.completedAt).getFullYear() === year).sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
+    const lexicon = store.getLexicon(), traces = store.getTraces(), posts = store.getCommunity().posts;
+    const category = (kind, icon, title, count, content) => `<section class="trail-branch-group trail-branch-group--${kind}"><div class="trail-branch-category"><span aria-hidden="true">${icon}</span><div><small>${count}</small><strong>${title}</strong></div></div><div class="trail-branch-leaves">${content}</div></section>`;
+    const tree = books.map(book => {
+      const expanded = ui.expandedTrailBooks.has(book.id);
+      const bookLexicon = lexicon.filter(item => item.bookId === book.id);
+      const bookTraces = traces.filter(item => item.bookId === book.id);
+      const bookPosts = posts.filter(post => normalize(post.bookTitle) === normalize(book.title));
+      const encouragements = bookPosts.reduce((sum, post) => sum + (Number(post.encouragements) || 0), 0);
+      const comments = bookPosts.flatMap(post => post.comments || []);
+      const branches = expanded ? `<div class="trail-branches" id="trail-branches-${attr(book.id)}">
+        ${category('lexicon','Aa','Lexiques',bookLexicon.length,bookLexicon.length ? bookLexicon.slice(0,6).map(item => `<article class="trail-leaf"><strong>${esc(item.word)}</strong><span>${esc(item.definition)}</span></article>`).join('') : '<p class="trail-empty-branch">Aucun mot ou expression lié à ce livre.</p>')}
+        ${category('encouragement','♡','Encouragements',encouragements,encouragements ? `<article class="trail-leaf"><strong>${encouragements} geste${encouragements > 1 ? 's' : ''} reçu${encouragements > 1 ? 's' : ''}</strong><span>sur ${bookPosts.length} partage${bookPosts.length > 1 ? 's' : ''} autour de cette lecture</span></article>` : '<p class="trail-empty-branch">Aucun encouragement pour le moment.</p>')}
+        ${category('interaction','☍','Interactions',comments.length,comments.length ? comments.slice(0,4).map(comment => `<article class="trail-leaf"><strong>${esc(comment.authorName || 'Lecteur BOO-P')}</strong><span>${esc(comment.text)}</span></article>`).join('') : '<p class="trail-empty-branch">Aucun commentaire lié à cette lecture.</p>')}
+        ${bookTraces.length ? category('trace','✦','Traces personnelles',bookTraces.length,bookTraces.slice(0,4).map(trace => `<article class="trail-leaf"><strong>${trace.page ? `Page ${trace.page}` : 'Trace'}</strong><span>${esc(trace.text)}</span></article>`).join('')) : ''}
+        <a class="trail-open-book text-link small" href="#book?id=${encodeURIComponent(book.id)}">Ouvrir la fiche du livre →</a>
+      </div>` : '';
+      const detailCount = bookLexicon.length + comments.length + bookTraces.length + encouragements;
+      return `<section class="trail-book-node ${expanded ? 'is-expanded' : ''}"><button class="trail-book-trunk" type="button" data-action="toggle-trail-book" data-id="${attr(book.id)}" aria-expanded="${expanded}" aria-controls="trail-branches-${attr(book.id)}"><span class="trail-book-trunk__mark" aria-hidden="true">▥</span><span><small>Lu en ${year} · ${detailCount} ramification${detailCount > 1 ? 's' : ''}</small><strong>${esc(book.title)}</strong><em>${esc(book.authors.join(', '))} · ${formatDate(book.completedAt)}</em></span><span class="trail-book-trunk__toggle" aria-hidden="true">${expanded ? '−' : '+'}</span></button>${branches}</section>`;
+    }).join('');
+    return `<div class="section-heading"><div><h2>Sentier ${year}</h2><p class="small muted">Une carte mentale de vos livres lus cette année. Touchez un livre pour faire apparaître ses lexiques, encouragements, interactions et Traces.</p></div></div>${books.length ? `<div class="trail-map mind-map" aria-label="Carte mentale interactive des lectures terminées en ${year}">${tree}</div>` : `<div class="empty-state"><h3>Aucun livre terminé en ${year}</h3><p>Les livres apparaîtront ici dès qu’une lecture de l’année sera marquée comme lue.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
   }
 
   function renderLexicon() {
@@ -662,14 +737,16 @@
     const progress = store.getGoalProgress(), state = store.getState().goals;
     return `<div class="grid-3">
       ${goalCard('week','Cette semaine',`${progress.week.value}/${progress.week.target} jours`,`Lire ${state.week.dailyMinutes} min par jour`,pct(progress.week.value,progress.week.target),state.week.history)}
-      ${goalCard('month','Ce mois',`${progress.month.value}/${progress.month.target} livres`,'Livres terminés sur le mois civil',pct(progress.month.value,progress.month.target),state.month.history)}
-      ${goalCard('year','Cette année',`${progress.year.value}/${progress.year.target} livres`,'Lectures terminées cette année',pct(progress.year.value,progress.year.target),state.year.history)}
-    </div><p class="small muted section-block">Les lectures marquées « Lu avant mon inscription » sans date de fin ne comptent pas. La progression se recalcule immédiatement selon les livres sélectionnés et leur date de fin.</p>
+      ${goalCard('month','Ce mois',goalStatusText(progress.month),'Chaque livre choisi vaut une part : vert s’il est lu, orange s’il est en cours.',progress.month,state.month.history)}
+      ${goalCard('year','Cette année',goalStatusText(progress.year),'Même calcul sur toute l’année pour les livres choisis.',progress.year,state.year.history)}
+    </div><p class="small muted section-block">La progression mensuelle et annuelle se recalcule immédiatement selon le statut des livres sélectionnés. Un livre à lire ne remplit rien ; un livre en cours remplit sa part en orange ; un livre lu remplit sa part en vert.</p>
     <section class="card monthly-report-cta section-block" aria-labelledby="monthly-report-title"><div><p class="eyebrow">Image 1080 × 1350 · prête à publier</p><h2 id="monthly-report-title">Votre mois de lecture, en un regard</h2><p class="small muted">Livres lus, temps de lecture, mots, expressions et citations. Avant la création, vous choisissez si vos notes personnelles peuvent apparaître.</p></div><button class="button button--primary" type="button" data-action="open-monthly-report">Créer le rapport mensuel</button></section>`;
   }
 
   function goalCard(period, title, value, description, progress, history) {
-    return `<article class="card goal-card"><div class="goal-card__head"><div><p class="eyebrow">Objectif principal</p><h2>${title}</h2></div><span class="progress-ring" style="--pct:${progress}"><span>${progress}%</span></span></div><p class="goal-card__value">${value}</p><p class="small muted">${description}</p><div class="goal-detail-list">${(history || []).map(item => `<span><span>${esc(item.label)}</span><strong>${esc(item.result)}</strong></span>`).join('')}</div><button class="button button--secondary button--small" type="button" data-action="edit-goal" data-period="${period}">Modifier</button></article>`;
+    const mixed = typeof progress === 'object';
+    const green = mixed ? progress.greenPct : progress, orange = mixed ? progress.orangePct : 0, total = Math.min(100, green + orange);
+    return `<article class="card goal-card"><div class="goal-card__head"><div><p class="eyebrow">Objectif principal</p><h2>${title}</h2></div><span class="progress-ring ${mixed ? 'progress-ring--mixed' : ''}" style="--pct:${green};--green-pct:${green};--orange-pct:${orange};--total-pct:${total}"><span>${total}%</span></span></div><p class="goal-card__value">${value}</p><p class="small muted">${description}</p>${mixed ? `<div class="goal-segment-bar" role="img" aria-label="${green} pour cent terminé en vert et ${orange} pour cent en cours en orange"><span class="goal-segment-bar__read" style="--segment:${green}%"></span><span class="goal-segment-bar__reading" style="--segment:${orange}%"></span></div><div class="goal-segment-legend"><span><i class="is-read"></i>${progress.value} lu${progress.value > 1 ? 's' : ''}</span><span><i class="is-reading"></i>${progress.inProgress} en cours</span></div>` : ''}<div class="goal-detail-list">${(history || []).map(item => `<span><span>${esc(item.label)}</span><strong>${esc(item.result)}</strong></span>`).join('')}</div><button class="button button--secondary button--small" type="button" data-action="edit-goal" data-period="${period}">Modifier</button></article>`;
   }
 
   function renderBookDetail() {
@@ -973,8 +1050,12 @@
       case 'friend': await updateFriendRelation(id, trigger.dataset.mode); break;
       case 'view-user': await openUserDialog(id); break;
       case 'create-club': openClubDialog(); break;
+      case 'open-club': location.hash = `#club?id=${encodeURIComponent(id)}`; break;
       case 'toggle-club': await toggleClub(id, trigger.dataset.current === 'true'); break;
       case 'club-details': openClubDetails(id); break;
+      case 'refresh-club': await refreshClubSpace(id, true); break;
+      case 'club-encourage': await toggleClubSpaceEncouragement(trigger.dataset.clubId, id, trigger.dataset.current === 'true'); break;
+      case 'club-book-read': await markClubBookRead(trigger.dataset.clubId, id); break;
       case 'approve-club-member': await approveClubMember(trigger.dataset.clubId, trigger.dataset.userId); break;
       case 'remove-club-member': await removeClubMember(trigger.dataset.clubId, trigger.dataset.userId); break;
       case 'toggle-salon': await toggleSalon(id, false); break;
@@ -986,6 +1067,8 @@
       case 'open-book': location.hash = `#book?id=${encodeURIComponent(id)}`; break;
       case 'add-book': openBookDialog(); break;
       case 'library-view': ui.selectedLibraryBookId = null; store.saveSettings({ libraryView: trigger.dataset.view }); render(); break;
+      case 'library-finish': store.saveSettings({ libraryFinish:trigger.dataset.finish }); render(); break;
+      case 'toggle-trail-book': ui.expandedTrailBooks.has(id) ? ui.expandedTrailBooks.delete(id) : ui.expandedTrailBooks.add(id); render(); break;
       case 'refresh-recommendations': await refreshRecommendations(); break;
       case 'wishlist-recommendation': addRecommendationToWishlist(id); break;
       case 'dismiss-recommendation': dismissRecommendation(id); break;
@@ -1077,6 +1160,7 @@
       goal: submitGoal, 'monthly-report':submitMonthlyReport, profile: submitProfile, adn: submitAdn, 'finish-session': submitFinishSession,
       comment: submitComment, privacy: submitPrivacy, 'notification-settings': submitNotificationSettings,
       post: submitPost, club: submitClub, 'club-edit': submitClubEdit, 'club-member': submitClubMember,
+      'club-post':submitClubPost, 'club-comment':submitClubComment, 'club-book':submitClubBook,
       'salon-message': submitSalonMessage, reply: submitReply, salon: submitSalon, 'salon-edit': submitSalonEdit,
       report: submitReport, help: submitHelp, 'change-password': submitChangePassword, 'delete-account': submitDeleteAccount
     };
@@ -1604,6 +1688,56 @@
       await refreshCommunity({ quiet:true });
       openClubDetails(form.dataset.clubId); showToast('Membre ajouté au club');
     } catch (error) { submit.disabled = false; showToast(error.message || 'Le membre ne peut pas être ajouté'); }
+  }
+
+  async function refreshClubSpace(clubId, announce = false) {
+    ui.clubSpaces.delete(clubId);
+    await loadClubSpace(clubId, { force:true });
+    if (announce) showToast('Espace du club actualisé');
+  }
+
+  async function submitClubPost(form, data) {
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    try {
+      await window.BT.community.createClubPost(form.dataset.clubId, data.get('text'), data.get('type'));
+      form.reset(); await refreshClubSpace(form.dataset.clubId); showToast(data.get('type') === 'announcement' ? 'Annonce publiée dans le club' : 'Message publié dans le club');
+    } catch (error) { submit.disabled = false; showToast(error.message || 'Le message ne peut pas être publié'); }
+  }
+
+  async function submitClubComment(form, data) {
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    try {
+      await window.BT.community.createClubComment(form.dataset.postId, data.get('text'));
+      await refreshClubSpace(form.dataset.clubId); showToast('Commentaire envoyé');
+    } catch (error) { submit.disabled = false; showToast(error.message || 'Le commentaire ne peut pas être envoyé'); }
+  }
+
+  async function submitClubBook(form, data) {
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    try {
+      await window.BT.community.addClubBook({ clubId:form.dataset.clubId, title:data.get('title'), status:data.get('status') });
+      await refreshCommunity({ quiet:true });
+      await refreshClubSpace(form.dataset.clubId);
+      showToast(data.get('status') === 'current' ? 'Nouvelle lecture ouverte dans le club' : data.get('status') === 'read' ? 'Livre ajouté à l’histoire du club' : 'Livre ajouté aux prochaines lectures');
+    } catch (error) { submit.disabled = false; showToast(error.message || 'Le livre ne peut pas être ajouté au club'); }
+  }
+
+  async function toggleClubSpaceEncouragement(clubId, postId, encouraged) {
+    try {
+      await window.BT.community.toggleClubPostEncouragement(postId, encouraged);
+      await refreshClubSpace(clubId);
+      showToast(encouraged ? 'Encouragement retiré' : 'Encouragement envoyé');
+    } catch (error) { showToast(error.message || 'L’encouragement ne peut pas être enregistré'); }
+  }
+
+  async function markClubBookRead(clubId, bookId) {
+    if (!confirm('Marquer ce livre comme lu par le club ?')) return;
+    try {
+      await window.BT.community.updateClubBook(bookId, clubId, { status:'read' });
+      await refreshCommunity({ quiet:true });
+      await refreshClubSpace(clubId);
+      showToast('Livre ajouté aux lectures terminées du club');
+    } catch (error) { showToast(error.message || 'Cette lecture ne peut pas être archivée'); }
   }
 
   async function submitSalonMessage(form, data) {

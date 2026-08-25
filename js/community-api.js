@@ -213,6 +213,9 @@ BT.community = (() => {
       book_title:club.bookTitle || '', color:club.color || '#6f927c'
     }).select().single();
     if (error) throw friendly(error, 'Le club ne peut pas être créé.');
+    if (String(club.bookTitle || '').trim()) {
+      await addClubBook({ clubId:data.id, title:club.bookTitle, status:'current' });
+    }
     return data;
   }
 
@@ -267,7 +270,145 @@ BT.community = (() => {
     if (updates.color != null) payload.color = updates.color;
     const { data, error } = await client().from('reading_clubs').update(payload).eq('id', clubId).select().single();
     if (error) throw friendly(error, 'Le club ne peut pas être modifié.');
+    if (updates.bookTitle != null && String(updates.bookTitle).trim()) {
+      await syncClubCurrentBook(clubId, updates.bookTitle);
+    }
     return data;
+  }
+
+  async function syncClubCurrentBook(clubId, title) {
+    const user = currentUser(), api = client(), cleanTitle = String(title || '').trim();
+    if (!cleanTitle) return null;
+    const existing = await api.from('reading_club_books')
+      .select('id, title, status')
+      .eq('club_id', clubId)
+      .ilike('title', cleanTitle)
+      .limit(1);
+    if (existing.error) throw friendly(existing.error, 'La lecture du club ne peut pas être synchronisée.');
+    let record = existing.data?.[0] || null;
+    if (record) {
+      const update = await api.from('reading_club_books').update({ status:'current', completed_at:null }).eq('id', record.id).select().single();
+      if (update.error) throw friendly(update.error, 'La lecture du club ne peut pas être mise à jour.');
+      record = update.data;
+    } else {
+      const insert = await api.from('reading_club_books').insert({ club_id:clubId, added_by:user.id, title:cleanTitle, status:'current' }).select().single();
+      if (insert.error) throw friendly(insert.error, 'La lecture du club ne peut pas être ajoutée.');
+      record = insert.data;
+    }
+    const demote = await api.from('reading_club_books').update({ status:'planned', completed_at:null })
+      .eq('club_id', clubId).eq('status', 'current').neq('id', record.id);
+    if (demote.error) throw friendly(demote.error, 'L’ancienne lecture du club ne peut pas être archivée.');
+    return record;
+  }
+
+  async function addClubBook({ clubId, title, status = 'planned' }) {
+    await window.BT.auth.ready();
+    const user = currentUser(), api = client(), cleanTitle = String(title || '').trim();
+    const safeStatus = ['planned','current','read'].includes(status) ? status : 'planned';
+    if (!cleanTitle) throw new Error('Indiquez le titre du livre.');
+    if (safeStatus === 'current') {
+      const record = await syncClubCurrentBook(clubId, cleanTitle);
+      const clubUpdate = await api.from('reading_clubs').update({ book_title:cleanTitle }).eq('id', clubId);
+      if (clubUpdate.error) throw friendly(clubUpdate.error, 'Le livre actuel du club ne peut pas être enregistré.');
+      return record;
+    }
+    const result = await api.from('reading_club_books').insert({
+      club_id:clubId, added_by:user.id, title:cleanTitle, status:safeStatus,
+      completed_at:safeStatus === 'read' ? new Date().toISOString() : null
+    }).select().single();
+    if (result.error) throw friendly(result.error, 'Le livre ne peut pas être ajouté au club.');
+    return result.data;
+  }
+
+  async function updateClubBook(bookId, clubId, updates) {
+    await window.BT.auth.ready();
+    const api = client(), payload = {};
+    if (updates.status != null) {
+      payload.status = ['planned','current','read'].includes(updates.status) ? updates.status : 'planned';
+      payload.completed_at = payload.status === 'read' ? new Date().toISOString() : null;
+    }
+    const result = await api.from('reading_club_books').update(payload).eq('id', bookId).eq('club_id', clubId).select().single();
+    if (result.error) throw friendly(result.error, 'Le statut de cette lecture ne peut pas être modifié.');
+    if (payload.status === 'current') {
+      await syncClubCurrentBook(clubId, result.data.title);
+      const clubUpdate = await api.from('reading_clubs').update({ book_title:result.data.title }).eq('id', clubId);
+      if (clubUpdate.error) throw friendly(clubUpdate.error, 'Le livre actuel du club ne peut pas être mis à jour.');
+    } else if (payload.status === 'read') {
+      const club = await api.from('reading_clubs').select('book_title').eq('id', clubId).single();
+      if (!club.error && String(club.data.book_title).toLocaleLowerCase('fr') === String(result.data.title).toLocaleLowerCase('fr')) {
+        await api.from('reading_clubs').update({ book_title:'' }).eq('id', clubId);
+      }
+    }
+    return result.data;
+  }
+
+  async function getClubSpace(clubId, clubs = null, salons = null) {
+    await window.BT.auth.ready();
+    const user = currentUser(), clubList = clubs || await listClubs();
+    const club = clubList.find(item => item.id === clubId);
+    if (!club) throw new Error('Ce club est introuvable ou n’est pas accessible.');
+    if (!club.joined) return { club, locked:true, books:[], posts:[], salons:[] };
+    const api = client();
+    const [bookResult, postResult, salonList] = await Promise.all([
+      api.from('reading_club_books')
+        .select('id, club_id, added_by, title, status, completed_at, created_at, updated_at')
+        .eq('club_id', clubId).order('updated_at', { ascending:false }),
+      api.from('reading_club_posts')
+        .select('id, club_id, author_id, post_type, body, created_at, updated_at, reading_club_comments(id, post_id, author_id, body, created_at), reading_club_encouragements(user_id, created_at)')
+        .eq('club_id', clubId).order('created_at', { ascending:false }).limit(60),
+      salons || listSalons(clubList)
+    ]);
+    if (bookResult.error) throw friendly(bookResult.error, 'Les lectures du club ne peuvent pas être chargées.');
+    if (postResult.error) throw friendly(postResult.error, 'Les annonces du club ne peuvent pas être chargées.');
+    const userIds = (postResult.data || []).flatMap(post => [post.author_id, ...(post.reading_club_comments || []).map(comment => comment.author_id)]);
+    const names = await directoryNames(userIds);
+    const posts = (postResult.data || []).map(post => {
+      const encouragements = post.reading_club_encouragements || [];
+      return {
+        id:post.id, clubId:post.club_id, authorId:post.author_id,
+        authorName:names.get(post.author_id)?.name || (post.author_id === user.id ? user.name : 'Lecteur BOO-P'),
+        type:post.post_type, text:post.body, date:post.created_at,
+        encouraged:encouragements.some(item => item.user_id === user.id), encouragements:encouragements.length,
+        comments:(post.reading_club_comments || []).sort((a,b) => new Date(a.created_at) - new Date(b.created_at)).map(comment => ({
+          id:comment.id, authorId:comment.author_id,
+          authorName:names.get(comment.author_id)?.name || (comment.author_id === user.id ? user.name : 'Lecteur BOO-P'),
+          text:comment.body, date:comment.created_at
+        }))
+      };
+    });
+    return {
+      club, locked:false, books:bookResult.data || [], posts,
+      salons:(salonList || []).filter(salon => salon.clubId === clubId)
+    };
+  }
+
+  async function createClubPost(clubId, text, type = 'discussion') {
+    await window.BT.auth.ready();
+    const user = currentUser(), safeType = type === 'announcement' ? 'announcement' : 'discussion';
+    const { data, error } = await client().from('reading_club_posts').insert({
+      club_id:clubId, author_id:user.id, post_type:safeType, body:String(text || '').trim()
+    }).select().single();
+    if (error) throw friendly(error, safeType === 'announcement' ? 'L’annonce ne peut pas être publiée.' : 'Le message ne peut pas être publié.');
+    return data;
+  }
+
+  async function createClubComment(postId, text) {
+    await window.BT.auth.ready();
+    const user = currentUser();
+    const { data, error } = await client().from('reading_club_comments').insert({
+      post_id:postId, author_id:user.id, body:String(text || '').trim()
+    }).select().single();
+    if (error) throw friendly(error, 'Le commentaire ne peut pas être envoyé.');
+    return data;
+  }
+
+  async function toggleClubPostEncouragement(postId, encouraged) {
+    await window.BT.auth.ready();
+    const user = currentUser(), api = client();
+    const result = encouraged
+      ? await api.from('reading_club_encouragements').delete().eq('post_id', postId).eq('user_id', user.id)
+      : await api.from('reading_club_encouragements').insert({ post_id:postId, user_id:user.id });
+    if (result.error) throw friendly(result.error, 'L’encouragement ne peut pas être enregistré.');
   }
 
   async function toggleClubMembership(clubId, joined) {
@@ -448,6 +589,7 @@ BT.community = (() => {
   return {
     listPosts, createPost, createComment, toggleEncouragement,
     createClub, listClubs, updateClub, toggleClubMembership, addClubMember, removeClubMember,
+    getClubSpace, addClubBook, updateClubBook, createClubPost, createClubComment, toggleClubPostEncouragement,
     listSalons, createSalon, updateSalon, toggleSalonMembership, updateSalonPresence, createSalonMessage,
     searchReaders, updateFriend, getReaderProfile, compressPhoto, maxUploadBytes:MAX_UPLOAD_BYTES
   };

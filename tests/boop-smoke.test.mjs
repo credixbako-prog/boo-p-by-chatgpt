@@ -43,14 +43,14 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.match(app, /data-action="refresh-recommendations"/);
   assert.match(app, /data-change="goal-all-books"/);
   assert.match(app, /data-change="goal-book"/);
-  assert.match(app, /class="bookcase"/);
+  assert.match(app, /class="bookcase bookcase--\$\{finish\}"/);
   assert.match(app, /class="genre-shelf"/);
   assert.match(app, /class="physical-shelf"/);
   assert.match(app, /class="book-spine \$\{selected/);
   assert.match(app, /class="book-spine__peek"/);
   assert.match(app, /data-action="select-book"/);
   assert.match(app, /selectedLibraryBookId/);
-  assert.match(app, /Touchez un livre pour le sélectionner/);
+  assert.match(app, /Touchez une première fois pour sélectionner/);
   assert.match(app, /data-change="library-sort"/);
   assert.match(app, /Suggestions BOO-P · analyse locale/);
   assert.match(store, /post-10/);
@@ -106,7 +106,7 @@ test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
   assert.match(app, /\['library','Bibliothèque'\]/);
   assert.match(app, /\['trail','Sentier'\]/);
   assert.match(app, /\['lexicon','Lexiques'\]/);
-  assert.match(app, /class="trail-map"/);
+  assert.match(app, /class="trail-map mind-map"/);
   assert.match(app, /class="trail-book-trunk"/);
   assert.match(app, /data-action="lexicon-filter"/);
   assert.match(css, /\.trail-branches/);
@@ -114,20 +114,27 @@ test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
 });
 
 test('communauté: adhésions, salons et messages sont persistants et protégés', async () => {
-  const [app, api, store, migration, hardening] = await Promise.all([
+  const [app, api, store, migration, hardening, clubSpaces] = await Promise.all([
     read('js/mvp-app.js'),
     read('js/community-api.js'),
     read('js/store.js'),
     read('supabase/migrations/20260825154647_reading_club_members_and_salons.sql'),
-    read('supabase/migrations/20260825161100_harden_reading_community_helpers.sql')
+    read('supabase/migrations/20260825161100_harden_reading_community_helpers.sql'),
+    read('supabase/migrations/20260825173002_reading_club_spaces.sql')
   ]);
   assert.match(api, /async function listClubs/);
   assert.match(api, /async function listSalons/);
   assert.match(api, /async function addClubMember/);
   assert.match(api, /async function createSalonMessage/);
+  assert.match(api, /async function getClubSpace/);
+  assert.match(api, /async function createClubPost/);
+  assert.match(api, /async function toggleClubPostEncouragement/);
   assert.match(app, /data-form="club-edit"/);
   assert.match(app, /data-form="club-member"/);
   assert.match(app, /data-form="salon-message"/);
+  assert.match(app, /class="club-space-layout"/);
+  assert.match(app, /data-form="club-post"/);
+  assert.match(app, /data-form="club-comment"/);
   assert.match(store, /replaceRemoteClubs/);
   assert.match(store, /replaceRemoteSalons/);
   assert.match(migration, /create table if not exists public\.reading_club_members/);
@@ -136,6 +143,52 @@ test('communauté: adhésions, salons et messages sont persistants et protégés
   assert.match(migration, /grant select, insert, update, delete/);
   assert.match(hardening, /create schema if not exists private/);
   assert.match(hardening, /revoke all on schema private from public, anon/);
+  assert.match(clubSpaces, /create table public\.reading_club_books/);
+  assert.match(clubSpaces, /create table public\.reading_club_posts/);
+  assert.match(clubSpaces, /create table public\.reading_club_comments/);
+  assert.match(clubSpaces, /create table public\.reading_club_encouragements/);
+  assert.match(clubSpaces, /enable row level security/);
+});
+
+test('objectifs: mois et année mélangent les parts vertes et orange des livres choisis', async () => {
+  const source = await read('js/store.js');
+  const values = new Map();
+  const localStorage = {
+    getItem:key => values.has(key) ? values.get(key) : null,
+    setItem:(key,value) => values.set(key, String(value)),
+    removeItem:key => values.delete(key)
+  };
+  const BT = {};
+  const context = {
+    window:{ BT, addEventListener(){} }, BT, localStorage,
+    navigator:{ onLine:true }, console, Date, Math, JSON, Set, Map
+  };
+  vm.runInNewContext(source, context);
+  const store = context.BT.store;
+  const selected = ['book-peste','book-etranger'];
+  store.updateGoal('month', { targetBooks:2, bookIds:selected });
+  store.updateGoal('year', { targetBooks:2, bookIds:selected });
+  const progress = store.getGoalProgress();
+  for (const period of ['month','year']) {
+    assert.equal(progress[period].value, 1);
+    assert.equal(progress[period].inProgress, 1);
+    assert.equal(progress[period].greenPct, 50);
+    assert.equal(progress[period].orangePct, 50);
+    assert.equal(progress[period].totalPct, 100);
+  }
+});
+
+test('bibliothèque: quatre finitions et rayons horizontaux restent contenus', async () => {
+  const [app, store, css] = await Promise.all([read('js/mvp-app.js'), read('js/store.js'), read('css/mvp-v5.css')]);
+  assert.match(app, /\['terracotta','Terracotta'\]/);
+  assert.match(app, /\['blue','Bleu'\]/);
+  assert.match(app, /\['sage','Vert sauge'\]/);
+  assert.match(app, /\['red','Rouge'\]/);
+  assert.match(store, /libraryFinish: 'terracotta'/);
+  assert.match(css, /\.physical-shelf \{[^}]*overflow-x: auto/);
+  assert.match(css, /\.bookcase--blue/);
+  assert.match(css, /\.bookcase--sage/);
+  assert.match(css, /\.bookcase--red/);
 });
 
 test('lexique: la recherche tolérante retrouve une définition française', async () => {
@@ -490,7 +543,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v18/);
+  assert.match(worker, /boo-p-webapp-v19/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);
