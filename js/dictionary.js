@@ -1,4 +1,4 @@
-/** BOO-P — aide lexicale intégrée, fondée sur les API publiques Wikimedia. */
+/** BOO-P — aide lexicale ouverte, avec vérification dans les dictionnaires de référence. */
 window.BT = window.BT || {};
 
 BT.dictionary = (() => {
@@ -11,6 +11,21 @@ BT.dictionary = (() => {
     const text = clean(value);
     return text.length > max ? `${text.slice(0, max).replace(/\s+\S*$/, '')}…` : text;
   };
+  const fold = value => clean(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('fr');
+  const dictionarySlug = value => fold(value)
+    .replace(/[’']/g, '-')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  function referenceLinks(term) {
+    const slug = dictionarySlug(term);
+    const larousseTerm = encodeURIComponent(clean(term).replace(/\s+/g, '_'));
+    return [
+      { label:'Le Robert', url:`https://dictionnaire.lerobert.com/definition/${slug}` },
+      { label:'Larousse', url:`https://www.larousse.fr/dictionnaires/francais/${larousseTerm}` }
+    ];
+  }
 
   async function fetchLexicalJSON(endpoint, unavailableMessage) {
     const controller = new AbortController();
@@ -59,11 +74,19 @@ BT.dictionary = (() => {
       const found = node.matches?.('ol > li') ? [node] : [];
       return found.concat([...(node.querySelectorAll?.('ol > li') || [])]);
     });
+    const unique = new Set();
     return items.filter(item => !item.parentElement.closest('li')).map(item => {
       const copy = item.cloneNode(true);
-      copy.querySelectorAll('ul, ol, dl, sup, .reference, .mw-editsection').forEach(node => node.remove());
-      return clean(copy.textContent);
-    }).filter(text => text.length >= 8).slice(0, 4);
+      copy.querySelectorAll('ul, ol, dl, sup, table, figure, .reference, .mw-editsection, .example, .citation').forEach(node => node.remove());
+      return clean(copy.textContent)
+        .replace(/^\([^)]*(?:orthographe|désuet|rare|familier|figuré)[^)]*\)\s*/i, '')
+        .replace(/\s*\[[^\]]+\]\s*$/g, '');
+    }).filter(text => {
+      const key = fold(text);
+      if (text.length < 8 || unique.has(key)) return false;
+      unique.add(key);
+      return true;
+    }).slice(0, 8);
   }
 
   async function queryWiktionary(term) {
@@ -81,7 +104,8 @@ BT.dictionary = (() => {
     const title = clean(payload.parse.title || term);
     return [{
       title,
-      extract: truncate(definitions.join(' ')),
+      extract: truncate(definitions[0]),
+      definitions:definitions.map(definition => truncate(definition, 700)),
       url: `https://fr.wiktionary.org/wiki/${encodeURIComponent(title.replace(/\s+/g, '_'))}`
     }];
   }
@@ -120,8 +144,22 @@ BT.dictionary = (() => {
           : project === 'wiktionary-search' ? await searchWiktionary(query)
           : await queryWiki(project, query);
         if (results.length) {
-          const best = results.find(item => item.title.toLocaleLowerCase('fr') === query.toLocaleLowerCase('fr')) || results[0];
-          const value = { term: query, kind, definition: best.extract, sourceLabel: label, sourceUrl: best.url, alternatives: results.slice(1) };
+          const best = results.find(item => fold(item.title) === fold(query)) || results[0];
+          const candidates = [];
+          const addCandidate = (definition, title, url) => {
+            const text = truncate(definition, 700), key = fold(text);
+            if (!text || candidates.some(item => fold(item.definition) === key)) return;
+            candidates.push({ definition:text, title, sourceLabel:label, sourceUrl:url });
+          };
+          (best.definitions || [best.extract]).forEach(definition => addCandidate(definition, best.title, best.url));
+          results.filter(item => item !== best).forEach(item => (item.definitions || [item.extract]).slice(0, 2)
+            .forEach(definition => addCandidate(definition, item.title, item.url)));
+          const selected = candidates[0] || { definition:best.extract, sourceLabel:label, sourceUrl:best.url, title:best.title };
+          const value = {
+            term:query, kind, definition:selected.definition,
+            sourceLabel:selected.sourceLabel, sourceUrl:selected.sourceUrl,
+            candidates:candidates.slice(0, 6), externalSources:referenceLinks(query)
+          };
           cache.set(cacheKey, value);
           return value;
         }
@@ -131,5 +169,5 @@ BT.dictionary = (() => {
     throw new Error('Aucune explication fiable trouvée. Vous pouvez saisir votre propre définition.');
   }
 
-  return { lookup };
+  return { lookup, referenceLinks };
 })();

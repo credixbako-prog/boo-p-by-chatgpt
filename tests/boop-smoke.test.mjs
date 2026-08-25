@@ -82,7 +82,10 @@ test('lexique: dictionnaire, questions ciblées et répétition espacée', async
   assert.match(app, /data-quality="almost"/);
   assert.match(app, /data-quality="recalled"/);
   assert.match(app, /Sérendipité/);
-  assert.match(app, /ui\.memoryDeckKeys\.splice\(Math\.min\(2/);
+  assert.match(app, /items\.slice\(0, 10\)/);
+  assert.match(app, /data-memory-carousel/);
+  assert.match(app, /normalizedQuality === 'recalled'/);
+  assert.match(app, /ui\.memoryDeckKeys\.push\(next\.memoryKey\)/);
   assert.doesNotMatch(app, /Quel souvenir aviez-vous gardé/);
   assert.match(dictionary, /fr\.wiktionary/);
   assert.match(dictionary, /fr\.wikipedia/);
@@ -90,8 +93,49 @@ test('lexique: dictionnaire, questions ciblées et répétition espacée', async
   assert.match(dictionary, /wiktionary-search/);
   assert.match(dictionary, /getElementById\('Français'\)/);
   assert.match(dictionary, /REQUEST_TIMEOUT_MS = 9000/);
+  assert.match(dictionary, /dictionnaire\.lerobert\.com\/definition/);
+  assert.match(dictionary, /larousse\.fr\/dictionnaires\/francais/);
+  assert.match(app, /data-action="dictionary-choice"/);
   assert.match(store, /REVIEW_OFFSETS = \[1, 3, 7, 14, 30\]/);
   assert.match(store, /reviewLexiconWord/);
+});
+
+test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
+  const [app, css] = await Promise.all([read('js/mvp-app.js'), read('css/mvp-v5.css')]);
+  assert.match(app, /label: 'Galerie'/);
+  assert.match(app, /\['library','Bibliothèque'\]/);
+  assert.match(app, /\['trail','Sentier'\]/);
+  assert.match(app, /\['lexicon','Lexiques'\]/);
+  assert.match(app, /class="trail-map"/);
+  assert.match(app, /class="trail-book-trunk"/);
+  assert.match(app, /data-action="lexicon-filter"/);
+  assert.match(css, /\.trail-branches/);
+  assert.match(css, /\.lexicon-filter-fab/);
+});
+
+test('communauté: adhésions, salons et messages sont persistants et protégés', async () => {
+  const [app, api, store, migration, hardening] = await Promise.all([
+    read('js/mvp-app.js'),
+    read('js/community-api.js'),
+    read('js/store.js'),
+    read('supabase/migrations/20260825154647_reading_club_members_and_salons.sql'),
+    read('supabase/migrations/20260825161100_harden_reading_community_helpers.sql')
+  ]);
+  assert.match(api, /async function listClubs/);
+  assert.match(api, /async function listSalons/);
+  assert.match(api, /async function addClubMember/);
+  assert.match(api, /async function createSalonMessage/);
+  assert.match(app, /data-form="club-edit"/);
+  assert.match(app, /data-form="club-member"/);
+  assert.match(app, /data-form="salon-message"/);
+  assert.match(store, /replaceRemoteClubs/);
+  assert.match(store, /replaceRemoteSalons/);
+  assert.match(migration, /create table if not exists public\.reading_club_members/);
+  assert.match(migration, /create table if not exists public\.reading_salons/);
+  assert.match(migration, /enable row level security/);
+  assert.match(migration, /grant select, insert, update, delete/);
+  assert.match(hardening, /create schema if not exists private/);
+  assert.match(hardening, /revoke all on schema private from public, anon/);
 });
 
 test('lexique: la recherche tolérante retrouve une définition française', async () => {
@@ -446,7 +490,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v17/);
+  assert.match(worker, /boo-p-webapp-v18/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

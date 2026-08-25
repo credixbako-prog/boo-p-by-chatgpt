@@ -216,6 +216,180 @@ BT.community = (() => {
     return data;
   }
 
+  async function directoryNames(userIds) {
+    const ids = [...new Set((userIds || []).filter(Boolean))];
+    if (!ids.length) return new Map();
+    const { data, error } = await client().from('profile_directory')
+      .select('user_id, display_name, handle')
+      .in('user_id', ids);
+    if (error) throw friendly(error, 'Les membres ne peuvent pas être chargés.');
+    return new Map((data || []).map(row => [row.user_id, { name:row.display_name, handle:`@${row.handle}` }]));
+  }
+
+  async function listClubs() {
+    await window.BT.auth.ready();
+    const user = currentUser();
+    const { data, error } = await client().from('reading_clubs')
+      .select('id, owner_id, name, description, visibility, access_mode, book_title, color, created_at, updated_at, reading_club_members(user_id, role, status, created_at)')
+      .order('updated_at', { ascending:false });
+    if (error) throw friendly(error, 'Les clubs ne peuvent pas être chargés.');
+    const memberships = (data || []).flatMap(club => club.reading_club_members || []);
+    const names = await directoryNames(memberships.map(member => member.user_id).concat((data || []).map(club => club.owner_id)));
+    return (data || []).map(club => {
+      const members = (club.reading_club_members || []).map(member => ({
+        userId:member.user_id,
+        name:names.get(member.user_id)?.name || (member.user_id === user.id ? user.name : 'Lecteur BOO-P'),
+        handle:names.get(member.user_id)?.handle || '',
+        role:member.role, status:member.status, joinedAt:member.created_at
+      }));
+      const mine = members.find(member => member.userId === user.id);
+      const role = club.owner_id === user.id ? 'owner' : mine?.status === 'active' ? mine.role : null;
+      return {
+        id:club.id, remoteId:club.id, ownerId:club.owner_id, name:club.name,
+        description:club.description, visibility:club.visibility, access:club.access_mode,
+        bookTitle:club.book_title, color:club.color, members,
+        membersCount:members.filter(member => member.status === 'active').length,
+        joined:mine?.status === 'active' || club.owner_id === user.id,
+        membershipStatus:mine?.status || (club.owner_id === user.id ? 'active' : null),
+        role, isRemote:true
+      };
+    });
+  }
+
+  async function updateClub(clubId, updates) {
+    await window.BT.auth.ready();
+    const payload = {};
+    if (updates.name != null) payload.name = String(updates.name).trim();
+    if (updates.description != null) payload.description = String(updates.description).trim();
+    if (updates.visibility != null) payload.visibility = updates.visibility;
+    if (updates.access != null) payload.access_mode = updates.access;
+    if (updates.bookTitle != null) payload.book_title = String(updates.bookTitle).trim();
+    if (updates.color != null) payload.color = updates.color;
+    const { data, error } = await client().from('reading_clubs').update(payload).eq('id', clubId).select().single();
+    if (error) throw friendly(error, 'Le club ne peut pas être modifié.');
+    return data;
+  }
+
+  async function toggleClubMembership(clubId, joined) {
+    await window.BT.auth.ready();
+    const user = currentUser(), api = client();
+    if (joined) {
+      const { error } = await api.from('reading_club_members').delete().eq('club_id', clubId).eq('user_id', user.id);
+      if (error) throw friendly(error, 'Vous ne pouvez pas quitter ce club.');
+      return { joined:false, status:null };
+    }
+    const club = await api.from('reading_clubs').select('access_mode').eq('id', clubId).single();
+    if (club.error) throw friendly(club.error, 'Ce club ne peut pas être ouvert.');
+    const status = club.data.access_mode === 'open' ? 'active' : 'pending';
+    const { error } = await api.from('reading_club_members').insert({ club_id:clubId, user_id:user.id, role:'member', status });
+    if (error) throw friendly(error, 'La demande d’adhésion ne peut pas être envoyée.');
+    return { joined:status === 'active', status };
+  }
+
+  async function addClubMember(clubId, userId, role = 'member') {
+    await window.BT.auth.ready();
+    const user = currentUser();
+    const { error } = await client().from('reading_club_members').upsert({
+      club_id:clubId, user_id:userId, role:['moderator','member'].includes(role) ? role : 'member',
+      status:'active', invited_by:user.id
+    }, { onConflict:'club_id,user_id' });
+    if (error) throw friendly(error, 'Ce membre ne peut pas être ajouté.');
+  }
+
+  async function removeClubMember(clubId, userId) {
+    await window.BT.auth.ready();
+    const { error } = await client().from('reading_club_members').delete().eq('club_id', clubId).eq('user_id', userId);
+    if (error) throw friendly(error, 'Ce membre ne peut pas être retiré.');
+  }
+
+  async function listSalons(clubs = null) {
+    await window.BT.auth.ready();
+    const user = currentUser();
+    const { data, error } = await client().from('reading_salons')
+      .select('id, club_id, created_by, title, book_title, scheduled_at, status, created_at, updated_at, reading_salon_participants(user_id, status, share_pages, reading_minutes, joined_at), reading_salon_messages(id, author_id, body, created_at)')
+      .order('scheduled_at', { ascending:false });
+    if (error) throw friendly(error, 'Les salons ne peuvent pas être chargés.');
+    const rows = data || [];
+    const userIds = rows.flatMap(salon => (salon.reading_salon_participants || []).map(item => item.user_id)
+      .concat((salon.reading_salon_messages || []).map(item => item.author_id)));
+    const names = await directoryNames(userIds);
+    const clubById = new Map((clubs || await listClubs()).map(club => [club.id, club]));
+    return rows.map(salon => {
+      const participants = (salon.reading_salon_participants || []).map(item => ({
+        userId:item.user_id, name:names.get(item.user_id)?.name || (item.user_id === user.id ? user.name : 'Lecteur BOO-P'),
+        status:item.status, sharePages:item.share_pages, minutes:item.reading_minutes
+      }));
+      const mine = participants.find(item => item.userId === user.id);
+      const club = clubById.get(salon.club_id);
+      return {
+        id:salon.id, remoteId:salon.id, clubId:salon.club_id, clubName:club?.name || 'Club BOO-P',
+        title:salon.title, bookTitle:salon.book_title, scheduledAt:salon.scheduled_at,
+        status:salon.status, joined:Boolean(mine), myStatus:mine?.status || 'waiting',
+        sharePages:Boolean(mine?.sharePages), participants,
+        messages:(salon.reading_salon_messages || []).sort((a,b) => new Date(a.created_at) - new Date(b.created_at)).map(message => ({
+          id:message.id, authorId:message.author_id,
+          authorName:names.get(message.author_id)?.name || (message.author_id === user.id ? user.name : 'Lecteur BOO-P'),
+          text:message.body, date:message.created_at
+        })),
+        canManage:Boolean(club && ['owner','moderator'].includes(club.role)), isRemote:true
+      };
+    });
+  }
+
+  async function createSalon(salon) {
+    await window.BT.auth.ready();
+    const user = currentUser();
+    const { data, error } = await client().from('reading_salons').insert({
+      club_id:salon.clubId, created_by:user.id, title:String(salon.title).trim(),
+      book_title:String(salon.bookTitle || '').trim(), scheduled_at:salon.scheduledAt,
+      status:salon.status || 'scheduled'
+    }).select().single();
+    if (error) throw friendly(error, 'Le salon ne peut pas être créé.');
+    return data;
+  }
+
+  async function updateSalon(salonId, updates) {
+    await window.BT.auth.ready();
+    const payload = {};
+    if (updates.title != null) payload.title = String(updates.title).trim();
+    if (updates.bookTitle != null) payload.book_title = String(updates.bookTitle).trim();
+    if (updates.scheduledAt != null) payload.scheduled_at = updates.scheduledAt;
+    if (updates.status != null) payload.status = updates.status;
+    const { data, error } = await client().from('reading_salons').update(payload).eq('id', salonId).select().single();
+    if (error) throw friendly(error, 'Le salon ne peut pas être modifié.');
+    return data;
+  }
+
+  async function toggleSalonMembership(salonId, joined) {
+    await window.BT.auth.ready();
+    const user = currentUser(), api = client();
+    const result = joined
+      ? await api.from('reading_salon_participants').delete().eq('salon_id', salonId).eq('user_id', user.id)
+      : await api.from('reading_salon_participants').insert({ salon_id:salonId, user_id:user.id, status:'waiting' });
+    if (result.error) throw friendly(result.error, joined ? 'Le salon ne peut pas être quitté.' : 'Le salon ne peut pas être rejoint.');
+  }
+
+  async function updateSalonPresence(salonId, updates) {
+    await window.BT.auth.ready();
+    const user = currentUser(), payload = {};
+    if (updates.status != null) payload.status = updates.status;
+    if (updates.sharePages != null) payload.share_pages = Boolean(updates.sharePages);
+    if (updates.readingMinutes != null) payload.reading_minutes = Math.max(0, Number(updates.readingMinutes) || 0);
+    const { error } = await client().from('reading_salon_participants').update(payload)
+      .eq('salon_id', salonId).eq('user_id', user.id);
+    if (error) throw friendly(error, 'Votre présence ne peut pas être mise à jour.');
+  }
+
+  async function createSalonMessage(salonId, text) {
+    await window.BT.auth.ready();
+    const user = currentUser();
+    const { data, error } = await client().from('reading_salon_messages').insert({
+      salon_id:salonId, author_id:user.id, body:String(text || '').trim()
+    }).select().single();
+    if (error) throw friendly(error, 'Le message ne peut pas être envoyé.');
+    return data;
+  }
+
   async function searchReaders(query = '') {
     await window.BT.auth.ready();
     const user = currentUser(), api = client(), clean = String(query || '').trim().slice(0, 80);
@@ -271,5 +445,10 @@ BT.community = (() => {
     return data || null;
   }
 
-  return { listPosts, createPost, createComment, toggleEncouragement, createClub, searchReaders, updateFriend, getReaderProfile, compressPhoto, maxUploadBytes:MAX_UPLOAD_BYTES };
+  return {
+    listPosts, createPost, createComment, toggleEncouragement,
+    createClub, listClubs, updateClub, toggleClubMembership, addClubMember, removeClubMember,
+    listSalons, createSalon, updateSalon, toggleSalonMembership, updateSalonPresence, createSalonMessage,
+    searchReaders, updateFriend, getReaderProfile, compressPhoto, maxUploadBytes:MAX_UPLOAD_BYTES
+  };
 })();

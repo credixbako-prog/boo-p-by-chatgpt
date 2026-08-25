@@ -161,7 +161,12 @@ body[data-theme="dark"] .eyebrow { color: #a9cbb5; }
 .session-state { margin: 10px 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--boo-sage) 13%, transparent); color: var(--boo-sage-dark); font-size: 11px; }
 
 .memory-list { display: grid; gap: 10px; width: min(100%,680px); margin-inline: auto; padding: 2px 0 8px; }
-.memory-card-shell { display: grid; gap: 12px; perspective: 1200px; }
+.memory-carousel { display: flex; min-width: 0; gap: 12px; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; }
+.memory-carousel::-webkit-scrollbar { display: none; }
+.memory-card-shell { display: grid; flex: 0 0 100%; min-width: 0; gap: 12px; perspective: 1200px; scroll-snap-align: start; scroll-snap-stop: always; }
+.memory-carousel-dots { display: flex; max-width: 100%; justify-content: center; gap: 5px; padding-top: 10px; }
+.memory-carousel-dots span { width: 6px; height: 6px; border-radius: 99px; background: var(--boo-line); transition: width .2s ease, background .2s ease; }
+.memory-carousel-dots span.is-current { width: 20px; background: var(--boo-sage); }
 .memory-deck-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--boo-muted); font: 600 10px/1.3 var(--boo-mono); }
 .memory-flip-card { appearance: none; width: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; perspective: 1200px; }
 .memory-flip-card__inner { display: grid; min-height: 330px; transform-style: preserve-3d; transition: transform .68s cubic-bezier(.2,.78,.25,1); }
@@ -222,6 +227,11 @@ body[data-theme="dark"] .eyebrow { color: #a9cbb5; }
 .card-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
 .participant-list { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0; }
 .participant { padding: 6px 9px; border-radius: 999px; background: var(--boo-paper-2); font-size: 10px; }
+.club-member-list { display: grid; gap: 7px; }
+.club-member-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 9px 0; border-bottom: 1px solid var(--boo-line); }
+.club-member-row:last-child { border-bottom: 0; }
+.club-member-row > span:nth-child(2) { display: grid; min-width: 0; }
+.club-member-row small { color: var(--boo-muted); font-size: 9px; }
 .friend-search { margin-bottom: 15px; }
 .safety-menu { position: relative; margin-left: auto; }
 .safety-menu summary { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 50%; cursor: pointer; list-style: none; }
@@ -288,6 +298,13 @@ label { font-size: 12px; font-weight: 600; }
 .session-switcher select { max-width: min(45vw,280px); }
 .dictionary-result { padding: 11px 12px; border: 1px solid var(--boo-line); border-radius: 12px; background: var(--boo-paper-2); color: var(--boo-muted); }
 .dictionary-result a { color: var(--boo-sage-dark); }
+.dictionary-result p { margin: 0 0 9px; }
+.dictionary-choices { display: grid; max-height: 260px; gap: 7px; overflow-y: auto; }
+.dictionary-choice { display: grid; gap: 4px; width: 100%; padding: 10px 12px; border: 1px solid var(--boo-line); border-radius: 11px; background: var(--boo-paper); color: var(--boo-ink); cursor: pointer; text-align: left; font: inherit; }
+.dictionary-choice span { color: var(--boo-sage-dark); font: 700 9px/1.2 var(--boo-mono); text-transform: uppercase; letter-spacing: .07em; }
+.dictionary-choice.is-selected { border-color: var(--boo-sage); background: color-mix(in srgb,var(--boo-sage) 9%,var(--boo-paper)); box-shadow: 0 0 0 2px color-mix(in srgb,var(--boo-sage) 15%,transparent); }
+.dictionary-reference-links { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--boo-line); }
+.dictionary-reference-links > span { width: 100%; color: var(--boo-muted); font-size: 10px; }
 .audio-book-fields { padding: 13px; border: 1px solid var(--boo-line); border-radius: 14px; }
 .personal-records { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; margin-bottom: 13px; }
 .personal-records span { display: grid; gap: 2px; padding: 13px; border-radius: 14px; background: var(--boo-paper-2); }
@@ -345,11 +362,43 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
 .timeline-item::before { content: ""; position: absolute; top: 5px; left: -24px; width: 10px; height: 10px; border: 3px solid var(--boo-bg); border-radius: 50%; background: var(--boo-sage); box-shadow: 0 0 0 1px var(--boo-sage); }
 .timeline-item time { color: var(--boo-muted); font-size: 10px; }
 
+.trail-map { position: relative; display: grid; gap: 24px; padding: 8px 0 28px; }
+.trail-map::before { position: absolute; top: 32px; bottom: 50px; left: 25px; width: 3px; border-radius: 99px; background: linear-gradient(var(--boo-navy),var(--boo-sage),var(--boo-ochre)); content: ''; opacity: .45; }
+.trail-book-node { position: relative; display: grid; gap: 8px; padding-left: 0; }
+.trail-book-trunk { position: relative; z-index: 1; display: grid; grid-template-columns: 50px minmax(0,1fr) auto; align-items: center; gap: 12px; width: 100%; padding: 13px 14px 13px 0; border: 1px solid var(--boo-line); border-radius: 18px; background: linear-gradient(120deg,var(--boo-paper),color-mix(in srgb,var(--boo-navy) 5%,var(--boo-paper-2))); color: var(--boo-ink); box-shadow: var(--boo-shadow-navy); cursor: pointer; text-align: left; }
+.trail-book-trunk__mark { display: grid; width: 50px; height: 50px; place-items: center; border-radius: 16px 50% 50% 16px; background: var(--boo-navy); color: var(--boo-paper); font-size: 20px; }
+.trail-book-trunk span:nth-child(2) { display: grid; min-width: 0; gap: 2px; }
+.trail-book-trunk small { color: var(--boo-sage-dark); font: 700 9px/1.2 var(--boo-mono); text-transform: uppercase; letter-spacing: .08em; }
+.trail-book-trunk strong, .trail-book-trunk em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trail-book-trunk strong { font-family: var(--boo-display); font-size: 16px; }
+.trail-book-trunk em { color: var(--boo-muted); font-size: 10px; font-style: normal; }
+.trail-branches { position: relative; display: grid; gap: 8px; margin-left: 25px; padding: 6px 0 0 28px; }
+.trail-branches::before { position: absolute; top: 0; bottom: 18px; left: 0; width: 1px; background: var(--boo-line); content: ''; }
+.trail-branch { position: relative; display: grid; grid-template-columns: 12px minmax(0,1fr); gap: 9px; padding: 10px 12px; border: 1px solid var(--boo-line); border-radius: 14px; background: var(--boo-paper); }
+.trail-branch::before { position: absolute; top: 20px; right: 100%; width: 29px; height: 1px; background: var(--boo-line); content: ''; }
+.trail-branch__bud { width: 10px; height: 10px; margin-top: 3px; border: 2px solid var(--boo-paper); border-radius: 50%; background: var(--boo-sage); box-shadow: 0 0 0 1px var(--boo-sage); }
+.trail-branch--lexique .trail-branch__bud { background: var(--boo-ochre); box-shadow: 0 0 0 1px var(--boo-ochre); }
+.trail-branch--trace .trail-branch__bud { background: var(--boo-navy); box-shadow: 0 0 0 1px var(--boo-navy); }
+.trail-branch__kind { color: var(--boo-sage-dark); font: 700 8px/1.2 var(--boo-mono); text-transform: uppercase; letter-spacing: .08em; }
+.trail-branch h4 { margin: 2px 0; font-size: 12px; line-height: 1.35; }
+.trail-branch time { color: var(--boo-muted); font: 500 9px/1.2 var(--boo-mono); }
+.trail-empty-branch { margin: 0; padding: 9px 12px; border-left: 1px dashed var(--boo-line); color: var(--boo-muted); font-size: 10px; }
+.trail-book-node--landmarks .trail-book-trunk { cursor: default; }
+.trail-book-node--landmarks .trail-book-trunk__mark { background: var(--boo-ochre); }
+
 .lexicon-grid { display: grid; gap: 12px; }
+.lexicon-view { position: relative; }
 .lexicon-card { position: relative; padding: 18px 18px 18px 22px; }
 .lexicon-card::before { content: ""; position: absolute; top: 14px; bottom: 14px; left: 0; width: 4px; border-radius: 999px; background: var(--boo-ochre); }
 .lexicon-card h3 { margin-bottom: 4px; }
 .lexicon-card footer { margin-top: 12px; color: var(--boo-muted); font-size: 10px; }
+.lexicon-kind { display: inline-flex; margin-bottom: 5px; padding: 4px 7px; border-radius: 999px; background: var(--boo-paper-2); color: var(--boo-sage-dark); font: 700 8px/1 var(--boo-mono); text-transform: uppercase; letter-spacing: .07em; }
+.lexicon-filter-fab { position: fixed; z-index: 14; right: max(18px,calc((100vw - 1160px)/2)); bottom: 26px; width: max-content; }
+.lexicon-filter-fab summary { display: flex; align-items: center; gap: 7px; padding: 10px 13px; border: 1px solid color-mix(in srgb,var(--boo-sage) 45%,var(--boo-line)); border-radius: 999px; background: color-mix(in srgb,var(--boo-paper) 94%,transparent); color: var(--boo-sage-dark); box-shadow: var(--boo-shadow-sage); backdrop-filter: blur(10px); cursor: pointer; font-size: 10px; font-weight: 700; list-style: none; }
+.lexicon-filter-fab summary::-webkit-details-marker { display: none; }
+.lexicon-filter-fab__menu { position: absolute; right: 0; bottom: calc(100% + 8px); display: grid; min-width: 150px; gap: 4px; padding: 7px; border: 1px solid var(--boo-line); border-radius: 14px; background: var(--boo-paper); box-shadow: var(--boo-shadow-navy); }
+.lexicon-filter-fab__menu button { padding: 9px 11px; border: 0; border-radius: 9px; background: transparent; color: var(--boo-ink); cursor: pointer; text-align: left; }
+.lexicon-filter-fab__menu button[aria-pressed="true"] { background: color-mix(in srgb,var(--boo-sage) 14%,var(--boo-paper)); color: var(--boo-sage-dark); font-weight: 700; }
 
 .goal-card { padding: 19px; }
 .goal-card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -483,7 +532,7 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
 
 @media (max-width: 559px) {
   html, body { width: 100%; max-width: 100%; overflow-x: hidden; overflow-x: clip; overscroll-behavior-x: none; }
-  body { min-width: 0; touch-action: pan-y pinch-zoom; }
+  body { min-width: 0; touch-action: manipulation; }
   .app-shell, .app-column, .main-view, .topbar, .bottom-nav { width: 100%; max-width: 100%; min-width: 0; overflow-x: clip; }
   .tabs { flex-wrap: wrap; overflow-x: clip; margin-inline: 0; }
   .tab { flex: 1 1 auto; text-align: center; }
@@ -501,6 +550,7 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
   .monthly-report-cta .button, .external-isbn-search .button { width: 100%; }
   .recommendations .section-heading { align-items: stretch; flex-direction: column; }
   .toolbar > .button--primary { width: 100%; }
+  .lexicon-filter-fab { right: 16px; bottom: calc(78px + env(safe-area-inset-bottom)); }
   .session-top { align-items: stretch; flex-direction: column; }
   .session-switcher { align-items: stretch; flex-direction: column; }
   .session-switcher select { width: 100%; max-width: none; }

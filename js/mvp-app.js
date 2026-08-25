@@ -13,18 +13,19 @@
     friendResults: [], friendSearchBusy: false, friendSearchTimer: null,
     catalogRecommendations: [], recommendationsBusy: false, currentRecommendations: [],
     monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
-    selectedLibraryBookId: null, memoryDeckKeys: [], memoryDeckSignature: '', memorySessionTotal: 0, memorySessionComplete: false
+    selectedLibraryBookId: null, memoryDeckKeys: [], memoryDeckSignature: '', memorySessionTotal: 0, memorySessionComplete: false,
+    memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all'
   };
 
   const NAV = [
     { id: 'home', label: 'Accueil', icon: '⌂', href: '#home' },
     { id: 'community', label: 'Communauté', icon: '◎', href: '#community?tab=public' },
-    { id: 'path', label: 'Parcours', icon: '⌁', href: '#path?tab=library' },
+    { id: 'path', label: 'Galerie', icon: '⌁', href: '#path?tab=library' },
     { id: 'profile', label: 'Profil', icon: '◉', href: '#profile' }
   ];
   const TITLES = {
     home: ['Votre espace', 'Accueil'], community: ['Échanges choisis', 'Communauté'],
-    path: ['Votre cheminement', 'Parcours'], profile: ['Identité du lecteur', 'Profil'],
+    path: ['Votre cheminement', 'Galerie'], profile: ['Identité du lecteur', 'Profil'],
     session: ['Mode immersif', 'Session de lecture'], book: ['Dans votre bibliothèque', 'Fiche du livre']
   };
   const STATUS_LABELS = { 'a-lire': 'À lire', 'en-cours': 'En cours', 'en-pause': 'En pause', lu: 'Lu', abandonne: 'Abandonné' };
@@ -117,6 +118,7 @@
     document.addEventListener('click', handleClick);
     document.addEventListener('change', handleChange);
     document.addEventListener('toggle', handleLibraryShelfToggle, true);
+    document.addEventListener('scroll', handleMemoryCarouselScroll, true);
     document.addEventListener('input', handleInput);
     document.addEventListener('submit', handleSubmit);
     document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => {
@@ -161,6 +163,10 @@
       ui.renderedRoute = ui.route;
       checkCelebrations();
       tickSessionClock();
+      requestAnimationFrame(() => {
+        const carousel = document.querySelector('[data-memory-carousel]');
+        if (carousel) carousel.scrollLeft = Math.min(ui.memoryCursor, carousel.children.length - 1) * carousel.clientWidth;
+      });
     };
     const routeChanged = Boolean(previousRoute && previousRoute !== ui.route);
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
@@ -171,6 +177,15 @@
     }
     paint();
     if (shouldFocus) view.focus({ preventScroll: true });
+  }
+
+  function handleMemoryCarouselScroll(event) {
+    const carousel = event.target;
+    if (!(carousel instanceof HTMLElement) || !carousel.matches('[data-memory-carousel]') || !carousel.clientWidth) return;
+    const next = Math.max(0, Math.min(carousel.children.length - 1, Math.round(carousel.scrollLeft / carousel.clientWidth)));
+    if (next === ui.memoryCursor) return;
+    ui.memoryCursor = next;
+    carousel.parentElement?.querySelectorAll('.memory-carousel-dots span').forEach((dot, index) => dot.classList.toggle('is-current', index === next));
   }
 
   function updateHeader() {
@@ -233,7 +248,7 @@
     const inProgress = store.getBooks().filter(book => book.status === 'en-cours' && book.libraryState === 'library');
     const openSessions = store.getActiveSessions();
     const progress = active ? bookProgress(active) : null;
-    const memoryItems = getMemoryItems(), memory = getMemoryDeck(memoryItems), memoryCard = memory[0] || null;
+    const memoryItems = getMemoryItems(), memory = getMemoryDeck(memoryItems);
     const weekPct = pct(goals.week.value, goals.week.target), monthPct = pct(goals.month.value, goals.month.target), yearPct = pct(goals.year.value, goals.year.target);
     return `
       <section class="page-head"><div><p class="eyebrow">Bonjour ${esc(profile.name)}</p><h1>Où en est votre lecture&nbsp;?</h1><p>Un regard calme sur votre régularité, vos livres et ce que vous souhaitez garder.</p></div><span class="privacy-badge">Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</span></section>
@@ -245,7 +260,7 @@
       </section>
 
       <section class="section-block" aria-labelledby="home-goals-title">
-        <div class="section-heading"><h2 id="home-goals-title">Objectifs</h2><a class="text-link" href="#path?tab=goals">Ajuster dans Parcours</a></div>
+        <div class="section-heading"><h2 id="home-goals-title">Objectifs</h2><a class="text-link" href="#path?tab=goals">Ajuster dans Galerie</a></div>
         <div class="goal-grid">
           ${goalMini('Semaine', `${goals.week.value}/${goals.week.target} jours`, weekPct)}
           ${goalMini('Mois', `${goals.month.value}/${goals.month.target} livres`, monthPct)}
@@ -273,9 +288,9 @@
       </section>
 
       <section class="section-block" aria-labelledby="memory-title">
-        <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} dans cette séance</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez d’abord la réponse, puis touchez la carte pour la retourner.</p></div><a class="text-link" href="#path?tab=lexicon">Mon lexique</a></div>
-        <div class="memory-list" aria-label="Cartes de la mémoire active">${memoryCard ? renderMemoryQuiz(memoryCard, ui.memorySessionTotal - memory.length + 1, ui.memorySessionTotal) : renderMemoryComplete()}</div>
-        <p class="memory-reminder small muted">Cinq cartes maximum · rappels adaptés à votre réponse, puis espacés jusqu’à 30 jours.</p>
+        <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} disponible${memory.length > 1 ? 's' : ''}</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez la réponse, touchez une carte pour la retourner ou balayez pour en choisir une autre.</p></div><a class="text-link" href="#path?tab=lexicon">Lexiques</a></div>
+        <div class="memory-list" aria-label="Cartes de la mémoire active">${memory.length ? `<div class="memory-carousel" data-memory-carousel tabindex="0" aria-label="Balayez horizontalement entre les cartes">${memory.map((item, index) => renderMemoryQuiz(item, index + 1, memory.length)).join('')}</div><div class="memory-carousel-dots" aria-hidden="true">${memory.map((_, index) => `<span class="${index === Math.min(ui.memoryCursor, memory.length - 1) ? 'is-current' : ''}"></span>`).join('')}</div>` : renderMemoryComplete()}</div>
+        <p class="memory-reminder small muted">Jusqu’à 10 cartes en même temps · une nouvelle entrée du lexique arrive automatiquement après « Retrouvé ».</p>
       </section>`;
   }
 
@@ -323,7 +338,7 @@
       const aDue = a.nextDueAt ? new Date(a.nextDueAt).getTime() : Number.MAX_SAFE_INTEGER;
       const bDue = b.nextDueAt ? new Date(b.nextDueAt).getTime() : Number.MAX_SAFE_INTEGER;
       return aDue - bDue || new Date(b.date) - new Date(a.date);
-    }).slice(0, 10);
+    });
     const examples = [
       { kind:'Mot à retrouver', question:'Je suis une découverte inattendue et fructueuse faite par hasard, grâce à la curiosité et à l’esprit d’observation. Qui suis-je ?', answer:'Sérendipité', detail:'Une découverte heureuse réalisée alors que l’on cherchait autre chose.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je suis un manuscrit ancien dont le texte visible recouvre une écriture effacée. Qui suis-je ?', answer:'Palimpseste', detail:'Un manuscrit réutilisé après effacement d’un premier texte.', source:'Exemple BOO-P' },
@@ -337,16 +352,18 @@
       { kind:'Mot à retrouver', question:'Je ne peux pas être exprimé avec des mots tant je dépasse le langage. Qui suis-je ?', answer:'Indicible', detail:'Ce qu’on ne peut pas dire ou décrire.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je suis la capacité à se reconstruire après une épreuve. Qui suis-je ?', answer:'Résilience', detail:'La faculté de retrouver un équilibre après un choc ou une difficulté.', source:'Exemple BOO-P' }
     ].map((item,index) => ({ ...item, memoryKey:`example:${index}:${normalize(item.answer)}`, date:new Date(0).toISOString() }));
-    return personal.concat(examples.slice(0, Math.max(0, 10 - personal.length))).slice(0, 10);
+    return personal.concat(examples.slice(0, Math.max(0, 10 - personal.length)));
   }
 
   function getMemoryDeck(items) {
     const signature = items.map(item => item.memoryKey).sort().join('|');
     if (signature !== ui.memoryDeckSignature) {
       ui.memoryDeckSignature = signature;
-      ui.memoryDeckKeys = items.slice(0, 5).map(item => item.memoryKey);
+      ui.memoryDeckKeys = items.slice(0, 10).map(item => item.memoryKey);
       ui.memorySessionTotal = ui.memoryDeckKeys.length;
       ui.memorySessionComplete = false;
+      ui.memoryCursor = 0;
+      ui.memoryCompletedKeys = [];
     }
     const byKey = new Map(items.map(item => [item.memoryKey, item]));
     ui.memoryDeckKeys = ui.memoryDeckKeys.filter(key => byKey.has(key));
@@ -356,7 +373,7 @@
   function renderMemoryQuiz(item, position, total) {
     const label = item.kind === 'Citation à compléter' ? 'Afficher la citation complète' : `Afficher la réponse à la devinette : ${item.question}`;
     return `<article class="memory-card-shell" data-memory-key="${attr(item.memoryKey)}">
-      <div class="memory-deck-status"><span>Carte ${position} sur ${total}</span><span>${total - position + 1} restante${total - position + 1 > 1 ? 's' : ''}</span></div>
+      <div class="memory-deck-status"><span>Carte ${position} sur ${total}</span><span>Balayer ↔</span></div>
       <button class="memory-flip-card" type="button" data-action="flip-memory" data-front-label="${attr(label)}" aria-pressed="false" aria-label="${attr(label)}">
         <span class="memory-flip-card__inner">
           <span class="memory-flip-card__face memory-flip-card__front" aria-hidden="false"><span class="status-chip">${esc(item.kind)}</span><span class="memory-flip-card__question">${esc(item.question)}</span><span class="memory-flip-card__gesture"><span aria-hidden="true">↻</span> Toucher pour retourner</span></span>
@@ -369,7 +386,7 @@
 
   function renderMemoryComplete() {
     if (!ui.memorySessionComplete) return '<div class="memory-complete"><p class="eyebrow">Rien à réviser</p><h3>Votre mémoire est au calme</h3><p>Ajoutez un mot, une expression ou une citation dans votre lexique pour préparer une prochaine carte.</p><a class="button button--secondary" href="#path?tab=lexicon">Ouvrir mon lexique</a></div>';
-    return `<div class="memory-complete"><span class="memory-complete__mark" aria-hidden="true">✓</span><p class="eyebrow">Séance terminée</p><h3>${ui.memorySessionTotal} carte${ui.memorySessionTotal > 1 ? 's' : ''} travaillée${ui.memorySessionTotal > 1 ? 's' : ''}</h3><p>Les prochaines cartes reviendront selon vos réponses, sans surcharger votre journée.</p><button class="button button--secondary" type="button" data-action="restart-memory">Revoir cinq cartes</button></div>`;
+    return `<div class="memory-complete"><span class="memory-complete__mark" aria-hidden="true">✓</span><p class="eyebrow">Séance terminée</p><h3>${ui.memorySessionTotal} carte${ui.memorySessionTotal > 1 ? 's' : ''} travaillée${ui.memorySessionTotal > 1 ? 's' : ''}</h3><p>Les prochaines cartes reviendront selon vos réponses, sans surcharger votre journée.</p><button class="button button--secondary" type="button" data-action="restart-memory">Revoir dix cartes</button></div>`;
   }
 
   function renderSession() {
@@ -450,14 +467,19 @@
 
   function renderClubs() {
     const clubs = store.getCommunity().clubs;
-    return `<div class="section-heading"><div><h2>Clubs</h2><p class="small muted">Les clubs créés sont enregistrés dans Supabase ; adhésions et salons restent simulés.</p></div><button class="button button--primary button--small" type="button" data-action="create-club">Créer un club</button></div>
-      <div class="grid-2">${clubs.map(club => `<article class="card club-card"><span class="club-mark" style="--club-color:${attr(club.color)}"></span><div class="card-content"><div class="button-row"><span class="privacy-badge">${club.visibility === 'private' ? 'Privé' : 'Public'}</span>${club.role ? `<span class="status-chip">${club.role === 'owner' ? 'Propriétaire' : club.role === 'moderator' ? 'Modérateur' : 'Membre'}</span>` : ''}</div><h3>${esc(club.name)}</h3><p class="small muted">${esc(club.description)}</p><p class="small"><strong>Livre actuel :</strong> ${esc(club.bookTitle || 'À choisir')}</p><p class="micro muted">${club.membersCount} membres · ${club.access === 'open' ? 'accès libre' : 'sur approbation'}</p><div class="card-actions"><button class="button ${club.joined ? 'button--secondary' : 'button--sage'} button--small" type="button" data-action="toggle-club" data-id="${attr(club.id)}">${club.joined ? 'Quitter le club' : club.access === 'open' ? 'Rejoindre' : 'Demander à rejoindre'}</button><button class="button button--ghost button--small" type="button" data-action="club-details" data-id="${attr(club.id)}">Voir l’historique</button></div></div></article>`).join('')}</div>`;
+    return `<div class="section-heading"><div><h2>Clubs</h2><p class="small muted">Membres, livre en cours et salons sont maintenant synchronisés avec BOO-P.</p></div><button class="button button--primary button--small" type="button" data-action="create-club">Créer un club</button></div>
+      ${clubs.length ? `<div class="grid-2">${clubs.map(club => {
+        const pending = club.membershipStatus === 'pending';
+        const membershipButton = club.role === 'owner' ? ''
+          : `<button class="button ${club.joined || pending ? 'button--secondary' : 'button--sage'} button--small" type="button" data-action="toggle-club" data-id="${attr(club.id)}" data-current="${Boolean(club.membershipStatus)}">${club.joined ? 'Quitter le club' : pending ? 'Annuler la demande' : club.access === 'open' ? 'Rejoindre' : 'Demander à rejoindre'}</button>`;
+        return `<article class="card club-card"><span class="club-mark" style="--club-color:${attr(club.color)}"></span><div class="card-content"><div class="button-row"><span class="privacy-badge">${club.visibility === 'private' ? 'Privé' : 'Public'}</span>${club.role ? `<span class="status-chip">${club.role === 'owner' ? 'Propriétaire' : club.role === 'moderator' ? 'Modérateur' : 'Membre'}</span>` : pending ? '<span class="status-chip status-chip--warning">Demande en attente</span>' : ''}</div><h3>${esc(club.name)}</h3><p class="small muted">${esc(club.description)}</p><p class="small"><strong>Livre actuel :</strong> ${esc(club.bookTitle || 'À choisir')}</p><p class="micro muted">${club.membersCount} membre${club.membersCount > 1 ? 's' : ''} · ${club.access === 'open' ? 'accès libre' : 'sur approbation'}</p><div class="card-actions">${membershipButton}<button class="button button--ghost button--small" type="button" data-action="club-details" data-id="${attr(club.id)}">${club.role === 'owner' ? 'Gérer le club' : 'Ouvrir le club'}</button></div></div></article>`;
+      }).join('')}</div>` : '<div class="empty-state"><h3>Aucun club accessible</h3><p>Créez un club ou rejoignez un club public lorsque d’autres lecteurs en auront publié.</p></div>'}`;
   }
 
   function renderSalons() {
     const community = store.getCommunity(), salons = community.salons, canCreate = community.clubs.some(club => club.role === 'owner');
-    return `<div class="section-heading"><div><h2>Salons de lecture</h2><p class="small muted">Présence et échanges simulés sur cet appareil.</p></div><div class="button-row">${canCreate ? '<button class="button button--primary button--small" type="button" data-action="create-salon">Créer un salon</button>' : ''}<span class="simulated-badge">Pas de temps réel</span></div></div>
-      <div class="grid-2">${salons.map(salon => `<article class="card salon-card"><div class="card-content"><div class="button-row"><span class="status-chip ${salon.status === 'scheduled' ? 'status-chip--warning' : ''}">${salon.status === 'scheduled' ? 'Programmé' : salon.status === 'live' ? 'En cours' : 'Terminé'}</span><span class="privacy-badge">${esc(salon.clubName)}</span></div><h3>${esc(salon.title)}</h3><p class="small"><strong>${esc(salon.bookTitle)}</strong> · ${formatDateTime(salon.scheduledAt)}</p><div class="participant-list">${salon.participants.map(person => `<span class="participant">${esc(person.name)} · ${salonStatus(person.status)} · ${person.minutes} min</span>`).join('')}</div><p class="micro muted">Progression en pages ${salon.sharePages ? 'partagée avec accord' : 'masquée par défaut'}.</p><div class="card-actions"><button class="button ${salon.joined ? 'button--secondary' : 'button--sage'} button--small" type="button" data-action="toggle-salon" data-id="${attr(salon.id)}">${salon.joined ? (salon.status === 'scheduled' ? 'Inscrit' : 'Ouvrir le salon') : 'Rejoindre'}</button><button class="button button--ghost button--small" type="button" data-action="salon-thread" data-id="${attr(salon.id)}">Discussion · ${salon.messages.length}</button></div></div></article>`).join('')}</div>`;
+    return `<div class="section-heading"><div><h2>Salons de lecture</h2><p class="small muted">Présence, progression choisie et messages enregistrés pour les membres du club.</p></div>${canCreate ? '<button class="button button--primary button--small" type="button" data-action="create-salon">Créer un salon</button>' : ''}</div>
+      ${salons.length ? `<div class="grid-2">${salons.map(salon => `<article class="card salon-card"><div class="card-content"><div class="button-row"><span class="status-chip ${salon.status === 'scheduled' ? 'status-chip--warning' : ''}">${salon.status === 'scheduled' ? 'Programmé' : salon.status === 'live' ? 'En cours' : 'Terminé'}</span><span class="privacy-badge">${esc(salon.clubName)}</span></div><h3>${esc(salon.title)}</h3><p class="small"><strong>${esc(salon.bookTitle || 'Lecture à choisir')}</strong> · ${formatDateTime(salon.scheduledAt)}</p><div class="participant-list">${salon.participants.length ? salon.participants.map(person => `<span class="participant">${esc(person.name)} · ${salonStatus(person.status)}${person.sharePages ? ` · ${person.minutes} min` : ''}</span>`).join('') : '<span class="participant">Aucun participant</span>'}</div><p class="micro muted">Votre progression en pages est ${salon.sharePages ? 'partagée avec votre accord' : 'masquée par défaut'}.</p><div class="card-actions">${salon.joined ? `<button class="button button--secondary button--small" type="button" data-action="salon-thread" data-id="${attr(salon.id)}">Ouvrir · ${salon.messages.length} message${salon.messages.length > 1 ? 's' : ''}</button><button class="button button--ghost button--small" type="button" data-action="leave-salon" data-id="${attr(salon.id)}">Quitter</button>` : `<button class="button button--sage button--small" type="button" data-action="toggle-salon" data-id="${attr(salon.id)}">Rejoindre</button>`}${salon.canManage ? `<button class="button button--ghost button--small" type="button" data-action="edit-salon" data-id="${attr(salon.id)}">Modifier</button>` : ''}</div></div></article>`).join('')}</div>` : '<div class="empty-state"><h3>Aucun salon programmé</h3><p>Le propriétaire d’un club peut préparer la prochaine lecture partagée.</p></div>'}`;
   }
   function salonStatus(status) { return ({ waiting:'en attente', reading:'en lecture', paused:'en pause', finished:'terminé' })[status] || status; }
 
@@ -484,10 +506,10 @@
   }
 
   function renderPath() {
-    const tabs = [['library','Ma bibliothèque'],['trail','Mon sentier'],['lexicon','Mon lexique'],['goals','Objectifs']];
+    const tabs = [['library','Bibliothèque'],['trail','Sentier'],['lexicon','Lexiques'],['goals','Objectifs']];
     const bodies = { library: renderLibrary, trail: renderTrail, lexicon: renderLexicon, goals: renderGoals };
-    return `<section class="page-head"><div><p class="eyebrow">Livres, mémoire et objectifs</p><h1>Parcours</h1><p>Votre cheminement reste modifiable : corrigez une page, un statut ou une ancienne lecture à tout moment.</p></div></section>
-      <nav class="tabs" aria-label="Sections de Parcours">${tabs.map(([id,label]) => `<a class="tab" href="#path?tab=${id}" aria-current="${ui.pathTab === id ? 'page' : 'false'}">${label}</a>`).join('')}</nav>${bodies[ui.pathTab]()}`;
+    return `<section class="page-head"><div><p class="eyebrow">Livres, mémoire et objectifs</p><h1>Galerie</h1><p>Votre cheminement reste modifiable : corrigez une page, un statut ou une ancienne lecture à tout moment.</p></div></section>
+      <nav class="tabs" aria-label="Sections de la Galerie">${tabs.map(([id,label]) => `<a class="tab" href="#path?tab=${id}" aria-current="${ui.pathTab === id ? 'page' : 'false'}">${label}</a>`).join('')}</nav>${bodies[ui.pathTab]()}`;
   }
 
   function renderLibrary() {
@@ -615,14 +637,25 @@
   }
 
   function renderTrail() {
-    const events = store.getTimeline();
-    return `<div class="section-heading"><div><h2>Mon sentier</h2><p class="small muted">Lectures, sessions, Traces, objectifs et circulation du livre.</p></div></div>${events.length ? `<div class="timeline">${events.map(event => `<article class="timeline-item"><time datetime="${attr(event.date)}">${formatDate(event.date)}</time><h3>${esc(event.label)}</h3>${event.bookId ? `<button class="text-link small" type="button" data-action="open-book" data-id="${attr(event.bookId)}">Voir le livre</button>` : ''}</article>`).join('')}</div>` : `<div class="empty-state"><h3>Votre sentier commence ici</h3><p>Démarrez une lecture ou ajoutez une ancienne lecture.</p><a class="button button--primary" href="#path?tab=library">Ma bibliothèque</a></div>`}`;
+    const events = store.getTimeline(), books = store.getBooks().filter(book => book.libraryState === 'library');
+    const groups = books.map(book => {
+      const branches = events.filter(event => event.bookId === book.id);
+      const latest = branches[0]?.date || book.updatedAt || book.addedAt;
+      return { book, branches, latest };
+    }).sort((a,b) => new Date(b.latest) - new Date(a.latest));
+    const freeEvents = events.filter(event => !event.bookId);
+    const branchKind = type => type === 'lexicon' ? 'lexique' : type === 'trace' ? 'trace' : String(type).includes('session') ? 'séance' : String(type).includes('goal') ? 'objectif' : 'étape';
+    const renderBranch = event => `<article class="trail-branch trail-branch--${attr(branchKind(event.type))}"><span class="trail-branch__bud" aria-hidden="true"></span><div><span class="trail-branch__kind">${esc(branchKind(event.type))}</span><h4>${esc(event.label)}</h4><time datetime="${attr(event.date)}">${formatDate(event.date)}</time></div></article>`;
+    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Chaque livre forme une branche principale ; séances, Traces et lexiques deviennent ses ramifications.</p></div></div>${groups.length ? `<div class="trail-map" aria-label="Carte arborescente de vos lectures">${groups.map(({book,branches}) => `<section class="trail-book-node"><button class="trail-book-trunk" type="button" data-action="open-book" data-id="${attr(book.id)}"><span class="trail-book-trunk__mark" aria-hidden="true">▥</span><span><small>${esc(STATUS_LABELS[book.status] || 'Livre')}</small><strong>${esc(book.title)}</strong><em>${esc(book.authors.join(', '))}</em></span><span aria-hidden="true">→</span></button><div class="trail-branches">${branches.length ? branches.slice(0, 12).map(renderBranch).join('') : '<p class="trail-empty-branch">Ce livre attend sa première séance, Trace ou entrée de lexique.</p>'}</div></section>`).join('')}${freeEvents.length ? `<section class="trail-book-node trail-book-node--landmarks"><div class="trail-book-trunk"><span class="trail-book-trunk__mark" aria-hidden="true">◇</span><span><small>Hors livre</small><strong>Repères personnels</strong><em>Objectifs et encouragements</em></span></div><div class="trail-branches">${freeEvents.slice(0, 10).map(renderBranch).join('')}</div></section>` : ''}</div>` : `<div class="empty-state"><h3>Votre sentier commence ici</h3><p>Démarrez une lecture ou ajoutez une ancienne lecture.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
   }
 
   function renderLexicon() {
-    const entries = store.getLexicon().filter(item => normalize(`${item.word} ${item.definition} ${item.bookTitle}`).includes(normalize(ui.lexiconQuery)));
-    return `<div class="toolbar"><label class="search-field" for="lexicon-search"><span aria-hidden="true">⌕</span><input id="lexicon-search" data-input="lexicon-search" type="search" value="${attr(ui.lexiconQuery)}" placeholder="Mot, définition ou livre…"></label><button class="button button--primary" type="button" data-action="add-lexicon">Ajouter une entrée</button></div>
-      ${entries.length ? `<div class="lexicon-grid">${entries.map(item => `<article class="card lexicon-card"><h3>${esc(item.word)}</h3><p>${esc(item.definition)}</p><footer>${item.bookTitle ? `${esc(item.bookTitle)}${item.page ? ` · p. ${item.page}` : ''}` : 'Sans livre associé'} · révisé ${formatDate(item.updatedAt)}</footer><div class="card-actions"><button class="text-link small" type="button" data-action="edit-lexicon" data-id="${attr(item.id)}">Modifier</button><button class="text-link small" type="button" data-action="delete-lexicon" data-id="${attr(item.id)}">Supprimer</button></div></article>`).join('')}</div>` : `<div class="empty-state"><h3>Le mot ne s’est pas encore présenté</h3><p>Ajoutez une explication personnelle ou élargissez la recherche.</p><button class="button button--primary" type="button" data-action="add-lexicon">Ajouter un mot</button></div>`}`;
+    const labels = { all:'Tout', word:'Mots', expression:'Expressions', citation:'Citations' };
+    const entries = store.getLexicon().filter(item => (ui.lexiconKind === 'all' || item.kind === ui.lexiconKind) && normalize(`${item.word} ${item.definition} ${item.bookTitle}`).includes(normalize(ui.lexiconQuery)));
+    return `<section class="lexicon-view"><div class="toolbar"><label class="search-field" for="lexicon-search"><span aria-hidden="true">⌕</span><input id="lexicon-search" data-input="lexicon-search" type="search" value="${attr(ui.lexiconQuery)}" placeholder="Mot, définition ou livre…"></label><button class="button button--primary" type="button" data-action="add-lexicon">Ajouter une entrée</button></div>
+      <p class="micro muted">Filtre actif : ${labels[ui.lexiconKind]} · ${entries.length} résultat${entries.length > 1 ? 's' : ''}</p>
+      ${entries.length ? `<div class="lexicon-grid">${entries.map(item => `<article class="card lexicon-card"><span class="lexicon-kind">${labels[item.kind]}</span><h3>${esc(item.word)}</h3><p>${esc(item.definition)}</p><footer>${item.bookTitle ? `${esc(item.bookTitle)}${item.page ? ` · p. ${item.page}` : ''}` : 'Sans livre associé'} · révisé ${formatDate(item.updatedAt)}</footer><div class="card-actions"><button class="text-link small" type="button" data-action="edit-lexicon" data-id="${attr(item.id)}">Modifier</button><button class="text-link small" type="button" data-action="delete-lexicon" data-id="${attr(item.id)}">Supprimer</button></div></article>`).join('')}</div>` : `<div class="empty-state"><h3>Aucune entrée pour ce filtre</h3><p>Changez de catégorie ou ajoutez une nouvelle entrée.</p><button class="button button--primary" type="button" data-action="add-lexicon">Ajouter une entrée</button></div>`}
+      <details class="lexicon-filter-fab"><summary aria-label="Filtrer le lexique"><span aria-hidden="true">≡</span><span>Filtrer</span></summary><div class="lexicon-filter-fab__menu" role="group" aria-label="Type d’entrée">${Object.entries(labels).map(([kind,label]) => `<button type="button" data-action="lexicon-filter" data-kind="${kind}" aria-pressed="${ui.lexiconKind === kind}">${label}</button>`).join('')}</div></details></section>`;
   }
 
   function renderGoals() {
@@ -795,7 +828,7 @@
 
   function openLexiconDialog(entry = null, bookId = null) {
     const book = store.getBookById(bookId || entry?.bookId);
-    openDialog({ title: entry ? 'Modifier l’entrée' : 'Ajouter au lexique', eyebrow: 'Comprendre puis mémoriser', body: `<form class="form-grid" data-form="lexicon"><input type="hidden" name="id" value="${attr(entry?.id || '')}"><input type="hidden" name="sourceLabel" value="${attr(entry?.sourceLabel || '')}"><input type="hidden" name="sourceUrl" value="${attr(entry?.sourceUrl || '')}"><div class="field-row"><label class="field">Type<select name="kind"><option value="word" ${entry?.kind !== 'expression' && entry?.kind !== 'citation' ? 'selected' : ''}>Mot</option><option value="expression" ${entry?.kind === 'expression' ? 'selected' : ''}>Expression</option><option value="citation" ${entry?.kind === 'citation' ? 'selected' : ''}>Citation</option></select></label><label class="field">Mot, expression ou citation<input name="word" required value="${attr(entry?.word || '')}"></label></div><button class="button button--sage" type="button" data-action="dictionary-lookup">Chercher une explication</button><div class="dictionary-result small" id="dictionary-result" role="status" aria-live="polite">${entry?.sourceLabel ? `Source actuelle : ${esc(entry.sourceLabel)}. Vous pouvez toujours corriger le texte.` : 'Pour un mot, BOO-P consulte le Wiktionnaire. Pour une expression ou une citation, la recherche est élargie.'}</div><label class="field">Définition ou explication modifiable<textarea name="definition" required>${esc(entry?.definition || '')}</textarea></label><label class="field">Livre facultatif<select name="bookId"><option value="">Sans livre</option>${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${(entry?.bookId || book?.id) === item.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><div class="field-row"><label class="field">Auteur<input name="author" value="${attr(entry?.author || book?.authors.join(', ') || '')}"></label><label class="field">${book?.mediaType === 'audio' ? 'Minute' : 'Page'}<input type="number" min="0" name="page" value="${entry?.page || ''}"></label></div><label class="field">Contexte ou note personnelle<textarea name="note">${esc(entry?.note || '')}</textarea></label><p class="small muted">Après l’enregistrement, cette entrée rejoint la Mémoire active avec des rappels adaptés à J+1, J+3, J+7, J+14 et J+30.</p><button class="button button--primary" type="submit">Enregistrer et apprendre</button></form>` });
+    openDialog({ title: entry ? 'Modifier l’entrée' : 'Ajouter au lexique', eyebrow: 'Comprendre puis mémoriser', body: `<form class="form-grid" data-form="lexicon"><input type="hidden" name="id" value="${attr(entry?.id || '')}"><input type="hidden" name="sourceLabel" value="${attr(entry?.sourceLabel || '')}"><input type="hidden" name="sourceUrl" value="${attr(entry?.sourceUrl || '')}"><div class="field-row"><label class="field">Type<select name="kind"><option value="word" ${entry?.kind !== 'expression' && entry?.kind !== 'citation' ? 'selected' : ''}>Mot</option><option value="expression" ${entry?.kind === 'expression' ? 'selected' : ''}>Expression</option><option value="citation" ${entry?.kind === 'citation' ? 'selected' : ''}>Citation</option></select></label><label class="field">Mot, expression ou citation<input name="word" required value="${attr(entry?.word || '')}"></label></div><button class="button button--sage" type="button" data-action="dictionary-lookup">Chercher une explication</button><div class="dictionary-result small" id="dictionary-result" role="status" aria-live="polite">${entry?.sourceLabel ? `Source actuelle : ${esc(entry.sourceLabel)}. Vous pouvez toujours corriger le texte.` : 'BOO-P propose plusieurs sens issus d’une source ouverte, puis prépare les liens exacts vers Le Robert et Larousse.'}</div><label class="field">Définition ou explication modifiable<textarea name="definition" required>${esc(entry?.definition || '')}</textarea></label><label class="field">Livre facultatif<select name="bookId"><option value="">Sans livre</option>${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${(entry?.bookId || book?.id) === item.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><div class="field-row"><label class="field">Auteur<input name="author" value="${attr(entry?.author || book?.authors.join(', ') || '')}"></label><label class="field">${book?.mediaType === 'audio' ? 'Minute' : 'Page'}<input type="number" min="0" name="page" value="${entry?.page || ''}"></label></div><label class="field">Contexte ou note personnelle<textarea name="note">${esc(entry?.note || '')}</textarea></label><p class="small muted">Après l’enregistrement, cette entrée rejoint la Mémoire active avec des rappels adaptés à J+1, J+3, J+7, J+14 et J+30.</p><button class="button button--primary" type="submit">Enregistrer et apprendre</button></form>` });
   }
 
   async function lookupDictionary(button) {
@@ -808,7 +841,9 @@
       form.elements.definition.value = found.definition;
       form.elements.sourceLabel.value = found.sourceLabel;
       form.elements.sourceUrl.value = found.sourceUrl;
-      result.innerHTML = `Proposition issue de <a href="${attr(found.sourceUrl)}" target="_blank" rel="noopener">${esc(found.sourceLabel)}</a>. Relisez-la et adaptez-la au contexte du livre avant d’enregistrer.`;
+      const candidates = (found.candidates || []).map((candidate, index) => `<button class="dictionary-choice ${index === 0 ? 'is-selected' : ''}" type="button" data-action="dictionary-choice" data-definition="${attr(candidate.definition)}" data-source-label="${attr(candidate.sourceLabel)}" data-source-url="${attr(candidate.sourceUrl)}"><span>Sens ${index + 1}</span>${esc(candidate.definition)}</button>`).join('');
+      const references = (found.externalSources || []).map(source => `<a class="button button--ghost button--small" href="${attr(source.url)}" target="_blank" rel="noopener">${esc(source.label)} ↗</a>`).join('');
+      result.innerHTML = `<p><strong>Choisissez le sens qui correspond à votre lecture.</strong> La première proposition reste entièrement modifiable.</p><div class="dictionary-choices">${candidates}</div><p class="micro muted">Propositions issues du <a href="${attr(found.sourceUrl)}" target="_blank" rel="noopener">${esc(found.sourceLabel)}</a>.</p><div class="dictionary-reference-links"><span>Vérifier sans retaper le mot :</span>${references}</div>`;
       form.elements.definition.focus();
     } catch (error) {
       result.textContent = error.message || 'Aucune explication trouvée. Saisissez la vôtre.';
@@ -816,6 +851,15 @@
       form.elements.word.focus();
     }
     finally { button.disabled = false; button.removeAttribute('aria-busy'); }
+  }
+
+  function chooseDictionaryDefinition(trigger) {
+    const form = trigger.closest('form'); if (!form) return;
+    form.elements.definition.value = trigger.dataset.definition || '';
+    form.elements.sourceLabel.value = trigger.dataset.sourceLabel || '';
+    form.elements.sourceUrl.value = trigger.dataset.sourceUrl || '';
+    form.querySelectorAll('.dictionary-choice').forEach(button => button.classList.toggle('is-selected', button === trigger));
+    document.getElementById('live-region').textContent = 'Définition sélectionnée. Vous pouvez encore la modifier.';
   }
 
   function openGoalDialog(period) {
@@ -914,7 +958,7 @@
       case 'dictate-dialog-trace': startDictation(document.getElementById('trace-dialog-text')); break;
       case 'flip-memory': flipMemoryCard(trigger); break;
       case 'memory-rate': reviewMemory(id, trigger.dataset.quality, trigger.dataset.memoryKey); break;
-      case 'restart-memory': ui.memoryDeckSignature = ''; ui.memoryDeckKeys = []; ui.memorySessionComplete = false; render(); break;
+      case 'restart-memory': ui.memoryDeckSignature = ''; ui.memoryDeckKeys = []; ui.memoryCompletedKeys = []; ui.memorySessionComplete = false; ui.memoryCursor = 0; render(); break;
       case 'show-day': showDayDetail(trigger.dataset.day); break;
       case 'show-week-detail': showWeekDetail(); break;
       case 'create-post': openPostDialog(); break;
@@ -929,11 +973,15 @@
       case 'friend': await updateFriendRelation(id, trigger.dataset.mode); break;
       case 'view-user': await openUserDialog(id); break;
       case 'create-club': openClubDialog(); break;
-      case 'toggle-club': store.toggleClub(id); showToast('Participation au club mise à jour localement'); render(); break;
+      case 'toggle-club': await toggleClub(id, trigger.dataset.current === 'true'); break;
       case 'club-details': openClubDetails(id); break;
-      case 'toggle-salon': toggleSalon(id); break;
+      case 'approve-club-member': await approveClubMember(trigger.dataset.clubId, trigger.dataset.userId); break;
+      case 'remove-club-member': await removeClubMember(trigger.dataset.clubId, trigger.dataset.userId); break;
+      case 'toggle-salon': await toggleSalon(id, false); break;
+      case 'leave-salon': await toggleSalon(id, true); break;
       case 'salon-thread': openSalonThread(id); break;
-      case 'create-salon': openSalonCreateDialog(); break;
+      case 'edit-salon': openSalonCreateDialog(store.getCommunity().salons.find(item => item.id === id)); break;
+      case 'create-salon': openSalonCreateDialog(null, trigger.dataset.clubId || null); break;
       case 'select-book': selectLibraryBook(trigger, id); break;
       case 'open-book': location.hash = `#book?id=${encodeURIComponent(id)}`; break;
       case 'add-book': openBookDialog(); break;
@@ -953,6 +1001,8 @@
       case 'edit-lexicon': openLexiconDialog(store.getLexicon().find(item => item.id === id)); break;
       case 'delete-lexicon': if (confirm('Supprimer cette entrée du lexique ?')) { store.deleteLexiconWord(id); showToast('Entrée supprimée'); render(); } break;
       case 'dictionary-lookup': await lookupDictionary(trigger); break;
+      case 'dictionary-choice': chooseDictionaryDefinition(trigger); break;
+      case 'lexicon-filter': ui.lexiconKind = trigger.dataset.kind || 'all'; render(); break;
       case 'edit-goal': openGoalDialog(trigger.dataset.period); break;
       case 'open-monthly-report': openMonthlyReportDialog(); break;
       case 'download-monthly-report': await downloadMonthlyReport(); break;
@@ -994,7 +1044,7 @@
       case 'session-page': { const book = store.getBookById(store.getActiveSession()?.bookId); const total = book?.mediaType === 'audio' ? book?.durationMinutes : book?.totalPages; const value = clamp(control.value, 0, total || 99999); control.value = value; store.updateActiveSession({ endPage: value }); break; }
       case 'isbn-photo-file': void readISBNPhoto(control.files?.[0]); break;
       case 'post-photo': previewPostPhoto(control.files?.[0]); break;
-      case 'salon-pages': store.updateSalon(control.dataset.id, { sharePages: control.checked }); showToast(control.checked ? 'Progression partagée avec votre accord' : 'Progression en pages masquée'); break;
+      case 'salon-pages': void updateSalonSharing(control.dataset.id, control.checked); break;
     }
   }
 
@@ -1026,8 +1076,8 @@
       trace: submitTrace, 'manual-session': submitManualSession, 'isbn-lookup': submitISBNLookup, book: submitBook, lexicon: submitLexicon,
       goal: submitGoal, 'monthly-report':submitMonthlyReport, profile: submitProfile, adn: submitAdn, 'finish-session': submitFinishSession,
       comment: submitComment, privacy: submitPrivacy, 'notification-settings': submitNotificationSettings,
-      post: submitPost, club: submitClub, 'salon-message': submitSalonMessage, reply: submitReply,
-      salon: submitSalon,
+      post: submitPost, club: submitClub, 'club-edit': submitClubEdit, 'club-member': submitClubMember,
+      'salon-message': submitSalonMessage, reply: submitReply, salon: submitSalon, 'salon-edit': submitSalonEdit,
       report: submitReport, help: submitHelp, 'change-password': submitChangePassword, 'delete-account': submitDeleteAccount
     };
     await handlers[kind]?.(form, data);
@@ -1057,8 +1107,17 @@
     const index = ui.memoryDeckKeys.indexOf(memoryKey);
     if (index >= 0) {
       const [key] = ui.memoryDeckKeys.splice(index, 1);
-      if (normalizedQuality === 'retry') ui.memoryDeckKeys.splice(Math.min(2, ui.memoryDeckKeys.length), 0, key);
+      if (normalizedQuality === 'retry') ui.memoryDeckKeys.splice(Math.min(index + 2, ui.memoryDeckKeys.length), 0, key);
+      else {
+        if (!ui.memoryCompletedKeys.includes(key)) ui.memoryCompletedKeys.push(key);
+        if (normalizedQuality === 'recalled') {
+          const queued = new Set([...ui.memoryDeckKeys, ...ui.memoryCompletedKeys]);
+          const next = getMemoryItems().find(item => !queued.has(item.memoryKey));
+          if (next) { ui.memoryDeckKeys.push(next.memoryKey); ui.memorySessionTotal += 1; }
+        }
+      }
     }
+    ui.memoryCursor = Math.max(0, Math.min(index < 0 ? ui.memoryCursor : index, ui.memoryDeckKeys.length - 1));
     ui.memorySessionComplete = ui.memoryDeckKeys.length === 0;
     const messages = {
       retry:'La carte reviendra après deux autres cartes, puis demain.',
@@ -1096,8 +1155,14 @@
   async function refreshCommunity({ quiet = false } = {}) {
     if (!window.BT.community) return;
     try {
-      const posts = await window.BT.community.listPosts();
+      const [posts, clubs] = await Promise.all([
+        window.BT.community.listPosts(),
+        window.BT.community.listClubs()
+      ]);
+      const salons = await window.BT.community.listSalons(clubs);
       store.mergeRemotePosts(posts);
+      store.replaceRemoteClubs(clubs);
+      store.replaceRemoteSalons(salons);
       ui.communityLoaded = true;
       if (ui.route === 'community') render();
     } catch (error) {
@@ -1514,19 +1579,63 @@
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
     try {
       const remote = await window.BT.community.createClub(payload);
-      store.addGroup({ ...payload, id:remote.id, remoteId:remote.id });
+      await refreshCommunity({ quiet:true });
       closeDialog(); showToast('Club enregistré dans BOO-P'); render();
     } catch (error) { submit.disabled = false; showToast(error.message || 'Club non créé'); }
   }
 
-  function submitSalonMessage(form, data) {
-    store.addSalonMessage(form.dataset.salonId, data.get('text')); openSalonThread(form.dataset.salonId); showToast('Message ajouté au salon simulé');
+  async function submitClubEdit(form, data) {
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    try {
+      await window.BT.community.updateClub(form.dataset.clubId, {
+        name:data.get('name'), description:data.get('description'), visibility:data.get('visibility'),
+        access:data.get('access'), bookTitle:String(data.get('customBookTitle') || '').trim() || data.get('bookTitle'),
+        color:data.get('color')
+      });
+      await refreshCommunity({ quiet:true });
+      closeDialog(); showToast('Club modifié'); render();
+    } catch (error) { submit.disabled = false; showToast(error.message || 'Le club ne peut pas être modifié'); }
   }
-  function submitSalon(form, data) {
+
+  async function submitClubMember(form, data) {
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    try {
+      await window.BT.community.addClubMember(form.dataset.clubId, data.get('userId'), data.get('role'));
+      await refreshCommunity({ quiet:true });
+      openClubDetails(form.dataset.clubId); showToast('Membre ajouté au club');
+    } catch (error) { submit.disabled = false; showToast(error.message || 'Le membre ne peut pas être ajouté'); }
+  }
+
+  async function submitSalonMessage(form, data) {
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    try {
+      await window.BT.community.createSalonMessage(form.dataset.salonId, data.get('text'));
+      await refreshCommunity({ quiet:true });
+      openSalonThread(form.dataset.salonId); showToast('Message envoyé');
+    } catch (error) { submit.disabled = false; showToast(error.message || 'Le message ne peut pas être envoyé'); }
+  }
+
+  async function submitSalon(form, data) {
     const club = store.getCommunity().clubs.find(item => item.id === data.get('clubId'));
     if (!club || club.role !== 'owner') { showToast('Seul le propriétaire du club peut créer un salon'); return; }
-    store.addSalon({ clubId:club.id, clubName:club.name, title:data.get('title'), bookTitle:data.get('bookTitle'), scheduledAt:new Date(data.get('scheduledAt')).toISOString() });
-    closeDialog(); showToast('Salon programmé localement'); render();
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    try {
+      await window.BT.community.createSalon({ clubId:club.id, title:data.get('title'), bookTitle:data.get('bookTitle'), scheduledAt:new Date(data.get('scheduledAt')).toISOString() });
+      await refreshCommunity({ quiet:true });
+      closeDialog(); showToast('Salon programmé'); render();
+    } catch (error) { submit.disabled = false; showToast(error.message || 'Le salon ne peut pas être créé'); }
+  }
+
+  async function submitSalonEdit(form, data) {
+    const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+    try {
+      await window.BT.community.updateSalon(form.dataset.salonId, {
+        title:data.get('title'), bookTitle:data.get('bookTitle'),
+        scheduledAt:new Date(data.get('scheduledAt')).toISOString(), status:data.get('status')
+      });
+      await refreshCommunity({ quiet:true });
+      closeDialog(); showToast('Salon modifié'); render();
+    } catch (error) { submit.disabled = false; showToast(error.message || 'Le salon ne peut pas être modifié'); }
   }
   async function submitReply(form, data) {
     const post = store.getCommunity().posts.find(item => item.id === form.dataset.postId);
@@ -1577,26 +1686,81 @@
     openDialog({ title:user.name, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2><p class="muted">${esc(user.handle || '')}</p></div></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'Ce lecteur n’a pas encore rédigé de biographie.')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<p class="small muted">L’adresse e-mail et les lectures privées ne sont jamais affichées dans la recherche.</p>${friendAction(user)}` });
   }
   function openClubDialog() {
-    openDialog({ title:'Créer un club', eyebrow:'Club enregistré dans BOO-P', body:`<form class="form-grid" data-form="club"><label class="field">Nom<input name="name" required maxlength="80"></label><label class="field">Description<textarea name="description" required maxlength="1200"></textarea></label><label class="field">Couverture<select name="color"><option value="#6f927c">Sauge proposée</option><option value="#cf873d">Ocre proposée</option></select><span class="field-help">Deux couvertures graphiques sont proposées pour ce prototype.</span></label><div class="field-row"><label class="field">Visibilité<select name="visibility"><option value="private">Privé</option><option value="public">Public</option></select></label><label class="field">Accès public<select name="access"><option value="approval">Sur approbation</option><option value="open">Accès libre</option></select></label></div><label class="field">Livre de ma bibliothèque<select name="bookTitle"><option value="">À choisir plus tard</option>${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Ou un autre livre<input name="customBookTitle" maxlength="240" placeholder="Titre absent de ma bibliothèque"><span class="field-help">BOO-P vous proposera de l’ajouter automatiquement à votre bibliothèque.</span></label><p class="small muted">Le club est enregistré dans la base ; invitations, adhésions et présence en direct restent simulées.</p><button class="button button--primary" type="submit">Créer le club</button></form>` });
+    openDialog({ title:'Créer un club', eyebrow:'Espace partagé et privé par défaut', body:`<form class="form-grid" data-form="club"><label class="field">Nom<input name="name" required maxlength="80"></label><label class="field">Description<textarea name="description" required maxlength="1200"></textarea></label><label class="field">Couverture<select name="color"><option value="#6f927c">Sauge</option><option value="#cf873d">Ocre</option></select></label><div class="field-row"><label class="field">Visibilité<select name="visibility"><option value="private">Privé</option><option value="public">Public</option></select></label><label class="field">Accès public<select name="access"><option value="approval">Sur approbation</option><option value="open">Accès libre</option></select></label></div><label class="field">Livre de ma bibliothèque<select name="bookTitle"><option value="">À choisir plus tard</option>${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Ou un autre livre<input name="customBookTitle" maxlength="240" placeholder="Titre absent de ma bibliothèque"><span class="field-help">BOO-P vous proposera de l’ajouter automatiquement à votre bibliothèque.</span></label><p class="small muted">Après la création, vous pourrez ajouter des membres, modifier le livre et programmer des salons.</p><button class="button button--primary" type="submit">Créer le club</button></form>` });
   }
   function openClubDetails(id) {
     const club = store.getCommunity().clubs.find(item => item.id === id); if (!club) return;
-    openDialog({ title:club.name, eyebrow:'Historique du club', body:`<p>${esc(club.description)}</p><div class="history-list"><div class="history-item"><span class="history-item__icon">▥</span><div class="history-item__content"><strong>${esc(club.bookTitle || 'Lecture à choisir')}</strong><span class="small muted">Livre en cours</span></div></div><div class="history-item"><span class="history-item__icon">✓</span><div class="history-item__content"><strong>Les Justes</strong><span class="small muted">Lecture précédente · exemple fictif</span></div></div></div><p class="small muted">Seul le propriétaire peut créer un salon dans cette version.</p>` });
+    const manager = club.role === 'owner';
+    const books = store.getBooks(), bookTitles = new Set(books.map(book => book.title));
+    const bookOptions = `<option value="">À choisir</option>${books.map(book => `<option value="${attr(book.title)}" ${book.title === club.bookTitle ? 'selected' : ''}>${esc(book.title)}</option>`).join('')}`;
+    const members = (club.members || []).sort((a,b) => (a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : a.name.localeCompare(b.name, 'fr')));
+    const memberIds = new Set(members.map(member => member.userId));
+    const candidates = store.getCommunity().users.filter(user => user.isRemote && !memberIds.has(user.id));
+    const memberAction = member => !manager || member.role === 'owner' ? '' : member.status === 'pending'
+      ? `<span class="button-row"><button class="text-link small" type="button" data-action="approve-club-member" data-club-id="${attr(club.id)}" data-user-id="${attr(member.userId)}">Accepter</button><button class="text-link small" type="button" data-action="remove-club-member" data-club-id="${attr(club.id)}" data-user-id="${attr(member.userId)}">Refuser</button></span>`
+      : `<button class="text-link small" type="button" data-action="remove-club-member" data-club-id="${attr(club.id)}" data-user-id="${attr(member.userId)}">Retirer</button>`;
+    const memberList = `<div class="club-member-list">${members.map(member => `<div class="club-member-row"><span class="avatar">${esc(initials(member.name))}</span><span><strong>${esc(member.name)}</strong><small>${member.role === 'owner' ? 'Propriétaire' : member.role === 'moderator' ? 'Modérateur' : member.status === 'pending' ? 'Demande en attente' : 'Membre'}</small></span>${memberAction(member)}</div>`).join('')}</div>`;
+    const managerPanel = manager ? `<details class="setting-card" open><summary>Modifier le club</summary><div class="setting-card__body"><form class="form-grid" data-form="club-edit" data-club-id="${attr(club.id)}"><label class="field">Nom<input name="name" required maxlength="80" value="${attr(club.name)}"></label><label class="field">Description<textarea name="description" maxlength="1200">${esc(club.description)}</textarea></label><div class="field-row"><label class="field">Visibilité<select name="visibility"><option value="private" ${club.visibility === 'private' ? 'selected' : ''}>Privé</option><option value="public" ${club.visibility === 'public' ? 'selected' : ''}>Public</option></select></label><label class="field">Accès<select name="access"><option value="approval" ${club.access === 'approval' ? 'selected' : ''}>Sur approbation</option><option value="open" ${club.access === 'open' ? 'selected' : ''}>Libre</option></select></label></div><label class="field">Livre actuel<select name="bookTitle">${bookOptions}</select></label><label class="field">Autre titre<input name="customBookTitle" maxlength="240" value="${bookTitles.has(club.bookTitle) ? '' : attr(club.bookTitle || '')}"></label><label class="field">Couleur<select name="color"><option value="#6f927c" ${club.color === '#6f927c' ? 'selected' : ''}>Sauge</option><option value="#cf873d" ${club.color === '#cf873d' ? 'selected' : ''}>Ocre</option></select></label><button class="button button--primary" type="submit">Enregistrer les modifications</button></form></div></details>${candidates.length ? `<details class="setting-card"><summary>Ajouter un membre</summary><div class="setting-card__body"><form class="form-grid" data-form="club-member" data-club-id="${attr(club.id)}"><label class="field">Lecteur<select name="userId">${candidates.map(user => `<option value="${attr(user.id)}">${esc(user.name)} ${esc(user.handle || '')}</option>`).join('')}</select></label><label class="field">Rôle<select name="role"><option value="member">Membre</option><option value="moderator">Modérateur</option></select></label><button class="button button--sage" type="submit">Ajouter au club</button></form></div></details>` : '<p class="small muted">Tous les lecteurs actuellement disponibles sont déjà membres.</p>'}` : '';
+    openDialog({ title:club.name, eyebrow:`${club.visibility === 'private' ? 'Club privé' : 'Club public'} · ${club.membersCount} membre${club.membersCount > 1 ? 's' : ''}`, body:`<p>${esc(club.description)}</p><div class="history-item"><span class="history-item__icon">▥</span><div class="history-item__content"><strong>${esc(club.bookTitle || 'Lecture à choisir')}</strong><span class="small muted">Livre en cours</span></div></div><section class="section-block"><h3>Membres</h3>${memberList}</section>${managerPanel}${club.role === 'owner' ? `<button class="button button--secondary section-block" type="button" data-action="create-salon" data-club-id="${attr(club.id)}">Créer un salon pour ce club</button>` : ''}` });
   }
-  function toggleSalon(id) {
+
+  async function toggleClub(id, currentMembership) {
+    try {
+      const result = await window.BT.community.toggleClubMembership(id, currentMembership);
+      await refreshCommunity({ quiet:true });
+      showToast(result.status === 'pending' ? 'Demande envoyée au propriétaire' : result.joined ? 'Club rejoint' : 'Participation au club annulée');
+      render();
+    } catch (error) { showToast(error.message || 'La participation ne peut pas être modifiée'); }
+  }
+
+  async function removeClubMember(clubId, userId) {
+    if (!confirm('Retirer ce membre du club ?')) return;
+    try {
+      await window.BT.community.removeClubMember(clubId, userId);
+      await refreshCommunity({ quiet:true });
+      openClubDetails(clubId); showToast('Membre retiré');
+    } catch (error) { showToast(error.message || 'Ce membre ne peut pas être retiré'); }
+  }
+
+  async function approveClubMember(clubId, userId) {
+    try {
+      await window.BT.community.addClubMember(clubId, userId, 'member');
+      await refreshCommunity({ quiet:true });
+      openClubDetails(clubId); showToast('Demande acceptée');
+    } catch (error) { showToast(error.message || 'Cette demande ne peut pas être acceptée'); }
+  }
+
+  async function toggleSalon(id, leave = false) {
     const salon = store.getCommunity().salons.find(item => item.id === id); if (!salon) return;
-    if (!salon.joined) { store.updateSalon(id,{ joined:true, myStatus:'waiting' }); showToast('Inscription au salon simulée'); render(); }
-    else openSalonThread(id);
+    if (leave && !confirm('Quitter ce salon de lecture ?')) return;
+    try {
+      await window.BT.community.toggleSalonMembership(id, leave || salon.joined);
+      await refreshCommunity({ quiet:true });
+      showToast(leave ? 'Salon quitté' : 'Salon rejoint');
+      render();
+    } catch (error) { showToast(error.message || 'Le salon ne peut pas être mis à jour'); }
+  }
+
+  async function updateSalonSharing(id, checked) {
+    try {
+      await window.BT.community.updateSalonPresence(id, { sharePages:checked });
+      await refreshCommunity({ quiet:true });
+      showToast(checked ? 'Progression partagée avec votre accord' : 'Progression en pages masquée');
+      openSalonThread(id);
+    } catch (error) { showToast(error.message || 'Ce réglage ne peut pas être modifié'); }
   }
   function openSalonThread(id) {
     const salon = store.getCommunity().salons.find(item => item.id === id); if (!salon) return;
-    openDialog({ title:salon.title, eyebrow:`${salon.clubName} · salon simulé`, body:`<div class="button-row"><span class="status-chip">${salonStatus(salon.myStatus)}</span><label class="checkbox-row"><input type="checkbox" data-change="salon-pages" data-id="${attr(id)}" ${salon.sharePages ? 'checked' : ''}> Partager ma progression en pages</label></div><div class="comments section-block">${salon.messages.map(message => `<div class="comment"><strong>${esc(message.authorName)}</strong><p>${esc(message.text)}</p><span class="micro muted">${relativeDate(message.date)}</span></div>`).join('') || '<p class="small muted">Aucun message.</p>'}</div><form class="inline-form section-block" data-form="salon-message" data-salon-id="${attr(id)}"><label class="sr-only" for="salon-message">Message</label><input id="salon-message" name="text" required maxlength="500" placeholder="Écrire dans le salon…"><button class="button button--sage button--small" type="submit">Envoyer</button></form><p class="small muted">Les temps individuels et présences sont des données fictives ; aucune synchronisation réelle.</p>` });
+    openDialog({ title:salon.title, eyebrow:`${salon.clubName} · ${salon.status === 'live' ? 'en cours' : salon.status === 'closed' ? 'terminé' : 'programmé'}`, body:`<div class="button-row"><span class="status-chip">${salonStatus(salon.myStatus)}</span><label class="checkbox-row"><input type="checkbox" data-change="salon-pages" data-id="${attr(id)}" ${salon.sharePages ? 'checked' : ''}> Partager ma progression en pages</label></div><div class="participant-list section-block">${salon.participants.map(person => `<span class="participant">${esc(person.name)} · ${salonStatus(person.status)}${person.sharePages ? ` · ${person.minutes} min` : ''}</span>`).join('')}</div><div class="comments section-block">${salon.messages.map(message => `<div class="comment"><strong>${esc(message.authorName)}</strong><p>${esc(message.text)}</p><span class="micro muted">${relativeDate(message.date)}</span></div>`).join('') || '<p class="small muted">Aucun message. Ouvrez la discussion.</p>'}</div><form class="inline-form section-block" data-form="salon-message" data-salon-id="${attr(id)}"><label class="sr-only" for="salon-message">Message</label><input id="salon-message" name="text" required maxlength="500" placeholder="Écrire dans le salon…"><button class="button button--sage button--small" type="submit">Envoyer</button></form><p class="small muted">Seuls les membres actifs du club peuvent lire et publier ici.</p>` });
   }
-  function openSalonCreateDialog() {
+  function openSalonCreateDialog(salon = null, preferredClubId = null) {
     const clubs = store.getCommunity().clubs.filter(club => club.role === 'owner');
     if (!clubs.length) { showToast('Créez d’abord un club dont vous êtes propriétaire'); return; }
-    const defaultDate = new Date(Date.now() + 86400000); defaultDate.setMinutes(defaultDate.getMinutes() - defaultDate.getTimezoneOffset());
-    openDialog({ title:'Créer un salon', eyebrow:'Réservé au propriétaire du club', body:`<form class="form-grid" data-form="salon"><label class="field">Club<select name="clubId">${clubs.map(club => `<option value="${attr(club.id)}">${esc(club.name)}</option>`).join('')}</select></label><label class="field">Nom du salon<input name="title" required></label><label class="field">Livre<select name="bookTitle">${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Date et heure<input type="datetime-local" name="scheduledAt" required value="${defaultDate.toISOString().slice(0,16)}"></label><p class="small muted">Invitations, rappels et présence sont simulés localement.</p><button class="button button--primary" type="submit">Programmer le salon</button></form>` });
+    const defaultDate = new Date(salon?.scheduledAt || Date.now() + 86400000); defaultDate.setMinutes(defaultDate.getMinutes() - defaultDate.getTimezoneOffset());
+    const club = salon ? clubs.find(item => item.id === salon.clubId) : clubs.find(item => item.id === preferredClubId) || clubs[0];
+    const books = store.getBooks(), bookOptions = books.map(book => `<option value="${attr(book.title)}" ${book.title === (salon?.bookTitle || club?.bookTitle) ? 'selected' : ''}>${esc(book.title)}</option>`).join('');
+    const editing = Boolean(salon);
+    openDialog({ title:editing ? 'Modifier le salon' : 'Créer un salon', eyebrow:'Réservé au propriétaire du club', body:`<form class="form-grid" data-form="${editing ? 'salon-edit' : 'salon'}" ${editing ? `data-salon-id="${attr(salon.id)}"` : ''}><label class="field">Club<select name="clubId" ${editing ? 'disabled' : ''}>${clubs.map(item => `<option value="${attr(item.id)}" ${item.id === club?.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></label><label class="field">Nom du salon<input name="title" required maxlength="120" value="${attr(salon?.title || '')}"></label><label class="field">Livre<select name="bookTitle">${bookOptions}</select></label><label class="field">Date et heure<input type="datetime-local" name="scheduledAt" required value="${defaultDate.toISOString().slice(0,16)}"></label>${editing ? `<label class="field">État<select name="status"><option value="scheduled" ${salon.status === 'scheduled' ? 'selected' : ''}>Programmé</option><option value="live" ${salon.status === 'live' ? 'selected' : ''}>En cours</option><option value="closed" ${salon.status === 'closed' ? 'selected' : ''}>Terminé</option></select></label>` : ''}<p class="small muted">Le salon et ses messages sont accessibles uniquement aux membres actifs du club.</p><button class="button button--primary" type="submit">${editing ? 'Enregistrer' : 'Programmer le salon'}</button></form>` });
   }
 
   function openHelpDialog() {
