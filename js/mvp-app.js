@@ -15,7 +15,7 @@
     monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
     selectedLibraryBookId: null, memoryDeckKeys: [], memoryDeckSignature: '', memorySessionTotal: 0, memorySessionComplete: false,
     memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all',
-    expandedTrailBooks: new Set(), trailYear: 'all', trailStatus: 'all', clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map(),
+    expandedTrailBooks: new Set(), trailYear: 'all', trailStatus: 'all', trailScale: .72, trailViewCenter: null, clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map(),
     syncReady: false, syncBusy: false, syncPending: false, syncTimer: null, syncUnsubscribe: null, syncBootstrapping: false, syncErrorShown: false
   };
 
@@ -100,7 +100,7 @@
     ui.params = new URLSearchParams(query);
     if (ui.route === 'community') ui.communityTab = ['public','clubs','salons','friends'].includes(ui.params.get('tab')) ? ui.params.get('tab') : 'public';
     if (ui.route === 'path') ui.pathTab = ['library','trail','lexicon'].includes(ui.params.get('tab')) ? ui.params.get('tab') : 'library';
-    if (ui.route === 'profile') ui.profileTab = ['overview','goals'].includes(ui.params.get('tab')) ? ui.params.get('tab') : 'overview';
+    if (ui.route === 'profile') ui.profileTab = 'overview';
   }
 
   function init() {
@@ -247,6 +247,8 @@
         const carousel = document.querySelector('[data-memory-carousel]');
         if (carousel) carousel.scrollLeft = Math.min(ui.memoryCursor, carousel.children.length - 1) * carousel.clientWidth;
         if (ui.route === 'club') loadClubSpace(ui.params.get('id'));
+        if (ui.route === 'path' && ui.pathTab === 'trail') restoreTrailViewport();
+        if (ui.route === 'profile' && (ui.params.get('section') === 'goals' || ui.params.get('tab') === 'goals')) document.getElementById('profile-goals')?.scrollIntoView({ behavior:'smooth', block:'start' });
       });
     };
     const routeChanged = Boolean(previousRoute && previousRoute !== ui.route);
@@ -267,6 +269,58 @@
     if (next === ui.memoryCursor) return;
     ui.memoryCursor = next;
     carousel.parentElement?.querySelectorAll('.memory-carousel-dots span').forEach((dot, index) => dot.classList.toggle('is-current', index === next));
+  }
+
+  function trailViewportElements() {
+    const shell = document.querySelector('[data-trail-shell]');
+    const stage = shell?.querySelector('[data-trail-stage]');
+    const canvas = shell?.querySelector('[data-trail-canvas]');
+    return { shell, stage, canvas };
+  }
+
+  function rememberTrailViewport() {
+    const { shell, canvas } = trailViewportElements();
+    if (!shell || !canvas) return ui.trailViewCenter;
+    const scale = Number(canvas.dataset.scale) || ui.trailScale || 1;
+    ui.trailViewCenter = {
+      x:(shell.scrollLeft + shell.clientWidth / 2) / scale,
+      y:(shell.scrollTop + shell.clientHeight / 2) / scale
+    };
+    return ui.trailViewCenter;
+  }
+
+  function setTrailZoom(value, { center = null, announce = true } = {}) {
+    const { shell, stage, canvas } = trailViewportElements();
+    if (!shell || !stage || !canvas) return;
+    const width = Number(canvas.dataset.width) || canvas.offsetWidth;
+    const height = Number(canvas.dataset.height) || canvas.offsetHeight;
+    const previousScale = Number(canvas.dataset.scale) || ui.trailScale || 1;
+    const focus = center || ui.trailViewCenter || {
+      x:(shell.scrollLeft + shell.clientWidth / 2) / previousScale,
+      y:(shell.scrollTop + shell.clientHeight / 2) / previousScale
+    };
+    const fitScale = Math.min((shell.clientWidth - 28) / width, (shell.clientHeight - 28) / height, 1);
+    const nextScale = Math.max(.12, Math.min(1.6, value === 'fit' ? fitScale : Number(value) || previousScale));
+    ui.trailScale = Math.round(nextScale * 100) / 100;
+    ui.trailViewCenter = value === 'fit' ? { x:width / 2, y:height / 2 } : focus;
+    canvas.dataset.scale = String(ui.trailScale);
+    canvas.style.transform = `scale(${ui.trailScale})`;
+    stage.style.width = `${Math.round(width * ui.trailScale)}px`;
+    stage.style.height = `${Math.round(height * ui.trailScale)}px`;
+    stage.classList.toggle('is-fitted', value === 'fit');
+    const output = document.querySelector('[data-trail-zoom-value]');
+    if (output) output.textContent = `${Math.round(ui.trailScale * 100)} %`;
+    requestAnimationFrame(() => {
+      shell.scrollLeft = Math.max(0, ui.trailViewCenter.x * ui.trailScale - shell.clientWidth / 2);
+      shell.scrollTop = Math.max(0, ui.trailViewCenter.y * ui.trailScale - shell.clientHeight / 2);
+    });
+    if (announce) document.getElementById('live-region').textContent = value === 'fit' ? 'Toute la carte est maintenant visible.' : `Zoom du Sentier : ${Math.round(ui.trailScale * 100)} pour cent.`;
+  }
+
+  function restoreTrailViewport() {
+    const { shell } = trailViewportElements(); if (!shell) return;
+    const root = { x:Number(shell.dataset.rootX), y:Number(shell.dataset.rootY) };
+    setTrailZoom(ui.trailScale, { center:ui.trailViewCenter || root, announce:false });
   }
 
   function updateHeader() {
@@ -343,7 +397,7 @@
       </section>
 
       <section class="section-block" aria-labelledby="home-goals-title">
-        <div class="section-heading"><h2 id="home-goals-title">Objectifs</h2><a class="text-link" href="#profile?tab=goals">Ajuster dans Profil</a></div>
+        <div class="section-heading"><h2 id="home-goals-title">Objectifs</h2><a class="text-link" href="#profile?section=goals">Ajuster dans Profil</a></div>
         <div class="goal-grid">
           ${goalMini('Semaine', `${goals.week.value}/${goals.week.target} jours`, weekPct)}
           ${goalMini('Mois', goalStatusText(goals.month), goals.month)}
@@ -381,7 +435,7 @@
   function goalMini(label, value, progress) {
     const mixed = typeof progress === 'object';
     const green = mixed ? progress.greenPct : progress, orange = mixed ? progress.orangePct : 0, total = Math.min(100, green + orange);
-    return `<a class="goal-mini" href="#profile?tab=goals" aria-label="${label}, ${value}"><span class="progress-ring ${mixed ? 'progress-ring--mixed' : ''}" style="--pct:${green};--green-pct:${green};--orange-pct:${orange};--total-pct:${total}"><span>${total}%</span></span><span><strong>${label}</strong><small>${value}</small></span></a>`;
+    return `<a class="goal-mini" href="#profile?section=goals" aria-label="${label}, ${value}"><span class="progress-ring ${mixed ? 'progress-ring--mixed' : ''}" style="--pct:${green};--green-pct:${green};--orange-pct:${orange};--total-pct:${total}"><span>${total}%</span></span><span><strong>${label}</strong><small>${value}</small></span></a>`;
   }
 
   function goalStatusText(progress) {
@@ -814,37 +868,44 @@
       const matchesYear = ui.trailYear === 'all' || new Date(activityDate(book)).getFullYear() === Number(ui.trailYear);
       return matchesYear && (ui.trailStatus === 'all' || book.status === ui.trailStatus);
     }).sort((a,b) => (new Date(activityDate(b)) - new Date(activityDate(a))) || a.title.localeCompare(b.title, 'fr'));
+    const palette = window.BT.trailMindmap?.colors || ['#d45a94','#12a9cf','#ef7a2d','#4455b8','#27a26d','#d9a116'];
+    const grouped = new Map();
+    books.forEach(book => {
+      const genre = String(book.genre || book.genres?.[0] || 'À classer').trim() || 'À classer';
+      if (!grouped.has(genre)) grouped.set(genre, []);
+      grouped.get(genre).push(book);
+    });
+    const genreGroups = [...grouped.entries()].sort(([a],[b]) => a.localeCompare(b, 'fr')).map(([name, genreBooks], index) => ({ id:`genre-${recommendationHash(name)}`, name, color:palette[index % palette.length], books:genreBooks }));
     const lexicon = store.getLexicon(), traces = store.getTraces(), posts = store.getCommunity().posts;
-    const layout = window.BT.trailMindmap?.layout?.(books, ui.expandedTrailBooks) || { width:900, height:660, root:{ x:105, y:330 }, nodes:[] };
+    const layout = window.BT.trailMindmap?.layout?.(genreGroups, ui.expandedTrailBooks) || { width:2360, height:920, root:{ x:1180, y:460 }, genres:[], nodes:[] };
     const details = new Map(books.map(book => {
       const bookLexicon = lexicon.filter(item => item.bookId === book.id);
       const bookTraces = traces.filter(item => item.bookId === book.id);
+      const sessionNotes = store.getSessionsForBook(book.id).filter(session => String(session.note || '').trim());
       const bookPosts = posts.filter(post => normalize(post.bookTitle) === normalize(book.title));
-      const comments = bookPosts.flatMap(post => post.comments || []);
-      const encouragements = bookPosts.reduce((sum, post) => sum + (Number(post.encouragements) || 0), 0);
+      const comments = bookPosts.flatMap(post => (post.comments || []).flatMap(comment => [comment, ...(comment.replies || [])]));
+      const notesCount = bookTraces.length + sessionNotes.length;
       return [book.id, [
         { kind:'lexicon', icon:'Aa', title:'Lexiques', count:bookLexicon.length, preview:bookLexicon[0] ? `${bookLexicon[0].word} · ${bookLexicon[0].definition}` : 'Aucun lexique lié' },
-        { kind:'trace', icon:'✦', title:'Traces', count:bookTraces.length, preview:bookTraces[0]?.text || 'Aucune Trace personnelle' },
-        { kind:'encouragement', icon:'♡', title:'Encouragements', count:encouragements, preview:encouragements ? `${encouragements} geste${encouragements > 1 ? 's' : ''} sur ${bookPosts.length} partage${bookPosts.length > 1 ? 's' : ''}` : 'Aucun encouragement' },
-        { kind:'interaction', icon:'☍', title:'Interactions', count:comments.length, preview:comments[0] ? `${comments[0].authorName || 'Lecteur BOO-P'} · ${comments[0].text}` : 'Aucune interaction' }
+        { kind:'comment', icon:'☍', title:'Commentaires', count:comments.length, preview:comments[0] ? `${comments[0].authorName || 'Lecteur BOO-P'} · ${comments[0].text}` : 'Aucun commentaire' },
+        { kind:'note', icon:'✦', title:'Notes & Traces', count:notesCount, preview:bookTraces[0]?.text || sessionNotes[0]?.note || 'Aucune note personnelle' }
       ]];
     }));
-    const paths = layout.nodes.map(node => {
-      const book = books.find(item => item.id === node.id);
-      return `<path class="trail-canvas-link trail-canvas-link--${attr(book?.status || 'a-lire')}" d="${attr(node.path)}"></path>${node.branches.map(branch => `<path class="trail-canvas-link trail-canvas-link--branch" d="${attr(branch.path)}"></path>`).join('')}`;
-    }).join('');
-    const nodes = layout.nodes.map(node => {
+    const paths = layout.genres.map(genre => `<path class="trail-canvas-link trail-canvas-link--genre" style="--trail-branch-color:${attr(genre.color)}" d="${attr(genre.path)}"></path>${genre.books.map(node => `<path class="trail-canvas-link trail-canvas-link--book" style="--trail-branch-color:${attr(genre.color)}" d="${attr(node.path)}"></path>${node.branches.map(branch => `<path class="trail-canvas-link trail-canvas-link--detail" style="--trail-branch-color:${attr(genre.color)}" d="${attr(branch.path)}"></path>`).join('')}`).join('')}`).join('');
+    const genreNodes = layout.genres.map(genre => `<article class="trail-genre-node trail-genre-node--${genre.side}" style="--x:${genre.x}px;--y:${genre.y}px;--trail-branch-color:${attr(genre.color)}"><span aria-hidden="true">${genre.books.length > 3 ? '✺' : '✦'}</span><strong>${esc(genre.name)}</strong><small>${genre.books.length} livre${genre.books.length > 1 ? 's' : ''}</small></article>`).join('');
+    const bookNodes = layout.nodes.map(node => {
       const book = books.find(item => item.id === node.id); if (!book) return '';
       const expanded = ui.expandedTrailBooks.has(book.id), branches = details.get(book.id) || [];
       const date = activityDate(book), dateLabel = book.status === 'lu' ? 'Terminé' : book.startedAt ? 'Commencé' : 'Ajouté';
       const satellites = expanded ? node.branches.map((branch,index) => {
         const item = branches[index];
-        return `<article class="trail-satellite trail-satellite--${item.kind}" style="--x:${branch.x}px;--y:${branch.y}px"><span class="trail-satellite__icon" aria-hidden="true">${item.icon}</span><span><small>${item.count}</small><strong>${item.title}</strong><em>${esc(item.preview)}</em></span></article>`;
+        return `<article class="trail-detail-leaf trail-detail-leaf--${item.kind} trail-detail-leaf--${node.side}" style="--x:${branch.x}px;--y:${branch.y}px;--trail-branch-color:${attr(node.color)}"><span class="trail-detail-leaf__icon" aria-hidden="true">${item.icon}</span><span><small>${item.count}</small><strong>${item.title}</strong><em>${esc(item.preview)}</em></span></article>`;
       }).join('') : '';
-      return `<div class="trail-canvas-book-wrap ${expanded ? 'is-expanded' : ''}" style="--x:${node.x}px;--y:${node.y}px"><button class="trail-canvas-book trail-canvas-book--${attr(book.status)}" type="button" data-action="toggle-trail-book" data-id="${attr(book.id)}" aria-expanded="${expanded}"><span class="trail-canvas-book__status">${esc(STATUS_LABELS[book.status])}</span><strong>${esc(book.title)}</strong><small>${esc(book.authors.join(', '))}</small><time datetime="${attr(date)}">${dateLabel} · ${formatDate(date)}</time><span class="trail-canvas-book__toggle" aria-hidden="true">${expanded ? '−' : '+'}</span></button>${expanded ? `<a class="trail-canvas-book__open" href="#book?id=${encodeURIComponent(book.id)}">Ouvrir la fiche →</a>` : ''}</div>${satellites}`;
+      return `<div class="trail-canvas-book-wrap trail-canvas-book-wrap--${node.side} ${expanded ? 'is-expanded' : ''}" style="--x:${node.x}px;--y:${node.y}px;--trail-branch-color:${attr(node.color)}"><button class="trail-canvas-book trail-canvas-book--${attr(book.status)}" type="button" data-action="toggle-trail-book" data-id="${attr(book.id)}" aria-expanded="${expanded}" aria-label="${expanded ? 'Replier' : 'Déployer'} les détails de ${attr(book.title)}"><span class="trail-canvas-book__status">${esc(STATUS_LABELS[book.status])}</span><strong>${esc(book.title)}</strong><small>${esc(book.authors.join(', '))}</small><time datetime="${attr(date)}">${dateLabel} · ${formatDate(date)}</time><span class="trail-canvas-book__toggle" aria-hidden="true">${expanded ? '−' : '+'}</span></button>${expanded ? `<a class="trail-canvas-book__open" href="#book?id=${encodeURIComponent(book.id)}">Ouvrir la fiche →</a>` : ''}</div>${satellites}`;
     }).join('');
     const filters = `<div class="trail-toolbar"><div><label for="trail-year">Année</label><select id="trail-year" data-change="trail-year"><option value="all" ${ui.trailYear === 'all' ? 'selected' : ''}>Toutes</option>${years.map(year => `<option value="${year}" ${String(year) === ui.trailYear ? 'selected' : ''}>${year}</option>`).join('')}</select></div><div><label for="trail-status">Statut</label><select id="trail-status" data-change="trail-status"><option value="all" ${ui.trailStatus === 'all' ? 'selected' : ''}>Tous les livres</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.trailStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div><span>${books.length} livre${books.length > 1 ? 's' : ''} affiché${books.length > 1 ? 's' : ''}</span></div>`;
-    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Une vraie carte mentale libre de toute votre bibliothèque : livres à lire, en cours, en pause, lus ou abandonnés. Touchez un nœud pour déployer ses ramifications.</p></div></div>${filters}<div class="trail-legend" aria-label="Légende des statuts">${Object.entries(STATUS_LABELS).map(([value,label]) => `<span class="trail-legend__${value}"><i></i>${label}</span>`).join('')}</div>${books.length ? `<div class="trail-canvas-shell" tabindex="0" aria-label="Carte mentale interactive. Faites glisser horizontalement et verticalement pour l’explorer."><p class="trail-pan-hint"><span aria-hidden="true">↔</span> Faites glisser la carte dans toutes les directions</p><div class="trail-canvas" style="width:${layout.width}px;height:${layout.height}px"><svg viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true" focusable="false">${paths}</svg><div class="trail-root" style="--x:${layout.root.x}px;--y:${layout.root.y}px"><span aria-hidden="true">✦</span><strong>Mon sentier</strong><small>${allBooks.length} livre${allBooks.length > 1 ? 's' : ''}</small></div>${nodes}</div></div>` : `<div class="empty-state"><h3>Aucun livre dans ce filtre</h3><p>Affichez toutes les années et tous les statuts, ou ajoutez un livre à votre bibliothèque.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
+    const profile = store.getProfile(), scaledWidth = Math.round(layout.width * ui.trailScale), scaledHeight = Math.round(layout.height * ui.trailScale);
+    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Votre univers part de vous, se ramifie par genres littéraires, puis par livres. Touchez un livre pour afficher ses lexiques, commentaires et notes.</p></div></div>${filters}<div class="trail-legend" aria-label="Légende des statuts">${Object.entries(STATUS_LABELS).map(([value,label]) => `<span class="trail-legend__${value}"><i></i>${label}</span>`).join('')}</div>${books.length ? `<div class="trail-map-frame"><div class="trail-map-controls" role="group" aria-label="Zoom de la carte"><button type="button" data-action="trail-zoom-out" aria-label="Dézoomer" title="Dézoomer">−</button><output data-trail-zoom-value>${Math.round(ui.trailScale * 100)} %</output><button type="button" data-action="trail-zoom-in" aria-label="Zoomer" title="Zoomer">+</button><button class="trail-map-controls__fit" type="button" data-action="trail-zoom-fit" aria-label="Afficher toute l’étendue de la carte" title="Afficher toute la carte"><span aria-hidden="true">⛶</span> Étendue</button></div><p class="trail-pan-hint"><span aria-hidden="true">↔</span> Glissez pour explorer · utilisez les boutons pour zoomer</p><div class="trail-canvas-shell" data-trail-shell data-root-x="${layout.root.x}" data-root-y="${layout.root.y}" tabindex="0" aria-label="Carte mentale interactive. Utilisez les boutons de zoom ou faites glisser la carte."><div class="trail-zoom-stage" data-trail-stage style="width:${scaledWidth}px;height:${scaledHeight}px"><div class="trail-canvas" data-trail-canvas data-width="${layout.width}" data-height="${layout.height}" data-scale="${ui.trailScale}" style="width:${layout.width}px;height:${layout.height}px;transform:scale(${ui.trailScale})"><svg viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true" focusable="false">${paths}</svg><div class="trail-root" style="--x:${layout.root.x}px;--y:${layout.root.y}px"><span class="trail-root__avatar" aria-hidden="true">${esc(initials(profile.name))}</span><strong>${esc(profile.name)}</strong><small>${genreGroups.length} genre${genreGroups.length > 1 ? 's' : ''} · ${allBooks.length} livre${allBooks.length > 1 ? 's' : ''}</small></div>${genreNodes}${bookNodes}</div></div></div></div>` : `<div class="empty-state"><h3>Aucun livre dans ce filtre</h3><p>Affichez toutes les années et tous les statuts, ou ajoutez un livre à votre bibliothèque.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
   }
 
   function renderLexicon() {
@@ -886,16 +947,14 @@
   }
 
   function renderProfile() {
-    const tabs = [['overview','Profil'],['goals','Objectifs']];
-    const tabNavigation = `<nav class="tabs" aria-label="Sections du Profil">${tabs.map(([id,label]) => `<a class="tab" href="#profile?tab=${id}" aria-current="${ui.profileTab === id ? 'page' : 'false'}">${label}</a>`).join('')}</nav>`;
-    if (ui.profileTab === 'goals') return `<section class="page-head"><div><p class="eyebrow">Progression personnelle</p><h1>Objectifs</h1><p>Choisissez vos livres et suivez séparément les lectures terminées et celles qui sont encore en cours.</p></div></section>${tabNavigation}${renderGoals()}`;
     const profile = store.getProfile(), settings = store.getSettings(), stats = store.getStats();
     let adn = store.getBooks().filter(book => book.isADN).sort((a,b) => (a.adnOrder ?? 99) - (b.adnOrder ?? 99)).slice(0,3);
     if (adn.length < 3) adn = adn.concat(store.getBooks().filter(book => !adn.some(item => item.id === book.id)).slice(0, 3 - adn.length));
-    const progress = store.getGoalProgress(), badges = store.getBadges();
-    return `${tabNavigation}<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main"><span class="profile-avatar">${esc(initials(profile.name))}</span><div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button></section>
+    const badges = store.getBadges();
+    return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main"><span class="profile-avatar">${esc(initials(profile.name))}</span><div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button></section>
       <section class="section-block"><div class="section-heading"><div><p class="eyebrow">Trois livres, une ligne</p><h2>ADN du lecteur</h2></div><button class="text-link" type="button" data-action="edit-adn">Modifier</button></div><div class="adn-row">${adn.map(book => `<div class="adn-book">${cover(book)}<strong>${esc(book.title)}</strong></div>`).join('')}</div></section>
-      <section class="section-block"><h2>Statistiques</h2><div class="stats-grid"><div class="card stat-card"><strong>${stats.booksRead}</strong><span>livres lus</span></div><div class="card stat-card"><strong>${Math.floor(stats.totalMinutes/60)} h ${stats.totalMinutes%60}</strong><span>temps de lecture</span></div><div class="card stat-card"><strong>${stats.streak}</strong><span>jours de série</span></div><div class="card stat-card"><strong>${stats.totalTraces}</strong><span>Traces et lexique</span></div><div class="card stat-card"><strong>${stats.booksTransmitted}</strong><span>prêtés ou donnés</span></div><div class="card stat-card"><strong>${progress.week.value}/${progress.week.target}</strong><span>objectif semaine</span></div><div class="card stat-card"><strong>${progress.month.value}/${progress.month.target}</strong><span>objectif mois</span></div><div class="card stat-card"><strong>${progress.year.value}/${progress.year.target}</strong><span>objectif année</span></div></div></section>
+      <section class="section-block"><h2>Statistiques</h2><div class="stats-grid"><div class="card stat-card"><strong>${stats.booksRead}</strong><span>livres lus</span></div><div class="card stat-card"><strong>${Math.floor(stats.totalMinutes/60)} h ${stats.totalMinutes%60}</strong><span>temps de lecture</span></div><div class="card stat-card"><strong>${stats.streak}</strong><span>jours de série</span></div><div class="card stat-card"><strong>${stats.totalTraces}</strong><span>Traces et lexique</span></div><div class="card stat-card"><strong>${stats.booksTransmitted}</strong><span>prêtés ou donnés</span></div></div></section>
+      <section class="section-block profile-goals" id="profile-goals"><div class="section-heading"><div><p class="eyebrow">Progression personnelle</p><h2>Objectifs</h2><p class="small muted">Choisissez vos livres et suivez séparément les lectures terminées et celles qui sont encore en cours.</p></div></div>${renderGoals()}</section>
       ${renderLatestBadge(badges)}
       <section class="section-block"><h2>Compte et préférences</h2><div class="settings-list">
         <details class="setting-card"><summary>Informations du compte</summary><div class="setting-card__body"><p><strong>${esc(profile.email)}</strong></p><p class="small muted">Compte sécurisé et session persistante gérés par Supabase.</p><button class="button button--secondary button--small" type="button" data-action="simulated-password">Changer le mot de passe</button></div></details>
@@ -1203,7 +1262,10 @@
       case 'add-book': openBookDialog(); break;
       case 'library-view': ui.selectedLibraryBookId = null; store.saveSettings({ libraryView: trigger.dataset.view }); render(); break;
       case 'library-finish': store.saveSettings({ libraryFinish:trigger.dataset.finish }); render(); break;
-      case 'toggle-trail-book': ui.expandedTrailBooks.has(id) ? ui.expandedTrailBooks.delete(id) : ui.expandedTrailBooks.add(id); render(); break;
+      case 'toggle-trail-book': rememberTrailViewport(); ui.expandedTrailBooks.has(id) ? ui.expandedTrailBooks.delete(id) : ui.expandedTrailBooks.add(id); render(); break;
+      case 'trail-zoom-in': rememberTrailViewport(); setTrailZoom(ui.trailScale + .15); break;
+      case 'trail-zoom-out': rememberTrailViewport(); setTrailZoom(ui.trailScale - .15); break;
+      case 'trail-zoom-fit': setTrailZoom('fit'); break;
       case 'refresh-recommendations': await refreshRecommendations(); break;
       case 'wishlist-recommendation': addRecommendationToWishlist(id); break;
       case 'dismiss-recommendation': dismissRecommendation(id); break;
@@ -1246,8 +1308,8 @@
       case 'focus-session': store.focusActiveSession(control.value); render(); break;
       case 'library-status': ui.selectedLibraryBookId = null; ui.libraryStatus = control.value; render(); break;
       case 'library-sort': ui.selectedLibraryBookId = null; store.saveSettings({ librarySort:control.value }); render(); break;
-      case 'trail-year': ui.trailYear = control.value; ui.expandedTrailBooks.clear(); render(); break;
-      case 'trail-status': ui.trailStatus = control.value; ui.expandedTrailBooks.clear(); render(); break;
+      case 'trail-year': ui.trailYear = control.value; ui.expandedTrailBooks.clear(); ui.trailViewCenter = null; render(); break;
+      case 'trail-status': ui.trailStatus = control.value; ui.expandedTrailBooks.clear(); ui.trailViewCenter = null; render(); break;
       case 'goal-all-books':
         if (control.checked) control.closest('form')?.querySelectorAll('input[name="bookIds"]').forEach(input => { input.checked = false; });
         break;

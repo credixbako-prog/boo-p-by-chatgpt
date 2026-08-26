@@ -136,16 +136,25 @@ test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
   assert.match(app, /\['library','Bibliothèque'\]/);
   assert.match(app, /\['trail','Sentier'\]/);
   assert.match(app, /\['lexicon','Lexiques'\]/);
-  assert.match(app, /const tabs = \[\['overview','Profil'\],\['goals','Objectifs'\]\]/);
-  assert.match(app, /href="#profile\?tab=goals"/);
+  assert.doesNotMatch(app, /const tabs = \[\['overview','Profil'\],\['goals','Objectifs'\]\]/);
+  assert.match(app, /id="profile-goals"/);
+  assert.match(app, /href="#profile\?section=goals"/);
   assert.match(app, /filter\(book => book\.libraryState === 'library'\)/);
   assert.match(app, /data-change="trail-year"/);
   assert.match(app, /data-change="trail-status"/);
   assert.match(app, /class="trail-canvas-shell"/);
   assert.match(app, /class="trail-canvas-book/);
+  assert.match(app, /class="trail-genre-node/);
+  assert.match(app, /data-action="trail-zoom-in"/);
+  assert.match(app, /data-action="trail-zoom-out"/);
+  assert.match(app, /data-action="trail-zoom-fit"/);
+  assert.match(app, /Commentaires/);
+  assert.match(app, /Notes & Traces/);
   assert.match(app, /window\.BT\.trailMindmap/);
   assert.match(app, /data-action="lexicon-filter"/);
-  assert.match(css, /\.trail-branches/);
+  assert.match(css, /\.trail-map-controls/);
+  assert.match(css, /\.trail-genre-node/);
+  assert.match(css, /data:image\/svg\+xml/);
   assert.match(css, /\.lexicon-filter-fab/);
 });
 
@@ -371,11 +380,11 @@ test('synchronisation: bibliothèque, sessions, Traces, lexiques et objectifs so
   assert.match(migration, /auth\.uid\(\)\) = user_id/);
 });
 
-test('notifications: un lecteur endormi accompagne l’état vide', async () => {
+test('notifications: un chat endormi accompagne l’état vide', async () => {
   const [app, css] = await Promise.all([read('js/mvp-app.js'), read('css/mvp-v5.css')]);
   assert.match(app, /class="notification-sleeper"/);
-  assert.match(app, /notification-sleeper__head/);
-  assert.match(css, /\.notification-sleeper__body/);
+  assert.match(css, /\.notification-sleeper \{ width: 136px; height: 84px; background:/);
+  assert.match(css, /\.notification-sleeper > span \{ display: none;/);
   assert.match(css, /@keyframes sleeper-z/);
 });
 
@@ -632,7 +641,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v25/);
+  assert.match(worker, /boo-p-webapp-v26/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);
