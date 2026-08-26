@@ -15,7 +15,7 @@
     monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
     selectedLibraryBookId: null, memoryDeckKeys: [], memoryDeckSignature: '', memorySessionTotal: 0, memorySessionComplete: false,
     memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all',
-    expandedTrailBooks: new Set(), trailYear: 'all', trailStatus: 'all', trailScale: .72, trailViewCenter: null, clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map(),
+    expandedTrailBooks: new Set(), trailYear: 'all', trailStatus: 'all', trailScale: .72, trailViewCenter: null, trailPinch: null, clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map(),
     syncReady: false, syncBusy: false, syncPending: false, syncTimer: null, syncUnsubscribe: null, syncBootstrapping: false, syncErrorShown: false
   };
 
@@ -197,6 +197,10 @@
     document.addEventListener('scroll', handleMemoryCarouselScroll, true);
     document.addEventListener('input', handleInput);
     document.addEventListener('submit', handleSubmit);
+    document.addEventListener('touchstart', handleTrailPinchStart, { passive:false });
+    document.addEventListener('touchmove', handleTrailPinchMove, { passive:false });
+    document.addEventListener('touchend', handleTrailPinchEnd, { passive:true });
+    document.addEventListener('touchcancel', handleTrailPinchEnd, { passive:true });
     document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => {
       if (event.target === dialog) closeDialog(dialog);
     }));
@@ -289,7 +293,7 @@
     return ui.trailViewCenter;
   }
 
-  function setTrailZoom(value, { center = null, announce = true } = {}) {
+  function setTrailZoom(value, { center = null, announce = true, viewportPoint = null } = {}) {
     const { shell, stage, canvas } = trailViewportElements();
     if (!shell || !stage || !canvas) return;
     const width = Number(canvas.dataset.width) || canvas.offsetWidth;
@@ -310,9 +314,10 @@
     stage.classList.toggle('is-fitted', value === 'fit');
     const output = document.querySelector('[data-trail-zoom-value]');
     if (output) output.textContent = `${Math.round(ui.trailScale * 100)} %`;
+    const anchor = viewportPoint || { x:shell.clientWidth / 2, y:shell.clientHeight / 2 };
     requestAnimationFrame(() => {
-      shell.scrollLeft = Math.max(0, ui.trailViewCenter.x * ui.trailScale - shell.clientWidth / 2);
-      shell.scrollTop = Math.max(0, ui.trailViewCenter.y * ui.trailScale - shell.clientHeight / 2);
+      shell.scrollLeft = Math.max(0, ui.trailViewCenter.x * ui.trailScale - anchor.x);
+      shell.scrollTop = Math.max(0, ui.trailViewCenter.y * ui.trailScale - anchor.y);
     });
     if (announce) document.getElementById('live-region').textContent = value === 'fit' ? 'Toute la carte est maintenant visible.' : `Zoom du Sentier : ${Math.round(ui.trailScale * 100)} pour cent.`;
   }
@@ -321,6 +326,58 @@
     const { shell } = trailViewportElements(); if (!shell) return;
     const root = { x:Number(shell.dataset.rootX), y:Number(shell.dataset.rootY) };
     setTrailZoom(ui.trailScale, { center:ui.trailViewCenter || root, announce:false });
+  }
+
+  function trailTouchDistance(touches) {
+    const x = touches[0].clientX - touches[1].clientX;
+    const y = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(x, y);
+  }
+
+  function trailTouchPoint(touches, shell) {
+    const rect = shell.getBoundingClientRect();
+    return {
+      x:(touches[0].clientX + touches[1].clientX) / 2 - rect.left,
+      y:(touches[0].clientY + touches[1].clientY) / 2 - rect.top
+    };
+  }
+
+  function handleTrailPinchStart(event) {
+    const shell = event.target.closest?.('[data-trail-shell]');
+    if (!shell || event.touches.length !== 2) return;
+    const canvas = shell.querySelector('[data-trail-canvas]');
+    if (!canvas) return;
+    event.preventDefault();
+    const scale = Number(canvas.dataset.scale) || ui.trailScale || 1;
+    const point = trailTouchPoint(event.touches, shell);
+    ui.trailPinch = {
+      shell,
+      startDistance:trailTouchDistance(event.touches),
+      startScale:scale,
+      focus:{ x:(shell.scrollLeft + point.x) / scale, y:(shell.scrollTop + point.y) / scale }
+    };
+    shell.classList.add('is-pinching');
+  }
+
+  function handleTrailPinchMove(event) {
+    const pinch = ui.trailPinch;
+    if (!pinch || event.touches.length !== 2 || !pinch.shell.isConnected) return;
+    event.preventDefault();
+    const distance = trailTouchDistance(event.touches);
+    if (!pinch.startDistance || !distance) return;
+    const nextScale = pinch.startScale * (distance / pinch.startDistance);
+    setTrailZoom(nextScale, { center:pinch.focus, viewportPoint:trailTouchPoint(event.touches, pinch.shell), announce:false });
+  }
+
+  function handleTrailPinchEnd(event) {
+    if (!ui.trailPinch || event.touches.length >= 2) return;
+    const shell = ui.trailPinch.shell;
+    shell?.classList.remove('is-pinching');
+    ui.trailPinch = null;
+    requestAnimationFrame(() => {
+      rememberTrailViewport();
+      document.getElementById('live-region').textContent = `Zoom du Sentier : ${Math.round(ui.trailScale * 100)} pour cent.`;
+    });
   }
 
   function updateHeader() {
@@ -905,7 +962,7 @@
     }).join('');
     const filters = `<div class="trail-toolbar"><div><label for="trail-year">Année</label><select id="trail-year" data-change="trail-year"><option value="all" ${ui.trailYear === 'all' ? 'selected' : ''}>Toutes</option>${years.map(year => `<option value="${year}" ${String(year) === ui.trailYear ? 'selected' : ''}>${year}</option>`).join('')}</select></div><div><label for="trail-status">Statut</label><select id="trail-status" data-change="trail-status"><option value="all" ${ui.trailStatus === 'all' ? 'selected' : ''}>Tous les livres</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.trailStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div><span>${books.length} livre${books.length > 1 ? 's' : ''} affiché${books.length > 1 ? 's' : ''}</span></div>`;
     const profile = store.getProfile(), scaledWidth = Math.round(layout.width * ui.trailScale), scaledHeight = Math.round(layout.height * ui.trailScale);
-    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Votre univers part de vous, se ramifie par genres littéraires, puis par livres. Touchez un livre pour afficher ses lexiques, commentaires et notes.</p></div></div>${filters}<div class="trail-legend" aria-label="Légende des statuts">${Object.entries(STATUS_LABELS).map(([value,label]) => `<span class="trail-legend__${value}"><i></i>${label}</span>`).join('')}</div>${books.length ? `<div class="trail-map-frame"><div class="trail-map-controls" role="group" aria-label="Zoom de la carte"><button type="button" data-action="trail-zoom-out" aria-label="Dézoomer" title="Dézoomer">−</button><output data-trail-zoom-value>${Math.round(ui.trailScale * 100)} %</output><button type="button" data-action="trail-zoom-in" aria-label="Zoomer" title="Zoomer">+</button><button class="trail-map-controls__fit" type="button" data-action="trail-zoom-fit" aria-label="Afficher toute l’étendue de la carte" title="Afficher toute la carte"><span aria-hidden="true">⛶</span> Étendue</button></div><p class="trail-pan-hint"><span aria-hidden="true">↔</span> Glissez pour explorer · utilisez les boutons pour zoomer</p><div class="trail-canvas-shell" data-trail-shell data-root-x="${layout.root.x}" data-root-y="${layout.root.y}" tabindex="0" aria-label="Carte mentale interactive. Utilisez les boutons de zoom ou faites glisser la carte."><div class="trail-zoom-stage" data-trail-stage style="width:${scaledWidth}px;height:${scaledHeight}px"><div class="trail-canvas" data-trail-canvas data-width="${layout.width}" data-height="${layout.height}" data-scale="${ui.trailScale}" style="width:${layout.width}px;height:${layout.height}px;transform:scale(${ui.trailScale})"><svg viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true" focusable="false">${paths}</svg><div class="trail-root" style="--x:${layout.root.x}px;--y:${layout.root.y}px"><span class="trail-root__avatar" aria-hidden="true">${esc(initials(profile.name))}</span><strong>${esc(profile.name)}</strong><small>${genreGroups.length} genre${genreGroups.length > 1 ? 's' : ''} · ${allBooks.length} livre${allBooks.length > 1 ? 's' : ''}</small></div>${genreNodes}${bookNodes}</div></div></div></div>` : `<div class="empty-state"><h3>Aucun livre dans ce filtre</h3><p>Affichez toutes les années et tous les statuts, ou ajoutez un livre à votre bibliothèque.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
+    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Votre univers part de vous, se ramifie par genres littéraires, puis par livres. Touchez un livre pour afficher ses lexiques, commentaires et notes.</p></div></div>${filters}<div class="trail-legend" aria-label="Légende des statuts">${Object.entries(STATUS_LABELS).map(([value,label]) => `<span class="trail-legend__${value}"><i></i>${label}</span>`).join('')}</div>${books.length ? `<div class="trail-map-frame"><div class="trail-map-controls" role="group" aria-label="Zoom de la carte"><button type="button" data-action="trail-zoom-out" aria-label="Dézoomer" title="Dézoomer">−</button><output data-trail-zoom-value>${Math.round(ui.trailScale * 100)} %</output><button type="button" data-action="trail-zoom-in" aria-label="Zoomer" title="Zoomer">+</button><button class="trail-map-controls__fit" type="button" data-action="trail-zoom-fit" aria-label="Afficher toute l’étendue de la carte" title="Afficher toute la carte"><span aria-hidden="true">⛶</span> Étendue</button></div><p class="trail-pan-hint"><span aria-hidden="true">↔</span> Glissez pour explorer · pincez à deux doigts pour zoomer</p><div class="trail-canvas-shell" data-trail-shell data-root-x="${layout.root.x}" data-root-y="${layout.root.y}" tabindex="0" aria-label="Carte mentale interactive. Pincez à deux doigts, utilisez les boutons de zoom ou faites glisser la carte."><div class="trail-zoom-stage" data-trail-stage style="width:${scaledWidth}px;height:${scaledHeight}px"><div class="trail-canvas" data-trail-canvas data-width="${layout.width}" data-height="${layout.height}" data-scale="${ui.trailScale}" style="width:${layout.width}px;height:${layout.height}px;transform:scale(${ui.trailScale})"><svg viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true" focusable="false">${paths}</svg><div class="trail-root" style="--x:${layout.root.x}px;--y:${layout.root.y}px"><span class="trail-root__avatar" aria-hidden="true">${esc(initials(profile.name))}</span><strong>${esc(profile.name)}</strong><small>${genreGroups.length} genre${genreGroups.length > 1 ? 's' : ''} · ${allBooks.length} livre${allBooks.length > 1 ? 's' : ''}</small></div>${genreNodes}${bookNodes}</div></div></div></div>` : `<div class="empty-state"><h3>Aucun livre dans ce filtre</h3><p>Affichez toutes les années et tous les statuts, ou ajoutez un livre à votre bibliothèque.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
   }
 
   function renderLexicon() {

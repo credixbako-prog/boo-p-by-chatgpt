@@ -148,6 +148,10 @@ test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
   assert.match(app, /data-action="trail-zoom-in"/);
   assert.match(app, /data-action="trail-zoom-out"/);
   assert.match(app, /data-action="trail-zoom-fit"/);
+  assert.match(app, /addEventListener\('touchmove', handleTrailPinchMove, \{ passive:false \}\)/);
+  assert.match(app, /function handleTrailPinchStart\(event\)/);
+  assert.match(app, /function handleTrailPinchMove\(event\)/);
+  assert.match(app, /pincez à deux doigts pour zoomer/);
   assert.match(app, /Commentaires/);
   assert.match(app, /Notes & Traces/);
   assert.match(app, /window\.BT\.trailMindmap/);
@@ -641,7 +645,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v26/);
+  assert.match(worker, /boo-p-webapp-v27/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

@@ -534,6 +534,7 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
 .trail-map-controls .trail-map-controls__fit { display: flex; width: auto; gap: 5px; padding-inline: 11px; color: var(--boo-sage-dark); font-size: 9px; }
 .trail-pan-hint { position: absolute; z-index: 24; top: auto; bottom: 12px; left: 12px; width: max-content; max-width: calc(100% - 24px); margin: 0; pointer-events: none; }
 .trail-canvas-shell { height: clamp(560px,72vh,760px); }
+.trail-canvas-shell.is-pinching { cursor: grabbing; user-select: none; }
 .trail-zoom-stage { position: relative; min-width: 1px; min-height: 1px; }
 .trail-zoom-stage.is-fitted { margin-inline: auto; }
 .trail-canvas { position: absolute; top: 0; left: 0; min-width: 0; overflow: visible; transform-origin: 0 0; background-size: 38px 38px,auto; }
