@@ -48,7 +48,7 @@
     const handle = cleanText(state.profile?.handle);
     return {
       monthKey:key, label:monthLabel(key), profileName, handle, includePersonalNotes,
-      books:books.map(book => ({ title:cleanText(book.title), authors:(book.authors || []).map(cleanText).filter(Boolean), rating:Number(book.rating) || 0 })),
+      books:books.map(book => ({ title:cleanText(book.title), authors:(book.authors || []).map(cleanText).filter(Boolean), rating:Number(book.rating) || 0, coverUrl:cleanText(book.coverUrl), coverColor:cleanText(book.coverColor) })),
       minutes, sessions:sessions.length, words:words.length, expressions:expressions.length, citations:citations.length,
       discoveries:entries.slice(0, 4).map(entry => ({ kind:entry.kind || 'word', text:cleanText(entry.word), definition:cleanText(entry.definition) })),
       notes,
@@ -93,69 +93,110 @@
     return y + lines.length * lineHeight;
   }
 
-  function drawStat(ctx, x, y, width, value, label, accent) {
-    roundedRect(ctx, x, y, width, 148, 28); ctx.fillStyle = COLORS.white; ctx.fill();
-    ctx.fillStyle = accent; ctx.fillRect(x, y, 8, 148);
-    ctx.fillStyle = COLORS.ink; ctx.font = '600 52px "Playfair Display", Georgia, serif'; ctx.fillText(String(value), x + 34, y + 67);
-    ctx.fillStyle = COLORS.muted; ctx.font = '600 20px Poppins, Arial, sans-serif'; ctx.fillText(label.toUpperCase(), x + 34, y + 111);
+  function coverPalette(book, index) {
+    const matches = String(book.coverColor || '').match(/#[0-9a-f]{6}/gi) || [];
+    const fallback = [COLORS.sageDark, COLORS.ochre, COLORS.ink, '#8f3f42', '#466b87', '#708d75'];
+    return [matches[0] || fallback[index % fallback.length], matches[1] || fallback[(index + 1) % fallback.length]];
+  }
+
+  function loadCoverImage(url) {
+    if (!url || typeof Image === 'undefined') return Promise.resolve(null);
+    return new Promise(resolve => {
+      const image = new Image();
+      const timer = window.setTimeout(() => resolve(null), 4500);
+      image.crossOrigin = 'anonymous'; image.referrerPolicy = 'no-referrer';
+      image.onload = () => { window.clearTimeout(timer); resolve(image); };
+      image.onerror = () => { window.clearTimeout(timer); resolve(null); };
+      image.src = url;
+    });
+  }
+
+  function collageLayout(count) {
+    if (count <= 1) return [{ x:0, y:0, w:1, h:1 }];
+    if (count === 2) return [{ x:0, y:0, w:.5, h:1 }, { x:.5, y:0, w:.5, h:1 }];
+    if (count === 3) return [{ x:0, y:0, w:.58, h:1 }, { x:.58, y:0, w:.42, h:.5 }, { x:.58, y:.5, w:.42, h:.5 }];
+    const columns = count > 4 ? 3 : 2, rows = Math.ceil(count / columns);
+    return Array.from({ length:count }, (_, index) => ({ x:(index % columns) / columns, y:Math.floor(index / columns) / rows, w:1 / columns, h:1 / rows }));
+  }
+
+  function drawCroppedImage(ctx, image, x, y, width, height) {
+    const sourceRatio = image.naturalWidth / image.naturalHeight, targetRatio = width / height;
+    let sourceX = 0, sourceY = 0, sourceWidth = image.naturalWidth, sourceHeight = image.naturalHeight;
+    if (sourceRatio > targetRatio) { sourceWidth = image.naturalHeight * targetRatio; sourceX = (image.naturalWidth - sourceWidth) / 2; }
+    else { sourceHeight = image.naturalWidth / targetRatio; sourceY = (image.naturalHeight - sourceHeight) / 2; }
+    ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+  }
+
+  function drawCoverTile(ctx, book, image, index, x, y, width, height) {
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, width, height); ctx.clip();
+    if (image) drawCroppedImage(ctx, image, x, y, width, height);
+    else {
+      const [start, end] = coverPalette(book, index), gradient = ctx.createLinearGradient(x, y, x + width, y + height);
+      gradient.addColorStop(0, start); gradient.addColorStop(1, end); ctx.fillStyle = gradient; ctx.fillRect(x, y, width, height);
+      ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(x + Math.max(12, width * .07), y, 3, height);
+      ctx.fillStyle = COLORS.white; ctx.font = `600 ${Math.max(24, Math.min(44, width * .09))}px "Playfair Display", Georgia, serif`;
+      drawLines(ctx, book.title || 'Lecture BOO-P', x + width * .12, y + height * .48, width * .76, Math.max(32, width * .1), 4);
+    }
+    const shade = ctx.createLinearGradient(0, y + height * .62, 0, y + height);
+    shade.addColorStop(0, 'rgba(7,14,24,0)'); shade.addColorStop(1, 'rgba(7,14,24,.72)'); ctx.fillStyle = shade; ctx.fillRect(x, y, width, height);
+    ctx.fillStyle = COLORS.white; ctx.font = '600 18px Poppins, Arial, sans-serif';
+    ctx.fillText(truncate(book.title, Math.max(18, Math.round(width / 10))), x + 20, y + height - 24);
+    ctx.restore();
+  }
+
+  async function drawCoverCollage(ctx, books, x, y, width, height) {
+    const shown = books.slice(0, 6);
+    if (!shown.length) {
+      const gradient = ctx.createLinearGradient(x, y, x + width, y + height); gradient.addColorStop(0, COLORS.ink); gradient.addColorStop(1, COLORS.sageDark);
+      ctx.fillStyle = gradient; ctx.fillRect(x, y, width, height);
+      ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.font = '600 68px "Playfair Display", Georgia, serif'; drawLines(ctx, 'Le sentier continue, page après page.', 80, 430, 800, 82, 3);
+      return;
+    }
+    const images = await Promise.all(shown.map(book => loadCoverImage(book.coverUrl)));
+    const layout = collageLayout(shown.length), gutter = 7;
+    shown.forEach((book, index) => {
+      const cell = layout[index], left = x + cell.x * width + gutter / 2, top = y + cell.y * height + gutter / 2;
+      drawCoverTile(ctx, book, images[index], index, left, top, cell.w * width - gutter, cell.h * height - gutter);
+    });
+  }
+
+  function drawMetric(ctx, x, y, value, label, accent) {
+    ctx.fillStyle = accent; ctx.font = '700 31px "Playfair Display", Georgia, serif'; ctx.fillText(String(value), x, y);
+    ctx.fillStyle = COLORS.muted; ctx.font = '600 13px Poppins, Arial, sans-serif'; ctx.fillText(label.toUpperCase(), x, y + 25);
   }
 
   async function render(data) {
     await document.fonts?.ready?.catch?.(() => {});
     const canvas = document.createElement('canvas'); canvas.width = WIDTH; canvas.height = HEIGHT;
     const ctx = canvas.getContext('2d', { alpha:false });
-    ctx.fillStyle = COLORS.paper; ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    ctx.fillStyle = COLORS.sageDark; ctx.fillRect(0, 0, 24, HEIGHT);
-    ctx.fillStyle = COLORS.ochre; ctx.fillRect(24, 0, 8, HEIGHT);
+    ctx.fillStyle = COLORS.ink; ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    await drawCoverCollage(ctx, data.books, 0, 0, WIDTH, 1000);
 
-    ctx.fillStyle = COLORS.sageDark; ctx.font = '700 24px Poppins, Arial, sans-serif'; ctx.letterSpacing = '5px'; ctx.fillText('BOO-P', 80, 92);
-    ctx.fillStyle = COLORS.muted; ctx.font = '600 18px Poppins, Arial, sans-serif'; ctx.fillText('MON MOIS DE LECTURE', 80, 132);
-    ctx.fillStyle = COLORS.ink; ctx.font = '600 70px "Playfair Display", Georgia, serif'; ctx.fillText(data.label, 80, 224);
-    ctx.fillStyle = COLORS.line; ctx.fillRect(80, 260, 920, 2);
+    const coverShade = ctx.createLinearGradient(0, 610, 0, 1000);
+    coverShade.addColorStop(0, 'rgba(7,14,24,0)'); coverShade.addColorStop(1, 'rgba(7,14,24,.88)'); ctx.fillStyle = coverShade; ctx.fillRect(0, 600, WIDTH, 400);
+    roundedRect(ctx, 54, 48, 132, 46, 23); ctx.fillStyle = 'rgba(255,253,248,.9)'; ctx.fill();
+    ctx.fillStyle = COLORS.ink; ctx.font = '700 20px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 83, 79);
+    ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = '600 18px Poppins, Arial, sans-serif'; ctx.fillText('MON MOIS DE LECTURE', 58, 815);
+    ctx.fillStyle = COLORS.white; ctx.font = '600 68px "Playfair Display", Georgia, serif'; drawLines(ctx, data.label, 58, 890, 880, 75, 2);
+    ctx.fillStyle = 'rgba(255,255,255,.82)'; ctx.font = '500 19px Poppins, Arial, sans-serif';
+    ctx.fillText(`${data.books.length} livre${data.books.length > 1 ? 's' : ''} terminé${data.books.length > 1 ? 's' : ''}${data.books.length > 6 ? ` · +${data.books.length - 6} hors cadre` : ''}`, 60, 965);
 
-    const gap = 18, statWidth = (920 - gap) / 2;
-    drawStat(ctx, 80, 304, statWidth, data.books.length, `livre${data.books.length > 1 ? 's' : ''} lu${data.books.length > 1 ? 's' : ''}`, COLORS.sage);
+    ctx.fillStyle = COLORS.paper; ctx.fillRect(0, 1000, WIDTH, 350);
+    ctx.fillStyle = COLORS.sageDark; ctx.fillRect(0, 1000, WIDTH, 10);
     const duration = data.minutes >= 60 ? `${Math.floor(data.minutes / 60)} h ${String(data.minutes % 60).padStart(2, '0')}` : `${data.minutes} min`;
-    drawStat(ctx, 80 + statWidth + gap, 304, statWidth, duration, 'temps de lecture', COLORS.ochre);
-    drawStat(ctx, 80, 470, statWidth, data.words, `mot${data.words > 1 ? 's' : ''} appris`, COLORS.ochre);
-    drawStat(ctx, 80 + statWidth + gap, 470, statWidth, data.expressions + data.citations, 'expressions & citations', COLORS.sage);
+    drawMetric(ctx, 60, 1070, duration, 'lecture', COLORS.ochre);
+    drawMetric(ctx, 310, 1070, data.words, 'mots appris', COLORS.sageDark);
+    drawMetric(ctx, 560, 1070, data.expressions, 'expressions', COLORS.ochre);
+    drawMetric(ctx, 810, 1070, data.citations, 'citations', COLORS.sageDark);
 
-    let y = 676;
-    ctx.fillStyle = COLORS.ink; ctx.font = '600 32px "Playfair Display", Georgia, serif'; ctx.fillText('Les livres du mois', 80, y);
-    y += 28;
-    const shownBooks = data.books.slice(0, 3);
-    if (!shownBooks.length) {
-      ctx.fillStyle = COLORS.muted; ctx.font = '400 22px Poppins, Arial, sans-serif'; ctx.fillText('Le sentier continue, page après page.', 80, y + 38); y += 86;
-    } else {
-      shownBooks.forEach((book, index) => {
-        const top = y + index * 80;
-        roundedRect(ctx, 80, top, 920, 62, 18); ctx.fillStyle = index % 2 ? COLORS.paperSoft : COLORS.white; ctx.fill();
-        ctx.fillStyle = index % 2 ? COLORS.ochre : COLORS.sage; roundedRect(ctx, 98, top + 13, 36, 36, 10); ctx.fill();
-        ctx.fillStyle = COLORS.white; ctx.font = '700 18px Poppins, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(String(index + 1), 116, top + 38); ctx.textAlign = 'left';
-        ctx.fillStyle = COLORS.ink; ctx.font = '600 23px "Playfair Display", Georgia, serif'; ctx.fillText(truncate(book.title, 48), 154, top + 28);
-        ctx.fillStyle = COLORS.muted; ctx.font = '400 16px Poppins, Arial, sans-serif'; ctx.fillText(truncate(book.authors.join(', ') || 'Auteur non renseigné', 62), 154, top + 51);
-      });
-      y += shownBooks.length * 80 + 22;
-    }
-
-    const discovery = data.discoveries[0];
-    if (discovery && y < 1035) {
-      ctx.fillStyle = COLORS.ink; ctx.font = '600 30px "Playfair Display", Georgia, serif'; ctx.fillText('Une trace à retenir', 80, y); y += 28;
-      roundedRect(ctx, 80, y, 920, 142, 24); ctx.fillStyle = COLORS.sageDark; ctx.fill();
-      ctx.fillStyle = COLORS.white; ctx.font = '600 28px "Playfair Display", Georgia, serif'; ctx.fillText(`“ ${truncate(discovery.text, 52)} ”`, 112, y + 45);
-      ctx.fillStyle = '#e8f0e9'; ctx.font = '400 18px Poppins, Arial, sans-serif'; drawLines(ctx, discovery.definition || 'Une découverte ajoutée au lexique.', 112, y + 82, 850, 27, 2);
-      y += 168;
-    }
-
-    if (data.includePersonalNotes && data.notes[0] && y < 1165) {
-      ctx.fillStyle = COLORS.ink; ctx.font = '600 27px "Playfair Display", Georgia, serif'; ctx.fillText('Note personnelle', 80, y); y += 34;
-      ctx.fillStyle = COLORS.muted; ctx.font = 'italic 18px "Playfair Display", Georgia, serif'; y = drawLines(ctx, `« ${data.notes[0]} »`, 80, y, 920, 27, 3) + 14;
-    }
-
-    ctx.fillStyle = COLORS.line; ctx.fillRect(80, 1193, 920, 2);
-    ctx.fillStyle = COLORS.ink; ctx.font = '500 21px "Playfair Display", Georgia, serif'; drawLines(ctx, data.summary, 80, 1240, 720, 29, 2);
-    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 17px Poppins, Arial, sans-serif'; ctx.textAlign = 'right';
-    ctx.fillText(truncate(data.handle || data.profileName, 28), 1000, 1280); ctx.fillText('boo-p · mon sentier de lecture', 1000, 1310); ctx.textAlign = 'left';
+    ctx.fillStyle = COLORS.line; ctx.fillRect(60, 1124, 960, 2);
+    ctx.fillStyle = COLORS.ink; ctx.font = '500 21px "Playfair Display", Georgia, serif'; drawLines(ctx, data.summary, 60, 1172, 960, 28, 2);
+    const highlight = data.includePersonalNotes && data.notes[0]
+      ? `« ${truncate(data.notes[0], 92)} »`
+      : data.discoveries[0] ? `${truncate(data.discoveries[0].text, 32)} · ${truncate(data.discoveries[0].definition, 78)}` : '';
+    if (highlight) { ctx.fillStyle = COLORS.muted; ctx.font = 'italic 16px "Playfair Display", Georgia, serif'; drawLines(ctx, highlight, 60, 1245, 830, 23, 2); }
+    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 15px Poppins, Arial, sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(truncate(data.handle || data.profileName, 28), 1020, 1288); ctx.fillText('boo-p · mon sentier de lecture', 1020, 1318); ctx.textAlign = 'left';
     return canvas;
   }
 

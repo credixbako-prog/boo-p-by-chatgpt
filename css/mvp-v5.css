@@ -142,15 +142,31 @@ body[data-theme="dark"] .eyebrow { color: #a9cbb5; }
 .streak-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 13px; color: var(--boo-muted); font-size: 12px; }
 
 .goal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.goal-mini { display: flex; min-width: 0; align-items: center; gap: 10px; padding: 13px; border: 1px solid var(--boo-line); border-radius: 18px; background: var(--boo-paper); text-decoration: none; }
+.goal-mini { display: grid; min-width: 0; min-height: 166px; grid-template-rows: auto auto minmax(2.6em,auto); align-items: center; justify-items: center; gap: 10px; padding: 13px 8px; border: 1px solid var(--boo-line); border-radius: 18px; background: var(--boo-paper); text-align: center; text-decoration: none; }
 .progress-ring { --pct: 0; position: relative; display: grid; width: 52px; height: 52px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: conic-gradient(var(--boo-sage) calc(var(--pct) * 1%), var(--boo-paper-2) 0); }
 .progress-ring--mixed { background: conic-gradient(var(--boo-sage) 0 calc(var(--green-pct) * 1%), var(--boo-ochre) calc(var(--green-pct) * 1%) calc(var(--total-pct) * 1%), var(--boo-paper-2) 0); }
 .progress-ring::before { content: ""; width: 40px; height: 40px; border-radius: 50%; background: var(--boo-paper); }
 .progress-ring span { position: absolute; font-size: 10px; font-weight: 700; }
-.goal-mini strong { display: block; overflow: hidden; font: 600 13px/1.2 var(--boo-display); text-overflow: ellipsis; }
-.goal-mini small { color: var(--boo-muted); font-size: 9px; }
+.goal-mini__title { width: 100%; font: 600 13px/1.2 var(--boo-display); overflow-wrap: anywhere; }
+.goal-mini__value { align-self: start; max-width: 100%; color: var(--boo-muted); font-size: 9px; line-height: 1.35; overflow-wrap: anywhere; }
 
-.active-book-card { display: grid; gap: 18px; padding: 18px; }
+.active-book-card { --session-card-bg:#e0e9df; --session-card-accent:#708d75; --session-card-ink:var(--boo-ink); --session-card-muted:var(--boo-muted); position: relative; display: grid; gap: 14px; padding: 54px 18px 18px; background: linear-gradient(145deg,var(--session-card-bg),color-mix(in srgb,var(--session-card-bg) 86%,var(--session-card-accent))); color: var(--session-card-ink); }
+.active-book-card--terracotta { --session-card-bg:#f1ded1; --session-card-accent:#a86a47; }
+.active-book-card--blue { --session-card-bg:#dbe8f0; --session-card-accent:#466b87; }
+.active-book-card--sage { --session-card-bg:#e0e9df; --session-card-accent:#708d75; }
+.active-book-card--red { --session-card-bg:#efdadd; --session-card-accent:#8f3f42; }
+.active-book-card--black { --session-card-bg:#20252b; --session-card-accent:#d39a58; --session-card-ink:#f8f3ea; --session-card-muted:#c5cdd4; }
+.active-book-card--white { --session-card-bg:#fff; --session-card-accent:#718396; }
+.active-book-card .muted { color: var(--session-card-muted); }
+.active-book-card .progress-track { background: color-mix(in srgb,var(--session-card-accent) 16%,var(--session-card-bg)); }
+.active-book-card .progress-track > span { background: linear-gradient(90deg,color-mix(in srgb,var(--session-card-accent) 78%,#142438),var(--session-card-accent)); }
+.session-card-color-picker { position: absolute; z-index: 5; top: 10px; right: 10px; }
+.session-card-color-picker > summary { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid color-mix(in srgb,var(--session-card-accent) 38%,var(--boo-line)); border-radius: 50%; background: color-mix(in srgb,var(--session-card-bg) 88%,transparent); color: var(--session-card-accent); box-shadow: 0 5px 16px color-mix(in srgb,var(--session-card-accent) 17%,transparent); cursor: pointer; list-style: none; }
+.session-card-color-picker > summary::-webkit-details-marker { display: none; }
+.session-card-color-picker > div { position: absolute; top: calc(100% + 7px); right: 0; display: flex; width: max-content; gap: 3px; padding: 5px; border: 1px solid var(--boo-line); border-radius: 999px; background: var(--boo-paper); box-shadow: var(--boo-shadow); }
+.active-book-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+.active-book-actions .button { width: 100%; min-width: 0; padding-inline: 10px; text-align: center; }
+.active-book-manual { justify-self: start; padding-inline: 0; }
 .book-cover { position: relative; display: grid; overflow: hidden; flex: 0 0 auto; place-items: end start; width: 84px; aspect-ratio: 2/3; padding: 10px; border-radius: 10px 14px 14px 10px; color: #fff; box-shadow: 8px 9px 20px rgba(20,36,56,.18); font: 600 12px/1.2 var(--boo-display); }
 .book-cover::after { content: ""; position: absolute; top: 0; bottom: 0; left: 6px; width: 1px; background: rgba(255,255,255,.22); }
 .book-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -576,10 +592,11 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
 .lexicon-card h3 { margin-bottom: 4px; }
 .lexicon-card footer { margin-top: 12px; color: var(--boo-muted); font-size: 10px; }
 .lexicon-kind { display: inline-flex; margin-bottom: 5px; padding: 4px 7px; border-radius: 999px; background: var(--boo-paper-2); color: var(--boo-sage-dark); font: 700 8px/1 var(--boo-mono); text-transform: uppercase; letter-spacing: .07em; }
-.lexicon-filter-fab { position: fixed; z-index: 14; right: max(18px,calc((100vw - 1160px)/2)); bottom: 26px; width: max-content; }
-.lexicon-filter-fab summary { display: flex; align-items: center; gap: 7px; padding: 10px 13px; border: 1px solid color-mix(in srgb,var(--boo-sage) 45%,var(--boo-line)); border-radius: 999px; background: color-mix(in srgb,var(--boo-paper) 94%,transparent); color: var(--boo-sage-dark); box-shadow: var(--boo-shadow-sage); backdrop-filter: blur(10px); cursor: pointer; font-size: 10px; font-weight: 700; list-style: none; }
+.lexicon-toolbar__actions { display: grid; flex: 0 0 auto; gap: 7px; }
+.lexicon-filter-fab { position: relative; z-index: 14; width: 100%; }
+.lexicon-filter-fab summary { display: flex; min-height: 34px; align-items: center; justify-content: center; gap: 7px; padding: 7px 13px; border: 1px solid color-mix(in srgb,var(--boo-sage) 45%,var(--boo-line)); border-radius: 999px; background: color-mix(in srgb,var(--boo-paper) 94%,transparent); color: var(--boo-sage-dark); box-shadow: var(--boo-shadow-sage); backdrop-filter: blur(10px); cursor: pointer; font-size: 10px; font-weight: 700; list-style: none; }
 .lexicon-filter-fab summary::-webkit-details-marker { display: none; }
-.lexicon-filter-fab__menu { position: absolute; right: 0; bottom: calc(100% + 8px); display: grid; min-width: 150px; gap: 4px; padding: 7px; border: 1px solid var(--boo-line); border-radius: 14px; background: var(--boo-paper); box-shadow: var(--boo-shadow-navy); }
+.lexicon-filter-fab__menu { position: absolute; top: calc(100% + 7px); right: 0; display: grid; min-width: 150px; gap: 4px; padding: 7px; border: 1px solid var(--boo-line); border-radius: 14px; background: var(--boo-paper); box-shadow: var(--boo-shadow-navy); }
 .lexicon-filter-fab__menu button { padding: 9px 11px; border: 0; border-radius: 9px; background: transparent; color: var(--boo-ink); cursor: pointer; text-align: left; }
 .lexicon-filter-fab__menu button[aria-pressed="true"] { background: color-mix(in srgb,var(--boo-sage) 14%,var(--boo-paper)); color: var(--boo-sage-dark); font-weight: 700; }
 
@@ -639,6 +656,15 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
 .session-timer__status { color: var(--boo-sage-dark); font-size: 11px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
 .session-controls { display: flex; justify-content: center; gap: 10px; }
 .session-control-main { width: 64px; height: 64px; border-radius: 50%; }
+.session-page-slider { gap: 9px; }
+.session-page-slider__value { display: flex; align-items: baseline; gap: 6px; color: var(--boo-muted); }
+.session-page-slider__value output { color: var(--boo-ink); font: 700 clamp(2rem,9vw,3.4rem)/1 var(--boo-display); font-variant-numeric: tabular-nums; }
+.session-page-slider input[type="range"] { appearance: none; width: 100%; height: 28px; padding: 0; border: 0; outline: 0; background: transparent; cursor: grab; accent-color: var(--boo-ochre); }
+.session-page-slider input[type="range"]::-webkit-slider-runnable-track { height: 9px; border-radius: 999px; background: linear-gradient(90deg,var(--boo-sage),var(--boo-ochre)); box-shadow: inset 0 1px 2px rgba(20,36,56,.2); }
+.session-page-slider input[type="range"]::-webkit-slider-thumb { appearance: none; width: 28px; height: 28px; margin-top: -10px; border: 4px solid var(--boo-paper); border-radius: 50%; background: var(--boo-ochre); box-shadow: 0 5px 14px rgba(20,36,56,.25); }
+.session-page-slider input[type="range"]::-moz-range-track { height: 9px; border: 0; border-radius: 999px; background: linear-gradient(90deg,var(--boo-sage),var(--boo-ochre)); }
+.session-page-slider input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; border: 4px solid var(--boo-paper); border-radius: 50%; background: var(--boo-ochre); box-shadow: 0 5px 14px rgba(20,36,56,.25); }
+.session-page-slider input[type="range"]:active { cursor: grabbing; }
 .rating-row { display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; }
 .rating-button { display: grid; min-height: 54px; place-items: center; border: 1px solid var(--boo-line); border-radius: 12px; background: var(--boo-paper); color: color-mix(in srgb,var(--boo-ink) 24%,transparent); cursor: pointer; font-size: 25px; transition: color .16s ease, border-color .16s ease, background .16s ease, transform .16s ease; }
 .rating-button:hover, .rating-button:focus-visible { border-color: color-mix(in srgb,var(--boo-ochre) 58%,var(--boo-line)); color: var(--boo-ochre); transform: translateY(-2px); }
@@ -720,8 +746,7 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
   .topbar { padding-inline: 24px; }
   .topbar__context { display: flex; }
   .main-view { padding: 30px 24px 110px; }
-  .active-book-card { grid-template-columns: 1fr auto; align-items: center; }
-  .active-book-card .button-row { max-width: 250px; }
+  .active-book-card { grid-template-columns: 1fr; align-items: stretch; }
   .book-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .book-detail-head { grid-template-columns: auto 1fr; align-items: start; }
   .stats-grid { grid-template-columns: repeat(4,1fr); }
@@ -787,8 +812,7 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
   .monthly-report-cta, .external-isbn-search { align-items: stretch; flex-direction: column; }
   .monthly-report-cta .button, .external-isbn-search .button { width: 100%; }
   .recommendations .section-heading { align-items: stretch; flex-direction: column; }
-  .toolbar > .button--primary { width: 100%; }
-  .lexicon-filter-fab { right: 16px; bottom: calc(78px + env(safe-area-inset-bottom)); }
+  .lexicon-toolbar__actions, .lexicon-toolbar__actions > .button { width: 100%; }
   .session-top { align-items: stretch; flex-direction: column; }
   .session-switcher { align-items: stretch; flex-direction: column; }
   .session-switcher select { width: 100%; max-width: none; }
@@ -801,7 +825,7 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
   .latest-badge-card__medal { width: 56px; height: 56px; }
   .latest-badge-card__medal::before { width: 42px; height: 42px; }
   .latest-badge-card__medal span { font-size: 17px; }
-  .goal-mini { flex-direction: column; text-align: center; padding: 10px 5px; }
+  .goal-mini { min-height: 158px; padding: 10px 5px; }
   .goal-mini .progress-ring { width: 46px; height: 46px; }
   .goal-mini .progress-ring::before { width: 35px; height: 35px; }
   .field-row { grid-template-columns: 1fr; }

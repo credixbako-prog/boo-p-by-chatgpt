@@ -80,7 +80,7 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
 
 test('lecture: dates éditables, étoiles et sélection de bibliothèque sans friction', async () => {
   const [app, store, css] = await Promise.all([read('js/mvp-app.js'), read('js/store.js'), read('css/mvp-v5.css')]);
-  const sessionView = app.slice(app.indexOf('function renderSession()'), app.indexOf('function tickSessionClock'));
+  const sessionView = app.slice(app.indexOf('function renderSessionPositionSlider'), app.indexOf('function tickSessionClock'));
   assert.match(app, /name="startedAt"/);
   assert.match(app, /name="completedAt"/);
   assert.match(app, /Date de fin de lecture/);
@@ -90,6 +90,12 @@ test('lecture: dates éditables, étoiles et sélection de bibliothèque sans fr
   assert.doesNotMatch(app, /🔖|Choisissez un signet/);
   assert.doesNotMatch(sessionView, /data-action="quick-trace"/);
   assert.match(sessionView, /data-action="session-lexicon"/);
+  assert.match(sessionView, /type="range"/);
+  assert.match(sessionView, /data-session-page-output/);
+  assert.match(sessionView, /<label class="field">Citation/);
+  assert.doesNotMatch(sessionView, /Note de session/);
+  assert.match(app, /includeCitation:false/);
+  assert.match(app, /Les citations se saisissent directement dans la session de lecture/);
   assert.match(app, /function clearLibraryBookSelection/);
   assert.match(app, /clickedSpine\?\.dataset\.id !== ui\.selectedLibraryBookId/);
   assert.match(store, /normalizeBookDate/);
@@ -160,6 +166,8 @@ test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
   assert.match(css, /\.trail-genre-node/);
   assert.match(css, /data:image\/svg\+xml/);
   assert.match(css, /\.lexicon-filter-fab/);
+  assert.match(app, /class="lexicon-toolbar__actions"/);
+  assert.match(css, /\.lexicon-filter-fab__menu \{ position: absolute; top:/);
 });
 
 test('communauté: adhésions, salons et messages sont persistants et protégés', async () => {
@@ -237,6 +245,11 @@ test('bibliothèque: six finitions visuelles et rayons horizontaux restent conte
   assert.match(app, /\['white','Blanc'\]/);
   assert.doesNotMatch(app, /<span aria-hidden="true"><\/span>\$\{label\}<\/button>/);
   assert.match(store, /libraryFinish: 'terracotta'/);
+  assert.match(store, /sessionCardColor: 'sage'/);
+  assert.match(app, /data-action="session-card-color"/);
+  assert.match(app, /class="active-book-actions"/);
+  assert.match(css, /\.active-book-card--black/);
+  assert.match(css, /\.goal-mini \{[^}]*grid-template-rows:/);
   assert.match(css, /\.physical-shelf \{[^}]*overflow-x: auto/);
   assert.match(css, /\.bookcase--blue/);
   assert.match(css, /\.bookcase--sage/);
@@ -402,6 +415,8 @@ test('ajout de livre: photo du code ISBN et saisie manuelle restent disponibles'
   assert.doesNotMatch(app, /data-form="book-search"/);
   assert.match(app, /id="book-isbn-field"/);
   assert.match(app, /id="book-genre-field"/);
+  assert.match(app, /knownGenres\.concat\(DEFAULT_GENRES\)/);
+  assert.match(app, /Les rayons déjà présents dans votre bibliothèque sont proposés en premier/);
   assert.match(app, /data-action="scan-book-isbn"/);
   assert.match(app, /capture="environment"/);
   assert.match(app, /La photo reste sur cet appareil et n’est pas enregistrée comme couverture/);
@@ -589,16 +604,20 @@ test('rapport mensuel: image Instagram et notes personnelles sur consentement', 
   assert.match(app, /data-action="share-monthly-report"/);
   assert.match(report, /const WIDTH = 1080/);
   assert.match(report, /const HEIGHT = 1350/);
+  assert.match(report, /drawCoverCollage/);
+  assert.match(report, /await Promise\.all\(shown\.map\(book => loadCoverImage\(book\.coverUrl\)\)\)/);
+  assert.match(report, /ctx\.fillRect\(0, 1000, WIDTH, 350\)/);
   assert.match(report, /navigator\.canShare/);
   assert.match(css, /\.monthly-report-preview/);
 
   const context = { window:{ BT:{} }, Intl, Date, console };
   vm.runInNewContext(report, context);
   const key = new Date().toISOString().slice(0, 7), at = `${key}-10T12:00:00.000Z`;
-  const state = { profile:{ name:'Lina', handle:'@lina' }, books:[{ title:'Le Livre', authors:['A. Auteur'], libraryState:'library', status:'lu', completedAt:at }], sessions:[{ startedAt:at, durationSeconds:3600, note:'Une note privée' }], lexicon:[{ kind:'word', word:'Clairière', definition:'Une ouverture.', createdAt:at }], traces:[{ text:'Une Trace privée', createdAt:at }] };
+  const state = { profile:{ name:'Lina', handle:'@lina' }, books:[{ title:'Le Livre', authors:['A. Auteur'], libraryState:'library', status:'lu', completedAt:at, coverUrl:'https://example.test/cover.jpg', coverColor:'linear-gradient(#123456,#654321)' }], sessions:[{ startedAt:at, durationSeconds:3600, note:'Une citation privée' }], lexicon:[{ kind:'word', word:'Clairière', definition:'Une ouverture.', createdAt:at }], traces:[{ text:'Une Trace privée', createdAt:at }] };
   const withoutNotes = context.window.BT.monthlyReport.buildData(state, key, false);
   const withNotes = context.window.BT.monthlyReport.buildData(state, key, true);
   assert.equal(withoutNotes.books.length, 1);
+  assert.equal(withoutNotes.books[0].coverUrl, 'https://example.test/cover.jpg');
   assert.equal(withoutNotes.minutes, 60);
   assert.equal(withoutNotes.notes.length, 0);
   assert.ok(withNotes.notes.length >= 1);
@@ -645,7 +664,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v27/);
+  assert.match(worker, /boo-p-webapp-v28/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

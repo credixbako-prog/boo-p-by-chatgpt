@@ -176,7 +176,7 @@ BT.store = (() => {
       community: demoCommunity(),
       notifications: [],
       badges: { unlocked: {} },
-      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, memoryCardColor: 'sage', dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
+      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, memoryCardColor: 'sage', sessionCardColor: 'sage', dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
       outbox: [], timeline: [], meta: { initializedAt: nowISO(), updatedAt: nowISO(), simulated: true }
     };
   }
@@ -231,6 +231,7 @@ BT.store = (() => {
     state.settings = { ...base.settings, ...(state.settings || {}), notifications: { ...base.settings.notifications, ...(state.settings?.notifications || {}) }, blockedUsers: state.settings?.blockedUsers || [], recentSearches: state.settings?.recentSearches || [], dismissedRecommendationIds: state.settings?.dismissedRecommendationIds || [], collapsedLibraryGenres:state.settings?.collapsedLibraryGenres || [] };
     state.settings.libraryFinish = ['terracotta','blue','sage','red','black','white'].includes(state.settings.libraryFinish) ? state.settings.libraryFinish : 'terracotta';
     state.settings.memoryCardColor = ['terracotta','blue','sage','red','black','white'].includes(state.settings.memoryCardColor) ? state.settings.memoryCardColor : 'sage';
+    state.settings.sessionCardColor = ['terracotta','blue','sage','red','black','white'].includes(state.settings.sessionCardColor) ? state.settings.sessionCardColor : 'sage';
     state.outbox = Array.isArray(state.outbox) ? state.outbox : [];
     state.timeline = Array.isArray(state.timeline) ? state.timeline : [];
     state.meta = { ...base.meta, ...(state.meta || {}) };
