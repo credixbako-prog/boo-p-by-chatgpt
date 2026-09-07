@@ -119,6 +119,9 @@ body[data-theme="dark"] .eyebrow { color: #a9cbb5; }
 .button--ghost { border-color: transparent; background: transparent; color: var(--boo-sage-dark); }
 .button--danger { border-color: color-mix(in srgb, var(--boo-danger) 35%, transparent); background: transparent; color: var(--boo-danger); }
 .button--small { min-height: 36px; padding: 7px 12px; font-size: 11px; }
+.home-add-book-fab { position: fixed; z-index: 1050; right: max(20px,env(safe-area-inset-right)); bottom: max(90px,calc(78px + env(safe-area-inset-bottom))); min-height: 52px; padding-inline: 19px; box-shadow: 0 14px 34px color-mix(in srgb,var(--boo-sage-dark) 32%,transparent); }
+.barcode-add-icon { position: relative; display: block; width: 23px; height: 18px; border: 1px solid rgba(255,255,255,.58); border-radius: 4px; background: repeating-linear-gradient(90deg,#fff 0 1px,transparent 1px 3px,#fff 3px 5px,transparent 5px 7px); }
+.barcode-add-icon::after { position: absolute; right: -5px; bottom: -5px; display: grid; width: 13px; height: 13px; place-items: center; border: 2px solid var(--boo-sage); border-radius: 50%; background: #fff; color: var(--boo-sage-dark); content: '+'; font: 700 11px/1 var(--boo-body); }
 .button--block { width: 100%; }
 .button[aria-pressed="true"] { border-color: color-mix(in srgb, var(--boo-ochre) 50%, transparent); background: color-mix(in srgb, var(--boo-ochre) 15%, var(--boo-paper)); color: var(--boo-ochre); }
 .button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
@@ -744,10 +747,17 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
 .book-import-grid { display: grid; gap: 16px; }
 .book-import-copy { align-self: center; }
 .book-import-copy h3, .isbn-lookup-card h3 { margin-bottom: 5px; }
-.camera-dropzone { position: relative; display: grid; min-height: 190px; place-items: center; overflow: hidden; padding: 18px; border: 2px dashed var(--boo-line); border-radius: 18px; background: var(--boo-paper-2); text-align: center; cursor: pointer; }
+.camera-dropzone { position: relative; display: grid; min-height: 190px; aspect-ratio: 1.8 / 1; place-items: center; overflow: hidden; padding: 18px; border: 2px dashed var(--boo-line); border-radius: 18px; background: var(--boo-paper-2); text-align: center; cursor: pointer; }
 .camera-dropzone:focus-within { outline: 3px solid color-mix(in srgb,var(--boo-sage) 36%,transparent); outline-offset: 3px; }
-.isbn-photo-preview { width: min(100%, 210px); max-height: 150px; object-fit: cover; border-radius: 13px; box-shadow: var(--boo-shadow-navy); }
-#book-isbn-photo-prompt.has-preview { margin-top: 10px; }
+.isbn-photo-preview { position: absolute; width: 100%; height: 100%; object-fit: cover; border-radius: 15px; box-shadow: var(--boo-shadow-navy); }
+.isbn-scan-frame { position: absolute; z-index: 2; inset: 20% 7%; border: 2px solid rgba(255,255,255,.94); border-radius: 13px; box-shadow: 0 0 0 999px rgba(20,36,56,.18), inset 0 0 0 1px rgba(20,36,56,.18); pointer-events: none; }
+.isbn-scan-frame::before, .isbn-scan-frame::after, .isbn-scan-frame i::before, .isbn-scan-frame i::after { position: absolute; width: 18px; height: 18px; border-color: var(--boo-ochre); border-style: solid; content: ''; }
+.isbn-scan-frame::before { top: -3px; left: -3px; border-width: 4px 0 0 4px; border-radius: 9px 0 0; }
+.isbn-scan-frame::after { top: -3px; right: -3px; border-width: 4px 4px 0 0; border-radius: 0 9px 0 0; }
+.isbn-scan-frame i::before { bottom: -3px; left: -3px; border-width: 0 0 4px 4px; border-radius: 0 0 0 9px; }
+.isbn-scan-frame i::after { right: -3px; bottom: -3px; border-width: 0 4px 4px 0; border-radius: 0 0 9px; }
+#book-isbn-photo-prompt { position: relative; z-index: 3; max-width: 86%; padding: 8px 11px; border-radius: 10px; background: color-mix(in srgb,var(--boo-paper) 87%,transparent); backdrop-filter: blur(5px); }
+#book-isbn-photo-prompt.has-preview { align-self: end; margin-bottom: 8px; }
 .book-analysis-status { display: grid; gap: 7px; margin-top: 12px; color: var(--boo-muted); }
 .book-analysis-status.is-error { color: var(--boo-danger); }
 .book-analysis-status progress { width: 100%; height: 8px; accent-color: var(--boo-sage); }
@@ -799,6 +809,7 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
   .club-space-aside { position: sticky; top: 105px; }
   .mind-map .trail-branches { grid-template-columns: repeat(3,minmax(0,1fr)); margin-left: 74px; padding-left: 34px; }
   .toast { bottom: 24px; }
+  .home-add-book-fab { right: 32px; bottom: 28px; }
   .session-view { min-height: calc(100vh - 160px); grid-template-columns: minmax(0,1.15fr) minmax(320px,.85fr); align-items: center; }
   .session-view > .session-panel { grid-column: 2; grid-row: 1 / span 4; }
 }
@@ -806,6 +817,7 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
 @media (max-width: 559px) {
   html, body { width: 100%; max-width: 100%; overflow-x: hidden; overflow-x: clip; overscroll-behavior-x: none; }
   body { min-width: 0; touch-action: manipulation; }
+  input, select, textarea { font-size: 16px; }
   .app-shell, .app-column, .main-view, .topbar, .bottom-nav { width: 100%; max-width: 100%; min-width: 0; overflow-x: clip; }
   .tabs { flex-wrap: wrap; overflow-x: clip; margin-inline: 0; }
   .tab { flex: 1 1 auto; text-align: center; }

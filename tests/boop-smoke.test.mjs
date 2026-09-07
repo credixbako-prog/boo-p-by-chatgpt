@@ -712,6 +712,21 @@ test('mobile: aucun défilement horizontal, y compris dans les dialogues', async
   assert.match(css, /\.dialog-body \{[^}]*overflow-x: (?:hidden|clip)/);
   assert.match(css, /\.app-dialog \{[^}]*overflow-x: (?:hidden|clip)/);
   assert.match(css, /\.tabs \{ flex-wrap: wrap; overflow-x: clip/);
+  assert.match(css, /input, select, textarea \{ font-size: 16px; \}/);
+});
+
+test('accueil: l’ajout rapide ouvre un scanner ISBN cadré sur téléphone', async () => {
+  const [app, css] = await Promise.all([read('js/mvp-app.js'), read('css/mvp-v5.css')]);
+  assert.match(app, /home-add-book-fab/);
+  assert.match(app, /Scanner un ISBN ou ajouter un livre/);
+  assert.match(app, /barcode-add-icon/);
+  assert.match(app, /openBookDialog\(null, \{ openScanner:true \}\)/);
+  assert.match(app, /cameraInput\?\.showPicker/);
+  assert.match(app, /function cropISBNAnalysisBlob/);
+  assert.match(app, /const ratio = 1\.8/);
+  assert.match(css, /\.barcode-add-icon/);
+  assert.match(css, /\.isbn-scan-frame/);
+  assert.match(css, /aspect-ratio: 1\.8 \/ 1/);
 });
 
 test('design: papier, ombres colorées, monospace et transitions restent progressifs', async () => {
@@ -747,7 +762,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v30/);
+  assert.match(worker, /boo-p-webapp-v31/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

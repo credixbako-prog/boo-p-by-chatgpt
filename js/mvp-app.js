@@ -488,7 +488,9 @@
         <div class="memory-color-picker bookcase-finish-picker" role="group" aria-label="Couleur des cartes devinettes">${SURFACE_COLORS.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="memory-card-color" data-color="${key}" aria-label="${label}" title="${label}" aria-pressed="${memoryColor === key}"><span aria-hidden="true"></span></button>`).join('')}</div>
         <div class="memory-list memory-list--${memoryColor}" aria-label="Cartes de la mémoire active">${memory.length ? `<div class="memory-carousel" data-memory-carousel tabindex="0" aria-label="Balayez horizontalement entre les cartes">${memory.map((item, index) => renderMemoryQuiz(item, index + 1, memory.length)).join('')}</div><div class="memory-carousel-dots" aria-hidden="true">${memory.map((_, index) => `<span class="${index === Math.min(ui.memoryCursor, memory.length - 1) ? 'is-current' : ''}"></span>`).join('')}</div>` : renderMemoryComplete()}</div>
         <p class="memory-reminder small muted">Jusqu’à 10 cartes en même temps · une nouvelle entrée du lexique arrive automatiquement après « Retrouvé ».</p>
-      </section>`;
+      </section>
+
+      <button class="button button--sage home-add-book-fab" type="button" data-action="add-book" aria-label="Scanner un ISBN ou ajouter un livre"><span class="barcode-add-icon" aria-hidden="true"></span><span>Ajouter un livre</span></button>`;
   }
 
   function goalMini(label, value, progress) {
@@ -1142,7 +1144,7 @@
     openDialog({ title: session ? 'Modifier la session passée' : 'Ajouter une session passée', eyebrow: 'Historique local', body: `<form class="form-grid" data-form="manual-session"><input type="hidden" name="sessionId" value="${attr(session?.id || '')}"><label class="field">Livre<select name="bookId">${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${item.id === book?.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><label class="field">Date<input type="date" name="date" required value="${date}"></label><div class="field-row"><label class="field">Durée (minutes)<input type="number" min="1" max="1440" name="duration" required value="${session ? Math.max(1,Math.round(session.durationSeconds/60)) : 30}"></label><label class="field">Ou horaires (facultatif)<span class="field-row"><input type="time" name="startTime"><input type="time" name="endTime"></span></label></div><div class="field-row"><label class="field">${audio ? 'Minute de départ' : 'Page de départ'}<input type="number" min="0" name="startPage" value="${session?.startPage ?? position ?? 0}"></label><label class="field">${audio ? 'Minute d’arrivée' : 'Page d’arrivée'}<input type="number" min="0" name="endPage" value="${session?.endPage ?? position ?? 0}"></label></div><label class="field">Note facultative<textarea name="note">${esc(session?.note || '')}</textarea></label><div class="button-row"><button class="button button--primary" type="submit">${session ? 'Enregistrer les modifications' : 'Ajouter la session'}</button>${session ? `<button class="button button--danger" type="button" data-action="delete-session" data-id="${attr(session.id)}">Supprimer</button>` : ''}</div></form>` });
   }
 
-  function openBookDialog(book = null) {
+  function openBookDialog(book = null, { openScanner = false } = {}) {
     const editing = Boolean(book);
     const knownGenres = store.getBooks().flatMap(item => [item.genre, ...(item.genres || [])]).map(value => String(value || '').trim()).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
     const genreKeys = new Set();
@@ -1155,7 +1157,7 @@
     openDialog({ title: editing ? 'Modifier le livre' : 'Ajouter un livre', eyebrow: editing ? 'Métadonnées modifiables' : 'ISBN ou saisie manuelle', wide: true, body: `
       <section class="book-import-panel" aria-labelledby="book-isbn-photo-title">
         <div class="book-import-grid">
-          <label class="camera-dropzone" for="isbn-photo-file"><img class="isbn-photo-preview" id="book-isbn-photo-preview" alt="Aperçu du code-barres ISBN" hidden><span id="book-isbn-photo-prompt"><strong>Photographier le code-barres ISBN</strong><br><span class="small muted">Cadrez le code-barres et le numéro imprimé au dos du livre</span></span><input class="sr-only" id="isbn-photo-file" type="file" accept="image/*,.heic,.heif" capture="environment" data-change="isbn-photo-file"></label>
+          <label class="camera-dropzone" for="isbn-photo-file"><img class="isbn-photo-preview" id="book-isbn-photo-preview" alt="Aperçu du code-barres ISBN" hidden><span class="isbn-scan-frame" aria-hidden="true"><i></i></span><span id="book-isbn-photo-prompt"><strong>Photographier le code-barres ISBN</strong><br><span class="small muted">Placez le code-barres et ses chiffres dans le cadre horizontal</span></span><input class="sr-only" id="isbn-photo-file" type="file" accept="image/*,.heic,.heif" capture="environment" data-change="isbn-photo-file"></label>
           <div class="book-import-copy"><h3 id="book-isbn-photo-title">Lire le code ISBN</h3><p class="small muted">BOO-P analyse uniquement le code-barres ou le numéro ISBN visible sur la photo. La photo reste sur cet appareil et n’est pas enregistrée comme couverture.</p><button class="button button--sage" id="scan-book-isbn" type="button" data-action="scan-book-isbn" disabled>Lire l’ISBN</button></div>
         </div>
         <div class="book-analysis-status small" id="book-analysis-status" role="status" aria-live="polite"><span id="book-analysis-message">Vous pouvez photographier le code ou saisir l’ISBN ci-dessous.</span><progress id="book-analysis-progress" max="1" value="0" hidden></progress></div>
@@ -1168,6 +1170,12 @@
     const formHint = bookForm?.querySelector(':scope > p.small.muted');
     if (bookForm && formHint) {
       formHint.insertAdjacentHTML('beforebegin', `<div class="field-row reading-date-fields"><label class="field">Date de début de lecture<input type="date" name="startedAt" value="${attr(dateInputValue(book?.startedAt))}"></label><label class="field">Date de fin de lecture<input type="date" name="completedAt" value="${attr(dateInputValue(book?.completedAt))}"><span class="field-help">Cette date classe le livre dans le Sentier et le fait compter dans les objectifs du mois et de l’année correspondants.</span></label></div><p class="small muted">Pour une lecture antérieure à votre inscription, indiquez la date de fin si vous la connaissez. Sans date, le livre reste dans votre bibliothèque mais ne compte dans aucun objectif daté.</p><fieldset class="book-rating-field"><legend>Note du livre</legend>${ratingPicker(book?.rating, 'book-rating')}<input type="hidden" name="rating" id="book-rating" value="${book?.rating || ''}"><p class="small muted" id="book-rating-description">${book?.rating ? `${book.rating} étoile${book.rating > 1 ? 's' : ''} sur 5.` : 'Notation facultative de 1 à 5 étoiles.'}</p></fieldset>`);
+    }
+    const cameraFirst = openScanner && !editing && window.matchMedia?.('(pointer: coarse)')?.matches && window.matchMedia?.('(max-width: 820px)')?.matches;
+    if (cameraFirst) {
+      const cameraInput = document.getElementById('isbn-photo-file');
+      try { cameraInput?.showPicker ? cameraInput.showPicker() : cameraInput?.click(); }
+      catch { /* Le cadre et le bouton restent disponibles si le navigateur bloque l'ouverture automatique. */ }
     }
   }
 
@@ -1369,7 +1377,7 @@
       case 'create-salon': openSalonCreateDialog(null, trigger.dataset.clubId || null); break;
       case 'select-book': selectLibraryBook(trigger, id); break;
       case 'open-book': location.hash = `#book?id=${encodeURIComponent(id)}`; break;
-      case 'add-book': openBookDialog(); break;
+      case 'add-book': openBookDialog(null, { openScanner:true }); break;
       case 'library-view': ui.selectedLibraryBookId = null; store.saveSettings({ libraryView: trigger.dataset.view }); render(); break;
       case 'library-finish': store.saveSettings({ libraryFinish:trigger.dataset.finish }); render(); break;
       case 'toggle-trail-book': rememberTrailViewport(); ui.expandedTrailBooks.has(id) ? ui.expandedTrailBooks.delete(id) : ui.expandedTrailBooks.add(id); render(); break;
@@ -1786,6 +1794,32 @@
     preview.hidden = false;
   }
 
+  async function cropISBNAnalysisBlob(blob) {
+    if (!blob || typeof createImageBitmap !== 'function') return blob;
+    const bitmap = await createImageBitmap(blob);
+    try {
+      const ratio = 1.8;
+      let sourceWidth = bitmap.width, sourceHeight = bitmap.height, sourceX = 0, sourceY = 0;
+      if (sourceWidth / sourceHeight > ratio) {
+        sourceWidth = Math.round(sourceHeight * ratio);
+        sourceX = Math.round((bitmap.width - sourceWidth) / 2);
+      } else {
+        sourceHeight = Math.round(sourceWidth / ratio);
+        sourceY = Math.round((bitmap.height - sourceHeight) / 2);
+      }
+      const scale = Math.min(1, 1600 / sourceWidth);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+      canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+      const context = canvas.getContext('2d', { alpha:false });
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(bitmap, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+      return await new Promise(resolve => canvas.toBlob(result => resolve(result || blob), 'image/jpeg', .92));
+    } catch { return blob; }
+    finally { bitmap.close?.(); }
+  }
+
   async function readISBNPhoto(file) {
     if (!file) return;
     const scanButton = document.getElementById('scan-book-isbn');
@@ -1794,7 +1828,7 @@
     try {
       const prepared = await window.BT.bookLookup.prepareCover(file, update => setBookAnalysisStatus(update.message, update.progress));
       ui.pendingISBNPhoto = prepared.dataUrl;
-      ui.pendingISBNPhotoFile = prepared.analysisBlob || file;
+      ui.pendingISBNPhotoFile = await cropISBNAnalysisBlob(prepared.analysisBlob || file);
       setISBNPhotoPreview(prepared.dataUrl);
       document.getElementById('book-isbn-photo-prompt')?.classList.add('has-preview');
       setBookAnalysisStatus('Photo prête. Lancez maintenant la lecture du code ISBN.', null);
