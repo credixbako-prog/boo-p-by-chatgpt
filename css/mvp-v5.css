@@ -658,14 +658,15 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
 .setting-card summary::after { content: "+"; font-size: 20px; font-weight: 400; }
 .setting-card[open] summary::after { content: "−"; }
 .setting-card__body { padding: 0 15px 15px; }
-.monthly-report-cta { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px; background: linear-gradient(135deg,color-mix(in srgb,var(--boo-sage) 13%,var(--boo-paper)),var(--boo-paper)); }
+.monthly-report-cta { position: relative; display: flex; overflow: hidden; align-items: center; justify-content: space-between; gap: 24px; padding: 24px; border-color: color-mix(in srgb,var(--boo-sage) 42%,var(--boo-line)); background: radial-gradient(circle at 92% 8%,color-mix(in srgb,var(--boo-ochre) 20%,transparent),transparent 34%),linear-gradient(135deg,color-mix(in srgb,var(--boo-sage) 15%,var(--boo-paper)),var(--boo-paper)); }
+.monthly-report-cta::after { position: absolute; right: -25px; bottom: -52px; width: 150px; height: 150px; border: 1px solid color-mix(in srgb,var(--boo-sage) 28%,transparent); border-radius: 50%; content: ""; pointer-events: none; }
 .monthly-report-cta > div { min-width: 0; }
 .monthly-report-cta h2 { margin-bottom: 8px; }
-.monthly-report-cta .button { flex: 0 0 auto; }
+.monthly-report-cta .button { z-index: 1; flex: 0 0 auto; }
 .report-format-note, .external-isbn-search { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px; border: 1px solid var(--boo-line); border-radius: 16px; background: var(--boo-paper-2); }
 .report-format-note > span { display: grid; width: 50px; height: 62px; flex: 0 0 auto; place-items: center; border: 2px solid var(--boo-sage); border-radius: 9px; color: var(--boo-sage-dark); font-size: 24px; }
 .report-format-note p, .external-isbn-search p { margin-bottom: 0; }
-.report-preview-wrap { display: grid; max-width: 520px; margin-inline: auto; padding: 10px; border-radius: 20px; background: var(--boo-paper-2); box-shadow: var(--boo-shadow); }
+.report-preview-wrap { display: grid; max-width: 520px; margin-inline: auto; padding: 10px; border: 1px solid color-mix(in srgb,var(--boo-sage) 28%,var(--boo-line)); border-radius: 20px; background: var(--boo-paper-2); box-shadow: 0 24px 58px rgba(69,106,89,.2); }
 .monthly-report-preview { display: block; width: 100%; height: auto; border-radius: 13px; }
 .report-actions { justify-content: center; margin-top: 18px; }
 .external-isbn-search { align-items: flex-start; }

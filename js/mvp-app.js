@@ -994,7 +994,7 @@
       ${goalCard('month','Ce mois',goalStatusText(progress.month),'Chaque livre choisi vaut une part : vert s’il est lu, orange s’il est en cours.',progress.month,state.month.history)}
       ${goalCard('year','Cette année',goalStatusText(progress.year),'Même calcul sur toute l’année pour les livres choisis.',progress.year,state.year.history)}
     </div><p class="small muted section-block">La progression mensuelle et annuelle se recalcule immédiatement selon le statut et la date de fin des livres sélectionnés. Un livre à lire ne remplit rien ; un livre en cours remplit sa part en orange ; un livre lu pendant la période remplit sa part en vert.</p>
-    <section class="card monthly-report-cta section-block" aria-labelledby="monthly-report-title"><div><p class="eyebrow">Image 1080 × 1350 · prête à publier</p><h2 id="monthly-report-title">Votre mois de lecture, en un regard</h2><p class="small muted">Livres lus, temps de lecture, mots, expressions et citations. Avant la création, vous choisissez si vos notes personnelles peuvent apparaître.</p></div><button class="button button--primary" type="button" data-action="open-monthly-report">Créer le rapport mensuel</button></section>`;
+    <section class="card monthly-report-cta section-block" aria-labelledby="monthly-report-title"><div><p class="eyebrow">Carte 1080 × 1350 · prête à partager</p><h2 id="monthly-report-title">Votre mois de lecture mérite sa couverture</h2><p class="small muted">Retrouvez les couvertures de votre bibliothèque, vos statistiques et ce que vous gardez du mois dans une image signée BOO-P.</p></div><button class="button button--primary" type="button" data-action="open-monthly-report">Créer ma carte du mois</button></section>`;
   }
 
   function goalBookRows(books, progress) {

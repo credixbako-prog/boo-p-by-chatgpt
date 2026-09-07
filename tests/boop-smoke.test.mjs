@@ -680,27 +680,36 @@ test('objectifs: le changement de mois et d’année archive la période puis re
 });
 
 test('rapport mensuel: image Instagram et notes personnelles sur consentement', async () => {
-  const [html, app, report, css] = await Promise.all([read('app.html'), read('js/mvp-app.js'), read('js/monthly-report.js'), read('css/mvp-v5.css')]);
+  const [html, app, report, css, coverProxy] = await Promise.all([read('app.html'), read('js/mvp-app.js'), read('js/monthly-report.js'), read('css/mvp-v5.css'), read('supabase/functions/cover-image-proxy/index.ts')]);
   assert.match(html, /js\/monthly-report\.js/);
   assert.match(app, /data-action="open-monthly-report"/);
   assert.match(app, /name="includePersonalNotes"/);
   assert.match(app, /data-action="share-monthly-report"/);
   assert.match(report, /const WIDTH = 1080/);
   assert.match(report, /const HEIGHT = 1350/);
-  assert.match(report, /drawCoverCollage/);
+  assert.match(report, /drawBookGallery/);
+  assert.match(report, /drawContainedImage/);
+  assert.match(report, /COVER_PROXY_FUNCTION = 'cover-image-proxy'/);
+  assert.match(report, /Authorization:`Bearer \$\{token\}`/);
   assert.match(report, /await Promise\.all\(shown\.map\(book => loadCoverImage\(book\.coverUrl\)\)\)/);
-  assert.match(report, /ctx\.fillRect\(0, 1000, WIDTH, 350\)/);
+  assert.match(report, /Quel chemin vos lectures dessinent-elles/);
+  assert.doesNotMatch(report, /!book\.historicalBeforeJoin/);
   assert.match(report, /navigator\.canShare/);
   assert.match(css, /\.monthly-report-preview/);
+  assert.match(coverProxy, /MAX_IMAGE_BYTES = 5 \* 1024 \* 1024/);
+  assert.match(coverProxy, /covers\.openlibrary\.org/);
+  assert.match(coverProxy, /Cross-Origin-Resource-Policy/);
+  assert.match(coverProxy, /isAllowedHost\(url\.hostname\)/);
 
-  const context = { window:{ BT:{} }, Intl, Date, console };
+  const context = { window:{ BT:{}, BOOP_SUPABASE_CONFIG:{ url:'https://project.supabase.co' } }, Intl, Date, console };
   vm.runInNewContext(report, context);
   const key = new Date().toISOString().slice(0, 7), at = `${key}-10T12:00:00.000Z`;
-  const state = { profile:{ name:'Lina', handle:'@lina' }, books:[{ title:'Le Livre', authors:['A. Auteur'], libraryState:'library', status:'lu', completedAt:at, coverUrl:'https://example.test/cover.jpg', coverColor:'linear-gradient(#123456,#654321)' }], sessions:[{ startedAt:at, durationSeconds:3600, note:'Une citation privée' }], lexicon:[{ kind:'word', word:'Clairière', definition:'Une ouverture.', createdAt:at }], traces:[{ text:'Une Trace privée', createdAt:at }] };
+  const state = { profile:{ name:'Lina', handle:'@lina' }, books:[{ title:'Le Livre', authors:['A. Auteur'], libraryState:'library', status:'lu', completedAt:at, coverUrl:'https://example.test/cover.jpg', coverColor:'linear-gradient(#123456,#654321)' }, { title:'Lecture antérieure', authors:['B. Auteur'], libraryState:'library', status:'lu', completedAt:at, historicalBeforeJoin:true, coverUrl:'https://example.test/old.jpg' }], sessions:[{ startedAt:at, durationSeconds:3600, note:'Une citation privée' }], lexicon:[{ kind:'word', word:'Clairière', definition:'Une ouverture.', createdAt:at }], traces:[{ text:'Une Trace privée', createdAt:at }] };
   const withoutNotes = context.window.BT.monthlyReport.buildData(state, key, false);
   const withNotes = context.window.BT.monthlyReport.buildData(state, key, true);
-  assert.equal(withoutNotes.books.length, 1);
+  assert.equal(withoutNotes.books.length, 2);
   assert.equal(withoutNotes.books[0].coverUrl, 'https://example.test/cover.jpg');
+  assert.match(context.window.BT.monthlyReport.coverProxyUrl('https://covers.openlibrary.org/b/id/1-L.jpg'), /functions\/v1\/cover-image-proxy/);
   assert.equal(withoutNotes.minutes, 60);
   assert.equal(withoutNotes.notes.length, 0);
   assert.ok(withNotes.notes.length >= 1);
@@ -762,7 +771,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v31/);
+  assert.match(worker, /boo-p-webapp-v32/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);
