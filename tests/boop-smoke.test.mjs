@@ -687,8 +687,12 @@ test('rapport mensuel: image Instagram et notes personnelles sur consentement', 
   assert.match(app, /data-action="share-monthly-report"/);
   assert.match(report, /const WIDTH = 1080/);
   assert.match(report, /const HEIGHT = 1350/);
+  assert.match(report, /const COVER_ZONE_HEIGHT = Math\.round\(HEIGHT \* \.75\)/);
+  assert.match(report, /REPORT_STATUSES = \['lu', 'en-cours', 'en-pause', 'abandonne'\]/);
+  assert.match(report, /book\.statusUpdatedAt/);
   assert.match(report, /drawBookGallery/);
   assert.match(report, /drawContainedImage/);
+  assert.match(report, /function imageHasVisibleContent/);
   assert.match(report, /COVER_PROXY_FUNCTION = 'cover-image-proxy'/);
   assert.match(report, /Authorization:`Bearer \$\{token\}`/);
   assert.match(report, /await Promise\.all\(shown\.map\(book => loadCoverImage\(book\.coverUrl\)\)\)/);
@@ -704,11 +708,15 @@ test('rapport mensuel: image Instagram et notes personnelles sur consentement', 
   const context = { window:{ BT:{}, BOOP_SUPABASE_CONFIG:{ url:'https://project.supabase.co' } }, Intl, Date, console };
   vm.runInNewContext(report, context);
   const key = new Date().toISOString().slice(0, 7), at = `${key}-10T12:00:00.000Z`;
-  const state = { profile:{ name:'Lina', handle:'@lina' }, books:[{ title:'Le Livre', authors:['A. Auteur'], libraryState:'library', status:'lu', completedAt:at, coverUrl:'https://example.test/cover.jpg', coverColor:'linear-gradient(#123456,#654321)' }, { title:'Lecture antérieure', authors:['B. Auteur'], libraryState:'library', status:'lu', completedAt:at, historicalBeforeJoin:true, coverUrl:'https://example.test/old.jpg' }], sessions:[{ startedAt:at, durationSeconds:3600, note:'Une citation privée' }], lexicon:[{ kind:'word', word:'Clairière', definition:'Une ouverture.', createdAt:at }], traces:[{ text:'Une Trace privée', createdAt:at }] };
+  const state = { profile:{ name:'Lina', handle:'@lina' }, books:[{ id:'read', title:'Le Livre', authors:['A. Auteur'], libraryState:'library', status:'lu', completedAt:at, coverUrl:'https://example.test/cover.jpg', coverColor:'linear-gradient(#123456,#654321)' }, { id:'old', title:'Lecture antérieure', authors:['B. Auteur'], libraryState:'library', status:'lu', completedAt:at, historicalBeforeJoin:true, coverUrl:'https://example.test/old.jpg' }, { id:'active', title:'En chemin', authors:['C. Auteur'], libraryState:'library', status:'en-cours', startedAt:at, coverUrl:'https://example.test/active.jpg' }, { id:'paused', title:'En suspens', authors:['D. Auteur'], libraryState:'library', status:'en-pause', lastUsedAt:at, coverUrl:'https://example.test/paused.jpg' }, { id:'abandoned', title:'Chemin interrompu', authors:['E. Auteur'], libraryState:'library', status:'abandonne', startedAt:at, coverUrl:'https://example.test/abandoned.jpg' }], sessions:[{ bookId:'read', startedAt:at, durationSeconds:3600, note:'Une citation privée' }], lexicon:[{ kind:'word', word:'Clairière', definition:'Une ouverture.', createdAt:at }], traces:[{ text:'Une Trace privée', createdAt:at }], activeSessions:[], timeline:[] };
   const withoutNotes = context.window.BT.monthlyReport.buildData(state, key, false);
   const withNotes = context.window.BT.monthlyReport.buildData(state, key, true);
-  assert.equal(withoutNotes.books.length, 2);
-  assert.equal(withoutNotes.books[0].coverUrl, 'https://example.test/cover.jpg');
+  assert.equal(withoutNotes.books.length, 5);
+  assert.equal(withoutNotes.statusCounts.lu, 2);
+  assert.equal(withoutNotes.statusCounts['en-cours'], 1);
+  assert.equal(withoutNotes.statusCounts['en-pause'], 1);
+  assert.equal(withoutNotes.statusCounts.abandonne, 1);
+  assert.ok(withoutNotes.books.some(book => book.coverUrl === 'https://example.test/cover.jpg'));
   assert.match(context.window.BT.monthlyReport.coverProxyUrl('https://covers.openlibrary.org/b/id/1-L.jpg'), /functions\/v1\/cover-image-proxy/);
   assert.equal(withoutNotes.minutes, 60);
   assert.equal(withoutNotes.notes.length, 0);
@@ -771,7 +779,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v32/);
+  assert.match(worker, /boo-p-webapp-v34/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

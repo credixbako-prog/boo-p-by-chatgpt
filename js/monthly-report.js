@@ -4,6 +4,7 @@
 
   const WIDTH = 1080;
   const HEIGHT = 1350;
+  const COVER_ZONE_HEIGHT = Math.round(HEIGHT * .75);
   const COLORS = {
     paper:'#f5efe5', paperSoft:'#ebe2d4', ink:'#17324d', muted:'#68747d',
     sage:'#6f927c', sageDark:'#456a59', ochre:'#cf873d', white:'#fffdf8', line:'#d9cebf', rose:'#b96862'
@@ -30,12 +31,35 @@
   function inMonth(value, monthKey) { return Boolean(value) && localMonthKey(value) === monthKey; }
   function cleanText(value) { return String(value || '').replace(/\s+/g, ' ').trim(); }
 
+  const REPORT_STATUSES = ['lu', 'en-cours', 'en-pause', 'abandonne'];
+  const STATUS_LABELS = { lu:'Terminé', 'en-cours':'En cours', 'en-pause':'En pause', abandonne:'Abandonné' };
+
+  function reportBooks(state, monthKey, monthSessions) {
+    const sessionBookIds = new Set(monthSessions.map(session => session.bookId).filter(Boolean));
+    (state.activeSessions || []).forEach(session => {
+      if ([session.startedAt, session.resumedAt, session.pausedAt, session.lastSeenAt].some(value => inMonth(value, monthKey))) sessionBookIds.add(session.bookId);
+    });
+    const statusBookIds = new Set((state.timeline || [])
+      .filter(event => String(event.type || '').startsWith('status-') && inMonth(event.date, monthKey))
+      .map(event => event.bookId).filter(Boolean));
+    const isCurrentMonth = monthKey === localMonthKey();
+
+    return (state.books || []).filter(book => {
+      if (book.libraryState !== 'library' || !REPORT_STATUSES.includes(book.status)) return false;
+      const hasMonthlyActivity = sessionBookIds.has(book.id) || statusBookIds.has(book.id)
+        || [book.startedAt, book.completedAt, book.lastUsedAt, book.statusUpdatedAt, book.addedAt].some(value => inMonth(value, monthKey));
+      const stillOnCurrentPath = isCurrentMonth && ['en-cours', 'en-pause', 'abandonne'].includes(book.status);
+      return hasMonthlyActivity || stillOnCurrentPath;
+    }).sort((a, b) => {
+      const activity = book => Math.max(...[book.completedAt, book.lastUsedAt, book.statusUpdatedAt, book.startedAt, book.addedAt].map(value => new Date(value || 0).getTime()));
+      return activity(b) - activity(a);
+    });
+  }
+
   function buildData(state, monthKey, includePersonalNotes = false) {
     const key = normalizeMonthKey(monthKey);
-    const books = (state.books || [])
-      .filter(book => book.libraryState === 'library' && book.status === 'lu' && book.completedAt && inMonth(book.completedAt, key))
-      .sort((a,b) => new Date(b.completedAt) - new Date(a.completedAt));
     const sessions = (state.sessions || []).filter(session => inMonth(session.startedAt, key));
+    const books = reportBooks(state, key, sessions);
     const entries = (state.lexicon || []).filter(entry => inMonth(entry.createdAt || entry.updatedAt, key));
     const traces = (state.traces || []).filter(trace => inMonth(trace.createdAt || trace.updatedAt, key));
     const words = entries.filter(entry => (entry.kind || 'word') === 'word');
@@ -47,17 +71,24 @@
     const minutes = Math.round(sessions.reduce((sum, session) => sum + (Number(session.durationSeconds) || 0) / 60, 0));
     const profileName = cleanText(state.profile?.name) || 'Lecteur BOO-P';
     const handle = cleanText(state.profile?.handle);
+    const statusCounts = REPORT_STATUSES.reduce((counts, status) => ({ ...counts, [status]:books.filter(book => book.status === status).length }), {});
+    const statusSummary = [
+      statusCounts.lu && `${statusCounts.lu} terminé${statusCounts.lu > 1 ? 's' : ''}`,
+      statusCounts['en-cours'] && `${statusCounts['en-cours']} en cours`,
+      statusCounts['en-pause'] && `${statusCounts['en-pause']} en pause`,
+      statusCounts.abandonne && `${statusCounts.abandonne} abandonné${statusCounts.abandonne > 1 ? 's' : ''}`
+    ].filter(Boolean).join(' · ');
     return {
-      monthKey:key, label:monthLabel(key), profileName, handle, includePersonalNotes,
+      monthKey:key, label:monthLabel(key), profileName, handle, includePersonalNotes, statusCounts, statusSummary,
       books:books.map(book => ({
         title:cleanText(book.title), authors:(book.authors || []).map(cleanText).filter(Boolean), rating:Number(book.rating) || 0,
-        coverUrl:cleanText(book.coverUrl), coverColor:cleanText(book.coverColor)
+        coverUrl:cleanText(book.coverUrl), coverColor:cleanText(book.coverColor), status:book.status, statusLabel:STATUS_LABELS[book.status]
       })),
       minutes, sessions:sessions.length, words:words.length, expressions:expressions.length, citations:citations.length,
       discoveries:entries.slice(0, 4).map(entry => ({ kind:entry.kind || 'word', text:cleanText(entry.word), definition:cleanText(entry.definition) })),
       notes,
       summary:books.length
-        ? `${books.length} livre${books.length > 1 ? 's' : ''} terminé${books.length > 1 ? 's' : ''}, ${minutes} minutes de lecture et ${entries.length} découverte${entries.length > 1 ? 's' : ''} à garder.`
+        ? `${books.length} lecture${books.length > 1 ? 's' : ''} suivie${books.length > 1 ? 's' : ''} ce mois${statusSummary ? ` : ${statusSummary}` : ''}.`
         : `${minutes} minutes de lecture et ${entries.length} découverte${entries.length > 1 ? 's' : ''} consignées sur le sentier.`
     };
   }
@@ -111,12 +142,25 @@
     return `${projectUrl}/functions/v1/${COVER_PROXY_FUNCTION}?url=${encodeURIComponent(source)}`;
   }
 
+  function imageHasVisibleContent(image) {
+    const width = image.naturalWidth || image.width, height = image.naturalHeight || image.height;
+    if (width < 32 || height < 48 || typeof document === 'undefined') return false;
+    try {
+      const sample = document.createElement('canvas'); sample.width = 12; sample.height = 18;
+      const context = sample.getContext('2d'); context.drawImage(image, 0, 0, sample.width, sample.height);
+      const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
+      let visible = 0;
+      for (let index = 3; index < pixels.length; index += 4) if (pixels[index] > 24) visible += 1;
+      return visible >= sample.width * sample.height * .65;
+    } catch { return true; }
+  }
+
   function loadImageCandidate(url, timeoutMs) {
     return new Promise(resolve => {
       const image = new Image();
       const timer = window.setTimeout(() => resolve(null), timeoutMs);
       image.crossOrigin = 'anonymous'; image.referrerPolicy = 'no-referrer';
-      image.onload = () => { window.clearTimeout(timer); resolve(image); };
+      image.onload = () => { window.clearTimeout(timer); resolve(imageHasVisibleContent(image) ? image : null); };
       image.onerror = () => { window.clearTimeout(timer); resolve(null); };
       image.src = url;
     });
@@ -171,8 +215,12 @@
     drawLines(ctx, book.title || 'Lecture BOO-P', x + width * .15, y + height * .43, width * .7, Math.max(25, width * .13), 4);
   }
 
+  function statusColor(status) {
+    return ({ lu:COLORS.sageDark, 'en-cours':COLORS.ochre, 'en-pause':COLORS.ink, abandonne:COLORS.rose })[status] || COLORS.muted;
+  }
+
   function drawCoverCard(ctx, book, image, index, x, y, width, angle = 0) {
-    const coverHeight = width * 1.5, captionHeight = Math.max(48, width * .27), cardHeight = coverHeight + captionHeight;
+    const coverHeight = width * 1.5, captionHeight = Math.max(48, width * .28), cardHeight = coverHeight + captionHeight;
     ctx.save(); ctx.translate(x + width / 2, y + cardHeight / 2); ctx.rotate(angle); ctx.translate(-width / 2, -cardHeight / 2);
     ctx.shadowColor = 'rgba(23,50,77,.24)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 14;
     roundedRect(ctx, 0, 0, width, cardHeight, 10); ctx.fillStyle = COLORS.white; ctx.fill(); ctx.shadowColor = 'transparent';
@@ -180,21 +228,24 @@
     if (image) drawContainedImage(ctx, image, 0, 0, width, coverHeight);
     else drawFallbackCover(ctx, book, index, 0, 0, width, coverHeight);
     ctx.restore();
-    ctx.fillStyle = COLORS.ink; ctx.font = `600 ${Math.max(13, width * .075)}px Poppins, Arial, sans-serif`;
-    ctx.textAlign = 'center'; drawLines(ctx, truncate(book.title || 'Lecture BOO-P', 34), width / 2, coverHeight + 22, width - 20, Math.max(15, width * .085), 2); ctx.textAlign = 'left';
+    roundedRect(ctx, 12, 12, Math.min(width - 24, Math.max(80, cleanText(book.statusLabel).length * 8 + 28)), 30, 15);
+    ctx.fillStyle = statusColor(book.status); ctx.fill();
+    ctx.fillStyle = COLORS.white; ctx.font = '700 11px Poppins, Arial, sans-serif'; ctx.fillText(String(book.statusLabel || 'Lecture').toUpperCase(), 25, 32);
+    ctx.fillStyle = COLORS.ink; ctx.font = `600 ${Math.max(12, width * .07)}px Poppins, Arial, sans-serif`;
+    ctx.textAlign = 'center'; drawLines(ctx, truncate(book.title || 'Lecture BOO-P', 32), width / 2, coverHeight + 21, width - 18, Math.max(14, width * .08), 2); ctx.textAlign = 'left';
     ctx.restore();
     return cardHeight;
   }
 
   async function drawBookGallery(ctx, books, x, y, width, height) {
-    const shown = books.slice(0, 5);
+    const shown = books.slice(0, 8);
     if (!shown.length) {
       ctx.save();
       roundedRect(ctx, x, y, width, height, 34); ctx.fillStyle = COLORS.paperSoft; ctx.fill();
       const shades = [COLORS.sage, COLORS.ochre, COLORS.ink, COLORS.rose];
       shades.forEach((color, index) => {
-        const bookWidth = 82 + index * 4, bookHeight = 220 + index * 22, left = x + width / 2 - 190 + index * 92;
-        roundedRect(ctx, left, y + height - bookHeight - 48, bookWidth, bookHeight, 7); ctx.fillStyle = color; ctx.fill();
+        const bookWidth = 106 + index * 5, bookHeight = 330 + index * 28, left = x + width / 2 - 245 + index * 120;
+        roundedRect(ctx, left, y + height - bookHeight - 58, bookWidth, bookHeight, 7); ctx.fillStyle = color; ctx.fill();
       });
       ctx.fillStyle = COLORS.ink; ctx.font = '600 31px "Playfair Display", Georgia, serif'; ctx.textAlign = 'center';
       ctx.fillText('Le prochain chapitre reste à écrire.', x + width / 2, y + height - 12); ctx.textAlign = 'left'; ctx.restore();
@@ -202,26 +253,31 @@
     }
 
     const images = await Promise.all(shown.map(book => loadCoverImage(book.coverUrl)));
-    const cardWidth = shown.length === 1 ? 242 : shown.length === 2 ? 220 : shown.length === 3 ? 194 : shown.length === 4 ? 178 : 164;
-    const gap = shown.length <= 2 ? 44 : 18;
-    const totalWidth = cardWidth * shown.length + gap * (shown.length - 1);
-    const startX = x + (width - totalWidth) / 2;
-    const angles = [-0.035, 0.025, -0.018, 0.03, -0.022];
-    shown.forEach((book, index) => drawCoverCard(ctx, book, images[index], index, startX + index * (cardWidth + gap), y + (index % 2 ? 8 : 0), cardWidth, shown.length === 1 ? 0 : angles[index]));
-    ctx.fillStyle = COLORS.sageDark; ctx.fillRect(x + 20, y + height - 16, width - 40, 5);
-    ctx.fillStyle = 'rgba(69,106,89,.16)'; ctx.fillRect(x + 42, y + height - 11, width - 84, 6);
+    const columns = shown.length <= 3 ? shown.length : shown.length === 4 ? 2 : shown.length <= 6 ? 3 : 4;
+    const cardWidth = shown.length === 1 ? 390 : shown.length === 2 ? 330 : shown.length === 3 ? 270 : shown.length === 4 ? 195 : shown.length <= 6 ? 190 : 168;
+    const cardHeight = cardWidth * 1.5 + Math.max(48, cardWidth * .28), gapX = shown.length <= 3 ? 36 : 24, gapY = 18;
+    const rows = Math.ceil(shown.length / columns), totalHeight = rows * cardHeight + (rows - 1) * gapY;
+    const startY = y + Math.max(0, (height - totalHeight - 16) / 2);
+    const angles = [-0.018, 0.014, -0.01, 0.016, -0.012, 0.01, -0.008, 0.012];
+    shown.forEach((book, index) => {
+      const row = Math.floor(index / columns), column = index % columns, rowCount = Math.min(columns, shown.length - row * columns);
+      const rowWidth = rowCount * cardWidth + (rowCount - 1) * gapX;
+      const startX = x + (width - rowWidth) / 2;
+      drawCoverCard(ctx, book, images[index], index, startX + column * (cardWidth + gapX), startY + row * (cardHeight + gapY), cardWidth, shown.length === 1 ? 0 : angles[index]);
+    });
+    ctx.fillStyle = COLORS.sageDark; ctx.fillRect(x + 20, y + height - 10, width - 40, 5);
+    ctx.fillStyle = 'rgba(69,106,89,.16)'; ctx.fillRect(x + 42, y + height - 5, width - 84, 5);
     if (books.length > shown.length) {
-      roundedRect(ctx, x + width - 160, y - 12, 145, 50, 25); ctx.fillStyle = COLORS.ochre; ctx.fill();
+      roundedRect(ctx, x + width - 160, y - 6, 145, 50, 25); ctx.fillStyle = COLORS.ochre; ctx.fill();
       ctx.fillStyle = COLORS.white; ctx.font = '700 17px Poppins, Arial, sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(`+ ${books.length - shown.length} livre${books.length - shown.length > 1 ? 's' : ''}`, x + width - 87, y + 20); ctx.textAlign = 'left';
+      ctx.fillText(`+ ${books.length - shown.length} livre${books.length - shown.length > 1 ? 's' : ''}`, x + width - 87, y + 26); ctx.textAlign = 'left';
     }
   }
 
-  function drawMetricCard(ctx, x, y, width, height, value, label, accent) {
-    roundedRect(ctx, x, y, width, height, 18); ctx.fillStyle = COLORS.white; ctx.fill();
-    ctx.fillStyle = accent; ctx.fillRect(x, y + 16, 5, height - 32);
-    ctx.fillStyle = COLORS.ink; ctx.font = '700 30px "Playfair Display", Georgia, serif'; ctx.fillText(String(value), x + 24, y + 43);
-    ctx.fillStyle = COLORS.muted; ctx.font = '600 12px Poppins, Arial, sans-serif'; ctx.fillText(label.toUpperCase(), x + 24, y + 69);
+  function drawCompactMetric(ctx, x, y, value, label, accent) {
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(x, y - 9, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COLORS.ink; ctx.font = '700 29px "Playfair Display", Georgia, serif'; ctx.fillText(String(value), x + 15, y);
+    ctx.fillStyle = COLORS.muted; ctx.font = '600 11px Poppins, Arial, sans-serif'; ctx.fillText(label.toUpperCase(), x + 15, y + 25);
   }
 
   function drawBackground(ctx) {
@@ -238,39 +294,39 @@
     const canvas = document.createElement('canvas'); canvas.width = WIDTH; canvas.height = HEIGHT;
     const ctx = canvas.getContext('2d', { alpha:false }); drawBackground(ctx);
 
-    roundedRect(ctx, 58, 48, 142, 48, 24); ctx.fillStyle = COLORS.ink; ctx.fill();
-    ctx.fillStyle = COLORS.white; ctx.font = '700 20px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 92, 80);
-    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 15px Poppins, Arial, sans-serif'; ctx.fillText('MON SENTIER · RAPPORT MENSUEL', 58, 142);
-    ctx.fillStyle = COLORS.ink; ctx.font = '600 58px "Playfair Display", Georgia, serif'; ctx.fillText(data.label, 58, 207);
-    ctx.fillStyle = COLORS.muted; ctx.font = '500 18px Poppins, Arial, sans-serif'; ctx.fillText(truncate(data.handle || data.profileName, 36), 60, 243);
-    ctx.textAlign = 'right'; ctx.fillStyle = COLORS.ochre; ctx.font = '700 92px "Playfair Display", Georgia, serif'; ctx.fillText(String(data.books.length), 1015, 194);
-    ctx.fillStyle = COLORS.ink; ctx.font = '600 15px Poppins, Arial, sans-serif'; ctx.fillText(`LIVRE${data.books.length > 1 ? 'S' : ''} TERMINÉ${data.books.length > 1 ? 'S' : ''}`, 1015, 225); ctx.textAlign = 'left';
+    roundedRect(ctx, 48, 34, 142, 48, 24); ctx.fillStyle = COLORS.ink; ctx.fill();
+    ctx.fillStyle = COLORS.white; ctx.font = '700 20px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 82, 66);
+    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 14px Poppins, Arial, sans-serif'; ctx.fillText('MON SENTIER · RAPPORT MENSUEL', 48, 112);
+    ctx.fillStyle = COLORS.ink; ctx.font = '600 55px "Playfair Display", Georgia, serif'; ctx.fillText(data.label, 48, 173);
+    ctx.fillStyle = COLORS.muted; ctx.font = '500 17px Poppins, Arial, sans-serif'; ctx.fillText(truncate(data.handle || data.profileName, 36), 50, 207);
+    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 16px Poppins, Arial, sans-serif'; ctx.fillText(truncate(data.statusSummary || 'Le sentier continue', 92), 50, 242);
+    ctx.textAlign = 'right'; ctx.fillStyle = COLORS.ochre; ctx.font = '700 84px "Playfair Display", Georgia, serif'; ctx.fillText(String(data.books.length), 1028, 158);
+    ctx.fillStyle = COLORS.ink; ctx.font = '600 14px Poppins, Arial, sans-serif'; ctx.fillText(`LECTURE${data.books.length > 1 ? 'S' : ''} SUIVIE${data.books.length > 1 ? 'S' : ''}`, 1028, 190); ctx.textAlign = 'left';
 
-    await drawBookGallery(ctx, data.books, 58, 294, 964, 454);
+    await drawBookGallery(ctx, data.books, 42, 270, 996, COVER_ZONE_HEIGHT - 278);
 
-    roundedRect(ctx, 58, 786, 286, 224, 28); ctx.fillStyle = COLORS.ink; ctx.fill();
+    ctx.fillStyle = COLORS.paper; ctx.fillRect(0, COVER_ZONE_HEIGHT, WIDTH, HEIGHT - COVER_ZONE_HEIGHT);
+    ctx.fillStyle = COLORS.sageDark; ctx.fillRect(0, COVER_ZONE_HEIGHT, WIDTH, 8);
     const duration = data.minutes >= 60 ? `${Math.floor(data.minutes / 60)} h ${String(data.minutes % 60).padStart(2, '0')}` : `${data.minutes} min`;
-    ctx.fillStyle = COLORS.white; ctx.font = '700 45px "Playfair Display", Georgia, serif'; drawLines(ctx, duration, 84, 850, 230, 50, 2);
-    ctx.fillStyle = 'rgba(255,255,255,.72)'; ctx.font = '600 13px Poppins, Arial, sans-serif'; ctx.fillText('TEMPS DE LECTURE', 84, 895);
-    ctx.fillStyle = COLORS.sage; ctx.font = '500 16px Poppins, Arial, sans-serif'; ctx.fillText(`${data.sessions} session${data.sessions > 1 ? 's' : ''}`, 84, 948);
+    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 12px Poppins, Arial, sans-serif'; ctx.fillText('MON MOIS EN QUELQUES MOTS', 50, 1053);
+    ctx.textAlign = 'right'; ctx.fillStyle = COLORS.muted; ctx.fillText(truncate(data.handle || data.profileName, 30), 1028, 1053); ctx.textAlign = 'left';
+    drawCompactMetric(ctx, 50, 1100, duration, 'lecture', COLORS.ochre);
+    drawCompactMetric(ctx, 274, 1100, data.sessions, 'sessions', COLORS.sageDark);
+    drawCompactMetric(ctx, 452, 1100, data.words, 'mots appris', COLORS.sageDark);
+    drawCompactMetric(ctx, 658, 1100, data.expressions, 'expressions', COLORS.ochre);
+    drawCompactMetric(ctx, 860, 1100, data.citations, 'citations', COLORS.rose);
 
-    drawMetricCard(ctx, 370, 786, 308, 103, data.words, 'mots appris', COLORS.sageDark);
-    drawMetricCard(ctx, 704, 786, 318, 103, data.expressions, 'expressions', COLORS.ochre);
-    drawMetricCard(ctx, 370, 907, 308, 103, data.citations, 'citations', COLORS.rose);
-    drawMetricCard(ctx, 704, 907, 318, 103, data.words + data.expressions + data.citations, 'découvertes', COLORS.ink);
-
-    roundedRect(ctx, 58, 1048, 964, 190, 28); ctx.fillStyle = 'rgba(255,253,248,.86)'; ctx.fill();
-    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 13px Poppins, Arial, sans-serif'; ctx.fillText('CE QUE JE GARDE DE CE MOIS', 84, 1085);
-    ctx.fillStyle = COLORS.ink; ctx.font = '500 23px "Playfair Display", Georgia, serif'; drawLines(ctx, data.summary, 84, 1123, 900, 30, 2);
+    ctx.fillStyle = COLORS.line; ctx.fillRect(50, 1152, 978, 2);
+    ctx.fillStyle = COLORS.ink; ctx.font = '500 21px "Playfair Display", Georgia, serif'; drawLines(ctx, data.summary, 50, 1191, 978, 27, 2);
     const highlight = data.includePersonalNotes && data.notes[0]
       ? `« ${truncate(data.notes[0], 110)} »`
       : data.discoveries[0] ? `${truncate(data.discoveries[0].text, 34)} · ${truncate(data.discoveries[0].definition, 88)}` : '';
-    if (highlight) { ctx.fillStyle = COLORS.muted; ctx.font = 'italic 17px "Playfair Display", Georgia, serif'; drawLines(ctx, highlight, 84, 1186, 885, 23, 2); }
+    if (highlight) { ctx.fillStyle = COLORS.muted; ctx.font = 'italic 16px "Playfair Display", Georgia, serif'; drawLines(ctx, highlight, 50, 1253, 960, 21, 2); }
 
-    ctx.fillStyle = COLORS.ochre; ctx.beginPath(); ctx.arc(74, 1290, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = COLORS.ink; ctx.font = '700 17px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 94, 1296);
-    ctx.fillStyle = COLORS.muted; ctx.font = '500 15px Poppins, Arial, sans-serif'; ctx.fillText('Lire · garder une trace · avancer', 168, 1296);
-    ctx.textAlign = 'right'; ctx.fillStyle = COLORS.sageDark; ctx.font = '600 14px Poppins, Arial, sans-serif'; ctx.fillText('Quel chemin vos lectures dessinent-elles ?', 1018, 1296); ctx.textAlign = 'left';
+    ctx.fillStyle = COLORS.ochre; ctx.beginPath(); ctx.arc(62, 1317, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COLORS.ink; ctx.font = '700 16px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 80, 1323);
+    ctx.fillStyle = COLORS.muted; ctx.font = '500 14px Poppins, Arial, sans-serif'; ctx.fillText('Lire · garder une trace · avancer', 150, 1323);
+    ctx.textAlign = 'right'; ctx.fillStyle = COLORS.sageDark; ctx.font = '600 13px Poppins, Arial, sans-serif'; ctx.fillText('Quel chemin vos lectures dessinent-elles ?', 1028, 1323); ctx.textAlign = 'left';
     return canvas;
   }
 

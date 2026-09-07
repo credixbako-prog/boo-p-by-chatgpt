@@ -103,6 +103,7 @@ BT.store = (() => {
       situation: data.situation || (data.status === 'transmis' ? 'donne' : 'possede'),
       coverColor: data.coverColor || 'linear-gradient(145deg,#17324d,#6f927c)', coverUrl: data.coverUrl || DEFAULT_BOOK_COVERS[data.id] || '',
       addedAt: data.addedAt || nowISO(), startedAt: normalizeBookDate(data.startedAt), completedAt: normalizeBookDate(data.completedAt),
+      statusUpdatedAt: normalizeBookDate(data.statusUpdatedAt || data.completedAt || data.lastUsedAt || data.startedAt || data.addedAt),
       historicalBeforeJoin: Boolean(data.historicalBeforeJoin || (data.isADN && !data.completedAt)),
       rating: numericRating >= 1 && numericRating <= 5 ? numericRating : null, isADN: Boolean(data.isADN),
       adnOrder: Number.isFinite(Number(data.adnOrder)) ? Number(data.adnOrder) : null,
@@ -366,7 +367,7 @@ BT.store = (() => {
     const previous = state.books[index]; const next = makeBook({ ...previous, ...updates, id });
     if (['en-cours','en-pause','lu'].includes(updates.status) && !next.startedAt && !next.historicalBeforeJoin) next.startedAt = next.completedAt || nowISO();
     if (updates.status === 'lu' && !next.completedAt && !next.historicalBeforeJoin) next.completedAt = nowISO();
-    if (updates.status && updates.status !== previous.status) addTimelineEvent(`status-${updates.status}`, id, `« ${next.title} » : ${statusLabel(updates.status)}`);
+    if (updates.status && updates.status !== previous.status) { next.statusUpdatedAt = nowISO(); addTimelineEvent(`status-${updates.status}`, id, `« ${next.title} » : ${statusLabel(updates.status)}`); }
     if (updates.situation && updates.situation !== previous.situation) addTimelineEvent(`situation-${updates.situation}`, id, `« ${next.title} » : ${situationLabel(updates.situation)}`);
     state.books[index] = next; commit({ queue: 'book.update' }); return clone(next);
   }
