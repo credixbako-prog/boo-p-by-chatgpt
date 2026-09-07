@@ -469,7 +469,7 @@ BT.store = (() => {
   function currentPeriodKeys() { const current = new Date(); return { week: localDateKey(weekStart(current)), month: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`, year: String(current.getFullYear()) }; }
   function sessionMinutesByDay() { const map = {}; state.sessions.forEach(session => { const key = localDateKey(session.startedAt); map[key] = (map[key] || 0) + (Number(session.durationSeconds) || 0) / 60; }); state.activeSessions.forEach(session => { map[localDateKey()] = (map[localDateKey()] || 0) + activeDuration(session) / 60; }); return map; }
   function completedDuringGoalPeriod(book, period, periodKey) {
-    if (book.status !== 'lu' || !book.completedAt || book.historicalBeforeJoin) return false;
+    if (book.status !== 'lu' || !book.completedAt) return false;
     const completedKey = localDateKey(book.completedAt);
     return period === 'month' ? completedKey.slice(0, 7) === periodKey : completedKey.slice(0, 4) === periodKey;
   }

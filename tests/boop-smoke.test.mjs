@@ -238,6 +238,25 @@ test('objectifs: mois et année mélangent les parts vertes et orange des livres
     assert.equal(progress[period].orangePct, 50);
     assert.equal(progress[period].totalPct, 100);
   }
+  const historical = store.addBook({ title:'Lecture d’avant BOO-P datée', author:'Lectrice test', status:'lu', historicalBeforeJoin:true, completedAt:`${monthKey}-03T12:00:00.000Z` });
+  store.updateGoal('month', { targetBooks:1, bookIds:[historical.id] });
+  store.updateGoal('year', { targetBooks:1, bookIds:[historical.id] });
+  assert.equal(store.getGoalProgress().month.value, 1, 'une lecture antérieure à l’inscription compte si sa date appartient au mois');
+  assert.equal(store.getGoalProgress().year.value, 1, 'une lecture antérieure à l’inscription compte si sa date appartient à l’année');
+  const undatedHistorical = store.addBook({ title:'Lecture d’avant BOO-P non datée', author:'Lectrice test', status:'lu', historicalBeforeJoin:true });
+  store.updateGoal('month', { targetBooks:1, bookIds:[undatedHistorical.id] });
+  assert.equal(store.getGoalProgress().month.value, 0, 'une lecture historique sans date ne doit pas être attribuée à une période arbitraire');
+});
+
+test('objectifs: l’écran montre les livres concernés et leur état daté', async () => {
+  const [app, css] = await Promise.all([read('js/mvp-app.js'), read('css/mvp-v5.css')]);
+  assert.match(app, /function goalBooksBlock/);
+  assert.match(app, /Livres concernés/);
+  assert.match(app, /Toute la bibliothèque/);
+  assert.match(app, /hors période/);
+  assert.match(app, /completedAt: status === 'lu' \? readingDateISO\(completedDate\) : null/);
+  assert.match(css, /\.goal-book-list/);
+  assert.match(css, /\.goal-books-more/);
 });
 
 test('bibliothèque: six finitions visuelles et rayons horizontaux restent contenus', async () => {
@@ -728,7 +747,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v29/);
+  assert.match(worker, /boo-p-webapp-v30/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

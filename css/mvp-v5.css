@@ -620,6 +620,18 @@ input[name="isbn"], input[name="totalPages"], input[name="currentPage"], input[n
 .goal-segment-legend i { width: 8px; height: 8px; border-radius: 50%; }
 .goal-segment-legend i.is-read { background: var(--boo-sage); }
 .goal-segment-legend i.is-reading { background: var(--boo-ochre); }
+.goal-books { display: grid; gap: 7px; margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--boo-line); }
+.goal-books > p { margin: 0; }
+.goal-book-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.goal-book-item { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 7px; border-radius: 10px; background: color-mix(in srgb,var(--boo-sage) 8%,var(--boo-paper)); color: var(--boo-ink); text-decoration: none; }
+.goal-book-item:hover, .goal-book-item:focus-visible { background: color-mix(in srgb,var(--boo-sage) 16%,var(--boo-paper)); }
+.goal-book-item .book-cover { width: 34px; height: 48px; min-height: 0; padding: 4px; border-radius: 4px; font-size: 6px; }
+.goal-book-item > span:nth-child(2) { display: grid; min-width: 0; gap: 2px; }
+.goal-book-item strong, .goal-book-item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goal-book-item strong { font-size: 10px; }
+.goal-book-item small { color: var(--boo-muted); font-size: 8px; }
+.goal-books-more summary { width: max-content; max-width: 100%; color: var(--boo-sage-dark); cursor: pointer; font-size: 9px; font-weight: 700; }
+.goal-books-more[open] summary { margin-bottom: 7px; }
 .goal-detail-list { display: grid; gap: 7px; margin: 14px 0; }
 .goal-detail-list span { display: flex; justify-content: space-between; gap: 8px; color: var(--boo-muted); font-size: 11px; }
 
