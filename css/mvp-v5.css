@@ -180,6 +180,14 @@ body[data-theme="dark"] .eyebrow { color: #a9cbb5; }
 .progress-track > span { display: block; width: var(--width, 0%); height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--boo-sage-dark),var(--boo-sage)); }
 .book-switcher { width: 100%; margin-bottom: 8px; border: 1px solid var(--boo-line); border-radius: 12px; background: var(--boo-paper); color: var(--boo-ink); padding: 9px 34px 9px 10px; }
 .session-state { margin: 10px 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--boo-sage) 13%, transparent); color: var(--boo-sage-dark); font-size: 11px; }
+.session-citation-composer { display: grid; gap: 9px; }
+.session-citation-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+.session-citation-list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.session-citation-list li, .session-citation-summary { display: grid; gap: 5px; padding: 10px 12px; border: 1px solid color-mix(in srgb,var(--boo-sage) 35%,var(--boo-line)); border-radius: 12px; background: color-mix(in srgb,var(--boo-sage) 8%,var(--boo-paper)); }
+.session-citation-list q, .session-citation-summary q { font-family: var(--boo-display); font-size: 12px; line-height: 1.55; }
+.session-citation-list small { color: var(--boo-muted); font-size: 9px; }
+.session-citation-empty { margin: -2px 0 0; }
+.session-citation-summary ul { display: grid; gap: 6px; margin: 4px 0 0; padding-left: 18px; }
 
 .memory-color-picker { margin-top: -8px; }
 .memory-list { --memory-card-bg:var(--boo-paper); --memory-card-back:var(--boo-paper-2); --memory-card-ink:var(--boo-ink); --memory-card-muted:var(--boo-muted); --memory-card-accent:var(--boo-sage); display: grid; gap: 10px; width: min(100%,680px); margin-inline: auto; padding: 2px 0 8px; }

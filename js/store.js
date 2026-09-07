@@ -14,7 +14,7 @@ BT.store = (() => {
   let STATE_KEY = LEGACY_STATE_KEY;
   let ONBOARDING_KEY = LEGACY_ONBOARDING_KEY;
   let activeUserId = null;
-  const SCHEMA_VERSION = 10;
+  const SCHEMA_VERSION = 11;
   const listeners = new Set();
 
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -40,6 +40,15 @@ BT.store = (() => {
   function normalizeLexiconEntry(item = {}) {
     const createdAt = item.createdAt || item.updatedAt || nowISO();
     return { ...item, kind:['word','expression','citation'].includes(item.kind) ? item.kind : 'word', createdAt, updatedAt:item.updatedAt || createdAt, reviewSchedule:Array.isArray(item.reviewSchedule) && item.reviewSchedule.length ? item.reviewSchedule : makeReviewSchedule(createdAt), reviewSuccesses:Math.max(0, Number(item.reviewSuccesses) || 0), reviewAlmosts:Math.max(0, Number(item.reviewAlmosts) || 0), reviewAttempts:Math.max(0, Number(item.reviewAttempts) || 0), lastReviewQuality:['retry','almost','recalled'].includes(item.lastReviewQuality) ? item.lastReviewQuality : null };
+  }
+  function normalizeSessionCitation(item = {}) {
+    const text = String(item.text || item.word || '').trim();
+    if (!text) return null;
+    return { id:item.id || uid('session-citation'), lexiconId:item.lexiconId || null, text, page:Math.max(0, Number(item.page) || 0) || null, createdAt:item.createdAt || nowISO() };
+  }
+  function normalizeActiveSession(session = {}) {
+    const citations = (Array.isArray(session.citations) ? session.citations : []).map(normalizeSessionCitation).filter(Boolean);
+    return { ...session, citationDraft:String(session.citationDraft ?? session.note ?? ''), citations };
   }
   const DEFAULT_BOOK_COVERS = {
     'book-etranger':'https://covers.openlibrary.org/b/isbn/9782070360024-L.jpg',
@@ -151,6 +160,7 @@ BT.store = (() => {
 
   function makeDefaultState() {
     const year = new Date().getFullYear();
+    const periods = currentPeriodKeys();
     return {
       schemaVersion: SCHEMA_VERSION,
       profile: { name: 'Dixon', handle: '@dixonlit', title: 'LECTEUR EXPLORATEUR', bio: 'Je marche de livre en livre, sans me presser.', email: 'dixon@prototype.local', interests: ['Philosophie', 'Roman', 'Histoire'], visibility: 'private', createdAt: nowISO() },
@@ -170,8 +180,8 @@ BT.store = (() => {
       ],
       goals: {
         week: { dailyMinutes: 20, daysTarget: 4, bookIds: [], history: [{ label: 'Semaine précédente', result: '3/4 jours' }] },
-        month: { targetBooks: 2, bookIds: [], history: [{ label: 'Mois précédent', result: '1/2 livre' }] },
-        year: { targetBooks: 12, bookIds: [], history: [{ label: String(year - 1), result: '9/10 livres' }] }, celebrated: {}
+        month: { periodKey:periods.month, targetBooks: 2, bookIds: [], history: [{ label: 'Mois précédent', result: '1/2 livre' }] },
+        year: { periodKey:periods.year, targetBooks: 12, bookIds: [], history: [{ label: String(year - 1), result: '9/10 livres' }] }, celebrated: {}
       },
       community: demoCommunity(),
       notifications: [],
@@ -209,13 +219,16 @@ BT.store = (() => {
     state.profile = { ...base.profile, ...(state.profile || {}), visibility: state.profile?.visibility || 'private' };
     state.books = (state.books || []).map(makeBook);
     state.sessions = Array.isArray(state.sessions) ? state.sessions : [];
-    state.activeSessions = Array.isArray(state.activeSessions) ? state.activeSessions : [];
-    if (state.activeSession && !state.activeSessions.some(session => session.id === state.activeSession.id)) state.activeSessions.push(state.activeSession);
+    state.activeSessions = (Array.isArray(state.activeSessions) ? state.activeSessions : []).map(normalizeActiveSession);
+    if (state.activeSession && !state.activeSessions.some(session => session.id === state.activeSession.id)) state.activeSessions.push(normalizeActiveSession(state.activeSession));
     state.activeSession = null;
     state.focusedSessionId = state.activeSessions.some(session => session.id === state.focusedSessionId) ? state.focusedSessionId : (state.activeSessions[0]?.id || null);
     state.traces = Array.isArray(state.traces) ? state.traces : [];
     state.lexicon = (Array.isArray(state.lexicon) ? state.lexicon : []).map(normalizeLexiconEntry);
     state.goals = { ...base.goals, ...(state.goals || {}), week: { ...base.goals.week, ...(state.goals?.week || {}) }, month: { ...base.goals.month, ...(state.goals?.month || {}) }, year: { ...base.goals.year, ...(state.goals?.year || {}) }, celebrated: state.goals?.celebrated || {} };
+    const periodKeys = currentPeriodKeys();
+    state.goals.month.periodKey ||= periodKeys.month;
+    state.goals.year.periodKey ||= periodKeys.year;
     const savedCommunity = state.community || {};
     state.community = { ...base.community, ...savedCommunity };
     state.community.users = Array.isArray(savedCommunity.users) ? savedCommunity.users : base.community.users;
@@ -297,6 +310,9 @@ BT.store = (() => {
         year:{ ...defaults.year, ...(snapshot.goals.year || {}) },
         celebrated:snapshot.goals.celebrated || {}
       };
+      const periodKeys = currentPeriodKeys();
+      state.goals.month.periodKey ||= periodKeys.month;
+      state.goals.year.periodKey ||= periodKeys.year;
     }
     const bookIds = new Set(state.books.map(book => book.id));
     state.sessions = state.sessions.filter(session => session?.id && bookIds.has(session.bookId));
@@ -364,7 +380,8 @@ BT.store = (() => {
   function getSessions() { return clone(state.sessions); }
   function getSessionsForBook(bookId) { return clone(state.sessions.filter(session => session.bookId === bookId).sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))); }
   function saveSession(session) {
-    const record = { id: session.id || uid('session'), manual: Boolean(session.manual), startedAt: session.startedAt || nowISO(), endedAt: session.endedAt || nowISO(), durationSeconds: Math.max(0, Number(session.durationSeconds ?? session.duration) || 0), startPage: Math.max(0, Number(session.startPage) || 0), endPage: Math.max(0, Number(session.endPage) || 0), note: session.note || '', bookId: session.bookId };
+    const citations = (Array.isArray(session.citations) ? session.citations : []).map(normalizeSessionCitation).filter(Boolean);
+    const record = { id: session.id || uid('session'), manual: Boolean(session.manual), startedAt: session.startedAt || nowISO(), endedAt: session.endedAt || nowISO(), durationSeconds: Math.max(0, Number(session.durationSeconds ?? session.duration) || 0), startPage: Math.max(0, Number(session.startPage) || 0), endPage: Math.max(0, Number(session.endPage) || 0), note: session.note || '', citations, bookId: session.bookId };
     const index = state.sessions.findIndex(item => item.id === record.id); if (index >= 0) state.sessions[index] = record; else state.sessions.push(record);
     const book = state.books.find(item => item.id === record.bookId); if (book) { if (book.mediaType === 'audio') book.currentMinute = Math.min(book.durationMinutes || Number.MAX_SAFE_INTEGER, record.endPage); else book.currentPage = Math.min(book.totalPages || Number.MAX_SAFE_INTEGER, record.endPage); book.startedAt ||= record.startedAt; book.lastUsedAt = record.endedAt; const completed = book.mediaType === 'audio' ? (book.durationMinutes && book.currentMinute >= book.durationMinutes) : (book.totalPages && book.currentPage >= book.totalPages); if (completed) { book.status = 'lu'; book.completedAt ||= record.endedAt; } }
     addTimelineEvent(record.manual ? 'manual-session' : 'session', record.bookId, `${Math.max(1, Math.round(record.durationSeconds / 60))} min de lecture`); commit({ queue: 'session.save' }); return clone(record);
@@ -381,7 +398,7 @@ BT.store = (() => {
   function focusActiveSession(id) { if (!state.activeSessions.some(session => session.id === id)) return null; state.focusedSessionId = id; commit(); return getActiveSession(id); }
   function activeDuration(session = findActiveSession(), timestamp = Date.now()) { if (!session) return 0; const running = session.status === 'running' ? Math.max(0, Math.floor((timestamp - new Date(session.resumedAt).getTime()) / 1000)) : 0; return Math.max(0, Number(session.accumulatedSeconds) || 0) + running; }
   function pauseOtherRunningSessions(exceptId) { state.activeSessions.forEach(session => { if (session.id !== exceptId && session.status === 'running') { session.accumulatedSeconds = activeDuration(session); session.status = 'paused'; session.pausedAt = nowISO(); session.lastSeenAt = session.pausedAt; } }); }
-  function startActiveSession(bookId) { const existing = state.activeSessions.find(session => session.bookId === bookId); if (existing) { state.focusedSessionId = existing.id; if (existing.status !== 'running') { pauseOtherRunningSessions(existing.id); existing.status = 'running'; existing.resumedAt = nowISO(); existing.lastSeenAt = existing.resumedAt; } commit(); return getActiveSession(existing.id); } const book = state.books.find(item => item.id === bookId && item.libraryState === 'library'); if (!book) return null; setActiveBook(bookId); const timestamp = nowISO(), position = book.mediaType === 'audio' ? book.currentMinute : book.currentPage; const session = { id: uid('active'), bookId, startedAt: timestamp, resumedAt: timestamp, lastSeenAt: timestamp, accumulatedSeconds: 0, status: 'running', startPage: position, endPage: position, note: '', traceDraft: '' }; pauseOtherRunningSessions(session.id); state.activeSessions.push(session); state.focusedSessionId = session.id; commit(); return getActiveSession(session.id); }
+  function startActiveSession(bookId) { const existing = state.activeSessions.find(session => session.bookId === bookId); if (existing) { state.focusedSessionId = existing.id; if (existing.status !== 'running') { pauseOtherRunningSessions(existing.id); existing.status = 'running'; existing.resumedAt = nowISO(); existing.lastSeenAt = existing.resumedAt; } commit(); return getActiveSession(existing.id); } const book = state.books.find(item => item.id === bookId && item.libraryState === 'library'); if (!book) return null; setActiveBook(bookId); const timestamp = nowISO(), position = book.mediaType === 'audio' ? book.currentMinute : book.currentPage; const session = { id: uid('active'), bookId, startedAt: timestamp, resumedAt: timestamp, lastSeenAt: timestamp, accumulatedSeconds: 0, status: 'running', startPage: position, endPage: position, note: '', citationDraft:'', citations:[], traceDraft: '' }; pauseOtherRunningSessions(session.id); state.activeSessions.push(session); state.focusedSessionId = session.id; commit(); return getActiveSession(session.id); }
   function recoverActiveSession() {
     const session = findActiveSession(); if (!session || session.status !== 'running') return getActiveSession();
     const timestamp = Date.now(); const lastSeen = new Date(session.lastSeenAt || session.resumedAt).getTime();
@@ -390,11 +407,24 @@ BT.store = (() => {
   }
   function heartbeatActiveSession() { const session = state.activeSessions.find(item => item.status === 'running'); if (session) { session.lastSeenAt = nowISO(); writeJSON(STATE_KEY, state); } }
   function updateActiveSession(updates, id = null) { const session = findActiveSession(id); if (!session) return null; Object.assign(session, updates, { lastSeenAt: nowISO() }); state.focusedSessionId = session.id; commit(); return getActiveSession(session.id); }
+  function addActiveSessionCitation(value, id = null) {
+    const session = findActiveSession(id), text = String(value || '').trim();
+    if (!session || !text) return null;
+    const createdAt = nowISO(), page = Math.max(0, Number(session.endPage) || 0) || null;
+    const lexicon = addLexiconWord({ kind:'citation', word:text, definition:'', bookId:session.bookId, page, createdAt, sessionId:session.id });
+    const citation = normalizeSessionCitation({ id:uid('session-citation'), lexiconId:lexicon.id, text, page, createdAt });
+    session.citations = [...(Array.isArray(session.citations) ? session.citations : []), citation];
+    session.citationDraft = '';
+    session.note = '';
+    session.lastSeenAt = createdAt;
+    commit({ queue:'session.citation' });
+    return clone(citation);
+  }
   function pauseActiveSession(id = null) { const session = findActiveSession(id); if (!session || session.status !== 'running') return getActiveSession(id); session.accumulatedSeconds = activeDuration(session); session.status = 'paused'; session.pausedAt = nowISO(); session.lastSeenAt = nowISO(); commit(); return getActiveSession(session.id); }
   function resumeActiveSession(id = null) { const session = findActiveSession(id); if (!session || session.status === 'running') return getActiveSession(id); pauseOtherRunningSessions(session.id); state.focusedSessionId = session.id; session.status = 'running'; session.resumedAt = nowISO(); session.lastSeenAt = session.resumedAt; session.autoPaused = false; commit(); return getActiveSession(session.id); }
   function finishActiveSession(summary = {}, id = null) {
     const session = findActiveSession(id); if (!session) return null; const durationSeconds = activeDuration(session);
-    const saved = saveSession({ id: uid('session'), bookId: session.bookId, startedAt: session.startedAt, endedAt: nowISO(), durationSeconds, startPage: session.startPage, endPage: summary.endPage ?? session.endPage, note: summary.note ?? session.note });
+    const saved = saveSession({ id: uid('session'), bookId: session.bookId, startedAt: session.startedAt, endedAt: nowISO(), durationSeconds, startPage: session.startPage, endPage: summary.endPage ?? session.endPage, note: summary.note ?? '', citations:session.citations });
     if (summary.traceText) saveTrace({ bookId: session.bookId, sessionId: saved.id, text: summary.traceText, page: summary.endPage ?? session.endPage, privacy: summary.share ? 'public' : 'private' });
     if (summary.rating || summary.markRead) updateBook(session.bookId, { rating: Number(summary.rating) || getBookById(session.bookId)?.rating, status: summary.markRead ? 'lu' : getBookById(session.bookId)?.status, completedAt: summary.markRead ? nowISO() : getBookById(session.bookId)?.completedAt });
     state.activeSessions = state.activeSessions.filter(item => item.id !== session.id); state.focusedSessionId = state.activeSessions[0]?.id || null; commit(); return saved;
@@ -405,7 +435,7 @@ BT.store = (() => {
   function saveTrace(trace) { const record = { id: trace.id || uid('trace'), bookId: trace.bookId || null, sessionId: trace.sessionId || null, text: String(trace.text || '').trim(), page: Math.max(0, Number(trace.page) || 0), privacy: trace.privacy || 'private', type: trace.type || 'trace', source: trace.source || 'personnel', createdAt: trace.createdAt || nowISO(), updatedAt: nowISO() }; const index = state.traces.findIndex(item => item.id === record.id); if (index >= 0) state.traces[index] = record; else state.traces.unshift(record); addTimelineEvent('trace', record.bookId, 'Nouvelle Trace personnelle'); commit({ queue: 'trace.save' }); return clone(record); }
   function deleteTrace(id) { state.traces = state.traces.filter(trace => trace.id !== id); commit({ queue: 'trace.delete' }); }
   function getLexicon() { return clone(state.lexicon.slice().sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))); }
-  function addLexiconWord(entry) { const book = state.books.find(item => item.id === entry.bookId); const createdAt = entry.createdAt || nowISO(); const existing = state.lexicon.find(item => item.id === entry.id); const record = normalizeLexiconEntry({ id: entry.id || uid('lex'), word: String(entry.word || '').trim(), kind: ['word','expression','citation'].includes(entry.kind) ? entry.kind : 'word', definition: String(entry.definition || '').trim(), sourceLabel: entry.sourceLabel || '', sourceUrl: entry.sourceUrl || '', bookId: entry.bookId || null, bookTitle: entry.bookTitle || book?.title || '', author: entry.author || book?.authors?.join(', ') || '', page: Math.max(0, Number(entry.page) || 0) || null, note: entry.note || '', createdAt:existing?.createdAt || createdAt, updatedAt:nowISO(), reviewSchedule:entry.reviewSchedule || existing?.reviewSchedule || makeReviewSchedule(createdAt), reviewSuccesses:existing?.reviewSuccesses || 0, reviewAlmosts:existing?.reviewAlmosts || 0, reviewAttempts:existing?.reviewAttempts || 0, lastReviewQuality:existing?.lastReviewQuality || null, lastReviewedAt:existing?.lastReviewedAt || null }); const index = state.lexicon.findIndex(item => item.id === record.id); if (index >= 0) state.lexicon[index] = record; else state.lexicon.unshift(record); addTimelineEvent('lexicon', record.bookId, `« ${record.word} » ajouté au lexique`); commit({ queue: 'lexicon.save' }); return clone(record); }
+  function addLexiconWord(entry) { const book = state.books.find(item => item.id === entry.bookId); const createdAt = entry.createdAt || nowISO(); const existing = state.lexicon.find(item => item.id === entry.id); const record = normalizeLexiconEntry({ id: entry.id || uid('lex'), sessionId:entry.sessionId || existing?.sessionId || null, word: String(entry.word || '').trim(), kind: ['word','expression','citation'].includes(entry.kind) ? entry.kind : 'word', definition: String(entry.definition || '').trim(), sourceLabel: entry.sourceLabel || '', sourceUrl: entry.sourceUrl || '', bookId: entry.bookId || null, bookTitle: entry.bookTitle || book?.title || '', author: entry.author || book?.authors?.join(', ') || '', page: Math.max(0, Number(entry.page) || 0) || null, note: entry.note || '', createdAt:existing?.createdAt || createdAt, updatedAt:nowISO(), reviewSchedule:entry.reviewSchedule || existing?.reviewSchedule || makeReviewSchedule(createdAt), reviewSuccesses:existing?.reviewSuccesses || 0, reviewAlmosts:existing?.reviewAlmosts || 0, reviewAttempts:existing?.reviewAttempts || 0, lastReviewQuality:existing?.lastReviewQuality || null, lastReviewedAt:existing?.lastReviewedAt || null }); const index = state.lexicon.findIndex(item => item.id === record.id); if (index >= 0) state.lexicon[index] = record; else state.lexicon.unshift(record); addTimelineEvent('lexicon', record.bookId, `« ${record.word} » ajouté au lexique`); commit({ queue: 'lexicon.save' }); return clone(record); }
   function reviewLexiconWord(id, result = 'recalled') {
     const entry = state.lexicon.find(item => item.id === id); if (!entry) return null;
     const quality = result === true ? 'recalled' : result === false ? 'retry' : ['retry','almost','recalled'].includes(result) ? result : 'recalled';
@@ -438,45 +468,68 @@ BT.store = (() => {
   function weekStart(date = new Date()) { const result = new Date(date); const day = result.getDay() || 7; result.setHours(0, 0, 0, 0); result.setDate(result.getDate() - day + 1); return result; }
   function currentPeriodKeys() { const current = new Date(); return { week: localDateKey(weekStart(current)), month: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`, year: String(current.getFullYear()) }; }
   function sessionMinutesByDay() { const map = {}; state.sessions.forEach(session => { const key = localDateKey(session.startedAt); map[key] = (map[key] || 0) + (Number(session.durationSeconds) || 0) / 60; }); state.activeSessions.forEach(session => { map[localDateKey()] = (map[localDateKey()] || 0) + activeDuration(session) / 60; }); return map; }
+  function completedDuringGoalPeriod(book, period, periodKey) {
+    if (book.status !== 'lu' || !book.completedAt || book.historicalBeforeJoin) return false;
+    const completedKey = localDateKey(book.completedAt);
+    return period === 'month' ? completedKey.slice(0, 7) === periodKey : completedKey.slice(0, 4) === periodKey;
+  }
+  function goalBookProgress(period, goal, periodKey) {
+    const target = Math.max(1, Number(goal.targetBooks) || 1);
+    const selectedIds = Array.isArray(goal.bookIds) ? goal.bookIds : [];
+    const candidates = state.books.filter(book => book.libraryState === 'library' && (!selectedIds.length || selectedIds.includes(book.id)));
+    const readBooks = candidates.filter(book => completedDuringGoalPeriod(book, period, periodKey)).slice(0, target);
+    const readingBooks = candidates.filter(book => book.status === 'en-cours').slice(0, Math.max(0, target - readBooks.length));
+    const greenValue = readBooks.length, orangeValue = readingBooks.length;
+    const greenPct = Math.min(100, Math.round((greenValue / target) * 100));
+    const orangePct = Math.min(100 - greenPct, Math.round((orangeValue / target) * 100));
+    return {
+      value:greenValue, inProgress:orangeValue, filledValue:greenValue + orangeValue, target,
+      greenPct, orangePct, totalPct:greenPct + orangePct,
+      bookIds:[...readBooks, ...readingBooks].map(book => book.id), selectedBookIds:selectedIds
+    };
+  }
+  function goalPeriodLabel(period, key) {
+    if (period === 'year') return key;
+    const [year, month] = String(key).split('-').map(Number);
+    const date = new Date(year, Math.max(0, month - 1), 1);
+    return Number.isNaN(date.getTime()) ? key : new Intl.DateTimeFormat('fr-FR', { month:'long', year:'numeric' }).format(date);
+  }
+  function ensureCurrentGoalPeriods(keys = currentPeriodKeys()) {
+    let changed = false;
+    ['month','year'].forEach(period => {
+      const goal = state.goals[period], previousKey = String(goal.periodKey || '');
+      if (!previousKey) { goal.periodKey = keys[period]; changed = true; return; }
+      if (previousKey === keys[period]) return;
+      const previous = goalBookProgress(period, goal, previousKey);
+      const historyEntry = { key:previousKey, label:goalPeriodLabel(period, previousKey), result:`${previous.value}/${previous.target} livre${previous.target > 1 ? 's' : ''}` };
+      goal.history = [historyEntry, ...(Array.isArray(goal.history) ? goal.history.filter(item => item.key !== previousKey) : [])].slice(0, 24);
+      goal.periodKey = keys[period];
+      delete state.goals.celebrated[`${period}:${keys[period]}`];
+      changed = true;
+    });
+    if (changed) {
+      state.meta.updatedAt = nowISO();
+      writeJSON(STATE_KEY, state);
+    }
+    return changed;
+  }
   function getGoalProgress() {
     const keys = currentPeriodKeys(), minutes = sessionMinutesByDay(), start = weekStart();
+    ensureCurrentGoalPeriods(keys);
     const weekDays = Array.from({ length: 7 }, (_, index) => { const date = new Date(start); date.setDate(start.getDate() + index); const key = localDateKey(date), value = Math.round(minutes[key] || 0); return { key, label: ['L','M','M','J','V','S','D'][index], minutes: value, target: state.goals.week.dailyMinutes, reached: value >= state.goals.week.dailyMinutes, today: key === localDateKey() }; });
-    const goalProgress = (period, goal) => {
-      const target = Math.max(1, Number(goal.targetBooks) || 1);
-      const selectedIds = Array.isArray(goal.bookIds) ? goal.bookIds : [];
-      const candidates = state.books.filter(book => {
-        if (book.libraryState !== 'library') return false;
-        if (selectedIds.length) return selectedIds.includes(book.id);
-        if (book.status === 'en-cours') return true;
-        if (book.status !== 'lu' || !book.completedAt || book.historicalBeforeJoin) return false;
-        const date = new Date(book.completedAt);
-        return period === 'month'
-          ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` === keys.month
-          : String(date.getFullYear()) === keys.year;
-      });
-      const readBooks = candidates.filter(book => book.status === 'lu').slice(0, target);
-      const readingBooks = candidates.filter(book => book.status === 'en-cours').slice(0, Math.max(0, target - readBooks.length));
-      const greenValue = readBooks.length, orangeValue = readingBooks.length;
-      const greenPct = Math.min(100, Math.round((greenValue / target) * 100));
-      const orangePct = Math.min(100 - greenPct, Math.round((orangeValue / target) * 100));
-      return {
-        value:greenValue, inProgress:orangeValue, filledValue:greenValue + orangeValue, target,
-        greenPct, orangePct, totalPct:greenPct + orangePct,
-        bookIds:[...readBooks, ...readingBooks].map(book => book.id), selectedBookIds:selectedIds
-      };
-    };
     const daysReached = weekDays.filter(day => day.reached).length;
     return {
       keys,
       week: { days: weekDays, value: daysReached, target: state.goals.week.daysTarget, todayMinutes: weekDays.find(day => day.today)?.minutes || 0, dailyTarget: state.goals.week.dailyMinutes },
-      month:goalProgress('month', state.goals.month),
-      year:goalProgress('year', state.goals.year)
+      month:goalBookProgress('month', state.goals.month, keys.month),
+      year:goalBookProgress('year', state.goals.year, keys.year)
     };
   }
   function getGoal() { const progress = getGoalProgress(); return { dailyMinutes: state.goals.week.dailyMinutes, streak: getStats().streak, streakDays: progress.week.days.map(day => day.reached), ...clone(state.goals) }; }
   function saveGoal(goal) { if (goal.dailyMinutes) state.goals.week.dailyMinutes = Number(goal.dailyMinutes); commit(); return getGoal(); }
   function updateGoal(period, updates) {
     if (!state.goals[period]) return null;
+    ensureCurrentGoalPeriods();
     state.goals[period] = { ...state.goals[period], ...updates };
     delete state.goals[period].floorProgress;
     const keys = currentPeriodKeys(), progress = getGoalProgress()[period];
@@ -562,7 +615,7 @@ BT.store = (() => {
     getState, getSyncedData, replaceSyncedData, getDataSyncStatus, markDataSynced, subscribe, useUser, getOnboarding, saveOnboarding, isOnboardingComplete, getProfile, saveProfile, getSettings, saveSettings,
     getBooks, getBookById, addBook, updateBook, deleteBook, getCurrentBook, setActiveBook, setCurrentBook, clearActiveBook, completeBook,
     getSessions, getSessionsForBook, saveSession, updateSession, deleteSession, getTodaySessions, getTodayReadingTime,
-    getActiveSession, getActiveSessions, getActiveSessionForBook, focusActiveSession, startActiveSession, recoverActiveSession, heartbeatActiveSession, activeDuration, updateActiveSession, pauseActiveSession, resumeActiveSession, finishActiveSession,
+    getActiveSession, getActiveSessions, getActiveSessionForBook, focusActiveSession, startActiveSession, recoverActiveSession, heartbeatActiveSession, activeDuration, updateActiveSession, addActiveSessionCitation, pauseActiveSession, resumeActiveSession, finishActiveSession,
     getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, reviewLexiconWord, deleteLexiconWord,
     getGoal, saveGoal, getGoalProgress, updateGoal, markGoalCelebrated, isGoalCelebrated,
     getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, addGroup, getGroups, updateGroup, toggleClub, addGroupMember, removeGroupMember, addGroupPost, addGroupComment, toggleGroupPostEncouragement, addGroupBook, updateGroupBook, updateSalon, addSalon, addSalonMessage,

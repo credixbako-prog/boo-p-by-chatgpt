@@ -92,8 +92,11 @@ test('lecture: dates éditables, étoiles et sélection de bibliothèque sans fr
   assert.match(sessionView, /data-action="session-lexicon"/);
   assert.match(sessionView, /type="range"/);
   assert.match(sessionView, /data-session-page-output/);
-  assert.match(sessionView, /<label class="field">Citation/);
+  assert.match(sessionView, /<label class="field" for="session-citation-draft">Citation/);
+  assert.match(sessionView, /data-action="save-session-citation"/);
+  assert.match(sessionView, /session-citation-list/);
   assert.doesNotMatch(sessionView, /Note de session/);
+  assert.match(store, /addActiveSessionCitation/);
   assert.match(app, /includeCitation:false/);
   assert.match(app, /Les citations se saisissent directement dans la session de lecture/);
   assert.match(app, /function clearLibraryBookSelection/);
@@ -222,7 +225,9 @@ test('objectifs: mois et année mélangent les parts vertes et orange des livres
   };
   vm.runInNewContext(source, context);
   const store = context.BT.store;
-  const selected = ['book-peste','book-etranger'];
+  const monthKey = store.localDateKey().slice(0, 7);
+  const finished = store.addBook({ title:'Terminé ce mois', author:'Lectrice test', status:'lu', completedAt:`${monthKey}-02T12:00:00.000Z` });
+  const selected = [finished.id,'book-etranger'];
   store.updateGoal('month', { targetBooks:2, bookIds:selected });
   store.updateGoal('year', { targetBooks:2, bookIds:selected });
   const progress = store.getGoalProgress();
@@ -567,6 +572,13 @@ test('modèle local: plusieurs sessions, un seul chrono et rappels persistants',
   store.resumeActiveSession(active[0].id);
   active = store.getActiveSessions();
   assert.equal(active.filter(session => session.status === 'running').length, 1);
+  store.updateActiveSession({ citationDraft:'Première citation' });
+  store.addActiveSessionCitation('Première citation');
+  store.addActiveSessionCitation('Deuxième citation');
+  const sessionWithCitations = store.getActiveSession();
+  assert.equal(sessionWithCitations.citations.length, 2);
+  assert.equal(sessionWithCitations.citationDraft, '');
+  assert.equal(store.getLexicon().filter(item => item.kind === 'citation' && item.sessionId === sessionWithCitations.id).length, 2);
   const almost = store.reviewLexiconWord('lex-1', 'almost');
   assert.equal(almost.lastReviewQuality, 'almost');
   assert.equal(almost.reviewAlmosts, 1);
@@ -593,7 +605,59 @@ test('modèle local: plusieurs sessions, un seul chrono et rappels persistants',
   assert.equal(store.getGoalProgress().year.value, 1);
   store.updateGoal('year', { targetBooks:2, bookIds:[planned.id] });
   assert.equal(store.getGoalProgress().year.value, 0);
+  const previousMonth = new Date();
+  previousMonth.setDate(1);
+  previousMonth.setMonth(previousMonth.getMonth() - 1);
+  const previousMonthKey = `${previousMonth.getFullYear()}-${String(previousMonth.getMonth() + 1).padStart(2, '0')}`;
+  const expiredMonthBook = store.addBook({ title:'Terminé le mois précédent', author:'Lectrice test', status:'lu', completedAt:`${previousMonthKey}-15T12:00:00.000Z` });
+  store.updateGoal('month', { targetBooks:1, bookIds:[expiredMonthBook.id] });
+  assert.equal(store.getGoalProgress().month.value, 0, 'un livre terminé le mois précédent ne doit pas remplir le nouvel objectif mensuel');
+  const expiredYearBook = store.addBook({ title:'Terminé l’année précédente', author:'Lectrice test', status:'lu', completedAt:`${new Date().getFullYear() - 1}-06-15T12:00:00.000Z` });
+  store.updateGoal('year', { targetBooks:1, bookIds:[expiredYearBook.id] });
+  assert.equal(store.getGoalProgress().year.value, 0, 'un livre terminé l’année précédente ne doit pas remplir le nouvel objectif annuel');
+  assert.equal(store.getState().goals.month.periodKey, store.localDateKey().slice(0, 7));
+  assert.equal(store.getState().goals.year.periodKey, store.localDateKey().slice(0, 4));
   assert.match(memory.get('boop_mvp_v5'), /reviewSuccesses/);
+});
+
+test('objectifs: le changement de mois et d’année archive la période puis repart à zéro', async () => {
+  const source = await read('js/store.js');
+  const memory = new Map();
+  const localStorage = {
+    getItem:key => memory.has(key) ? memory.get(key) : null,
+    setItem:(key,value) => memory.set(key,String(value)),
+    removeItem:key => memory.delete(key)
+  };
+  const loadStore = () => {
+    const BT = {};
+    const context = { BT, window:{ BT, addEventListener(){} }, localStorage, navigator:{ onLine:true }, console, setTimeout, clearTimeout, Intl };
+    vm.runInNewContext(source, context);
+    return context.window.BT.store;
+  };
+  const firstStore = loadStore();
+  const previousState = firstStore.getState();
+  const today = new Date();
+  const priorMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const priorMonthKey = `${priorMonth.getFullYear()}-${String(priorMonth.getMonth() + 1).padStart(2, '0')}`;
+  const priorYearKey = String(today.getFullYear() - 1);
+  previousState.goals.month.periodKey = priorMonthKey;
+  previousState.goals.year.periodKey = priorYearKey;
+  previousState.goals.month.history = [];
+  previousState.goals.year.history = [];
+  previousState.books.forEach(book => {
+    if (book.status === 'lu') book.completedAt = `${priorYearKey}-06-15T12:00:00.000Z`;
+  });
+  localStorage.setItem('boop_mvp_v5', JSON.stringify(previousState));
+
+  const reloadedStore = loadStore();
+  const progress = reloadedStore.getGoalProgress();
+  const rolled = reloadedStore.getState().goals;
+  assert.equal(rolled.month.periodKey, progress.keys.month);
+  assert.equal(rolled.year.periodKey, progress.keys.year);
+  assert.equal(rolled.month.history[0].key, priorMonthKey);
+  assert.equal(rolled.year.history[0].key, priorYearKey);
+  assert.equal(progress.month.value, 0);
+  assert.equal(progress.year.value, 0);
 });
 
 test('rapport mensuel: image Instagram et notes personnelles sur consentement', async () => {
@@ -664,7 +728,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v28/);
+  assert.match(worker, /boo-p-webapp-v29/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

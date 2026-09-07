@@ -607,6 +607,7 @@
     if (!session) return '';
     const book = store.getBookById(session.bookId);
     const sessions = store.getActiveSessions(), audio = book.mediaType === 'audio';
+    const citations = Array.isArray(session.citations) ? session.citations : [];
     return `<section class="session-view">
       <div class="session-top"><button class="button button--ghost" type="button" data-action="leave-session">← Accueil</button>${sessions.length > 1 ? `<label class="session-switcher">Session<select data-change="focus-session">${sessions.map(item => { const itemBook = store.getBookById(item.bookId); return `<option value="${attr(item.id)}" ${item.id === session.id ? 'selected' : ''}>${esc(itemBook?.title || 'Livre')} · ${item.status === 'running' ? 'en lecture' : 'en pause'}</option>`; }).join('')}</select></label>` : ''}<span class="simulated-badge">Sauvegarde locale active</span></div>
       <div class="session-book">${cover(book,'small')}<div><p class="eyebrow">Lecture en cours</p><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p></div></div>
@@ -615,7 +616,8 @@
       <aside class="card card-pad session-panel">
         <p class="eyebrow">Progression et note</p><div class="form-grid">
           ${renderSessionPositionSlider(book, session.endPage, { dataChange:'session-page' })}
-          <label class="field">Citation<textarea data-input="session-citation" placeholder="Une phrase du livre à conserver…">${esc(session.note)}</textarea></label>
+          <div class="session-citation-composer"><label class="field" for="session-citation-draft">Citation<textarea id="session-citation-draft" data-input="session-citation" placeholder="Une phrase du livre à conserver…">${esc(session.citationDraft || session.note || '')}</textarea></label><div class="session-citation-actions"><button class="button button--secondary" type="button" data-action="save-session-citation">Ajouter la citation</button><span class="small muted" role="status" aria-live="polite">${citations.length} citation${citations.length > 1 ? 's' : ''} ajoutée${citations.length > 1 ? 's' : ''} pendant cette session</span></div></div>
+          ${citations.length ? `<ol class="session-citation-list" aria-label="Citations ajoutées pendant cette session">${citations.map(citation => `<li><q>${esc(citation.text)}</q>${citation.page ? `<small>${audio ? 'Minute' : 'Page'} ${citation.page}</small>` : ''}</li>`).join('')}</ol>` : '<p class="small muted session-citation-empty">Validez chaque citation : le champ se videra pour accueillir la suivante.</p>'}
           <label class="field">Trace en brouillon<textarea id="session-trace-draft" data-input="session-trace" placeholder="Écrivez ou dictez une Trace…">${esc(session.traceDraft)}</textarea></label>
           <button class="button button--secondary" type="button" data-action="dictate-trace">Dicter une Trace <span class="simulated-badge">selon navigateur</span></button>
         </div>
@@ -1266,7 +1268,9 @@
   function openFinishSessionDialog() {
     const session = store.getActiveSession(), book = store.getBookById(session.bookId);
     const audio = book.mediaType === 'audio', total = audio ? book.durationMinutes : book.totalPages;
-    openDialog({ title: 'Bilan de la session', eyebrow: 'Confirmer avant de clôturer', body: `<form class="form-grid" data-form="finish-session">${renderSessionPositionSlider(book, session.endPage, { id:'finish-session-page', name:'endPage' })}<label class="field">Citation<textarea name="note" placeholder="Une phrase du livre à conserver…">${esc(session.note || '')}</textarea></label><fieldset class="book-rating-field"><legend>Note du livre · facultative</legend>${ratingPicker(book.rating, 'finish-rating')}<input type="hidden" name="rating" id="finish-rating" value="${book.rating || ''}"><p class="small muted" id="finish-rating-description">${book.rating ? `${book.rating} étoile${book.rating > 1 ? 's' : ''} sur 5.` : 'Choisissez une note de 1 à 5 étoiles.'}</p></fieldset><label class="field">Trace ou bilan facultatif<textarea name="traceText">${esc(session.traceDraft || '')}</textarea></label><label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(total) && total ? 'checked' : ''}> Marquer le livre comme Lu</label><label class="checkbox-row"><input type="checkbox" name="share"> Partager explicitement ce bilan dans le fil public</label><p class="small muted">Sans partage, le bilan reste privé.</p><button class="button button--primary" type="submit">Clôturer et enregistrer</button></form>` });
+    const citations = Array.isArray(session.citations) ? session.citations : [];
+    const citationSummary = citations.length ? `<section class="session-citation-summary" aria-labelledby="finish-citations-title"><strong id="finish-citations-title">${citations.length} citation${citations.length > 1 ? 's' : ''} conservée${citations.length > 1 ? 's' : ''}</strong><ul>${citations.map(citation => `<li><q>${esc(citation.text)}</q></li>`).join('')}</ul></section>` : '<p class="small muted">Aucune citation ajoutée pendant cette session.</p>';
+    openDialog({ title: 'Bilan de la session', eyebrow: 'Confirmer avant de clôturer', body: `<form class="form-grid" data-form="finish-session">${renderSessionPositionSlider(book, session.endPage, { id:'finish-session-page', name:'endPage' })}${citationSummary}<fieldset class="book-rating-field"><legend>Note du livre · facultative</legend>${ratingPicker(book.rating, 'finish-rating')}<input type="hidden" name="rating" id="finish-rating" value="${book.rating || ''}"><p class="small muted" id="finish-rating-description">${book.rating ? `${book.rating} étoile${book.rating > 1 ? 's' : ''} sur 5.` : 'Choisissez une note de 1 à 5 étoiles.'}</p></fieldset><label class="field">Trace ou bilan facultatif<textarea name="traceText">${esc(session.traceDraft || '')}</textarea></label><label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(total) && total ? 'checked' : ''}> Marquer le livre comme Lu</label><label class="checkbox-row"><input type="checkbox" name="share"> Partager explicitement ce bilan dans le fil public</label><p class="small muted">Sans partage, le bilan reste privé.</p><button class="button button--primary" type="submit">Clôturer et enregistrer</button></form>` });
   }
 
   async function handleClick(event) {
@@ -1292,7 +1296,12 @@
       case 'book-session': startSession(id); break;
       case 'leave-session': location.hash = '#home'; showToast('Session conservée en arrière-plan'); break;
       case 'toggle-session': { const session = store.getActiveSession(); session?.status === 'running' ? store.pauseActiveSession() : store.resumeActiveSession(); render(); break; }
-      case 'finish-session': openFinishSessionDialog(); break;
+      case 'save-session-citation': saveSessionCitation(); break;
+      case 'finish-session': {
+        const pendingCitation = String(store.getActiveSession()?.citationDraft || '').trim();
+        if (pendingCitation) { showToast('Ajoutez ou effacez la citation en cours avant de terminer'); document.getElementById('session-citation-draft')?.focus(); break; }
+        openFinishSessionDialog(); break;
+      }
       case 'quick-trace': openTraceDialog(trigger.dataset.bookId || store.getActiveSession()?.bookId); break;
       case 'session-lexicon': openLexiconDialog(null, store.getActiveSession()?.bookId, { includeCitation:false }); break;
       case 'dictate-trace': startDictation(document.getElementById('session-trace-draft'), text => store.updateActiveSession({ traceDraft: text })); break;
@@ -1412,7 +1421,7 @@
     if (control.matches('.session-page-slider input[type="range"]')) { const value = clamp(control.value, 0, control.max || 99999); updateSessionPageOutput(control, value); return; }
     if (control.id === 'global-search') { ui.searchQuery = control.value; renderSearchResults(control.value); return; }
     const type = control.dataset.input; if (!type) return;
-    if (type === 'session-citation') { store.updateActiveSession({ note: control.value }); return; }
+    if (type === 'session-citation') { store.updateActiveSession({ citationDraft: control.value }); return; }
     if (type === 'session-trace') { store.updateActiveSession({ traceDraft: control.value }); return; }
     if (type === 'friend-search') {
       ui.friendQuery = control.value; const position = control.selectionStart; render();
@@ -1447,6 +1456,17 @@
     if (!bookId) return;
     store.startActiveSession(bookId);
     location.hash = '#session';
+  }
+
+  function saveSessionCitation() {
+    const field = document.getElementById('session-citation-draft');
+    const text = String(field?.value || '').trim();
+    if (!text) { showToast('Écrivez une citation avant de l’ajouter'); field?.focus(); return; }
+    const citation = store.addActiveSessionCitation(text);
+    if (!citation) { showToast('La citation n’a pas pu être ajoutée'); return; }
+    showToast('Citation ajoutée au lexique');
+    render();
+    window.setTimeout(() => document.getElementById('session-citation-draft')?.focus(), 30);
   }
 
   function flipMemoryCard(trigger) {
@@ -1936,7 +1956,7 @@
     const session = store.getActiveSession(), book = store.getBookById(session.bookId);
     const traceText = String(data.get('traceText') || '').trim(), share = data.get('share') === 'on';
     const total = book.mediaType === 'audio' ? book.durationMinutes : book.totalPages;
-    store.finishActiveSession({ endPage: clamp(data.get('endPage'), 0, total || 99999), note: data.get('note'), rating: data.get('rating'), traceText, markRead: data.get('markRead') === 'on', share });
+    store.finishActiveSession({ endPage: clamp(data.get('endPage'), 0, total || 99999), rating: data.get('rating'), traceText, markRead: data.get('markRead') === 'on', share });
     if (share && traceText) {
       try {
         const post = isGuestMode()
