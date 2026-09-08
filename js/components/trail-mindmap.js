@@ -21,7 +21,21 @@ BT.trailMindmap = (() => {
     })).filter(group => group.books.length);
   }
 
-  function layout(groups = [], expandedIds = []) {
+  function placeInsights(fragments, width, height, root) {
+    const spots = [
+      { x:root.x, y:72, align:'center', tilt:-1.2 },
+      { x:250, y:125, align:'left', tilt:-2.1 },
+      { x:width - 250, y:155, align:'right', tilt:1.8 },
+      { x:205, y:height * .52, align:'left', tilt:1.1 },
+      { x:width - 205, y:height * .44, align:'right', tilt:-1.4 },
+      { x:270, y:height - 115, align:'left', tilt:1.7 },
+      { x:width - 270, y:height - 130, align:'right', tilt:-1.8 },
+      { x:root.x, y:height - 70, align:'center', tilt:.8 }
+    ];
+    return (fragments || []).map(value => String(value || '').trim()).filter(Boolean).slice(0, spots.length).map((text, index) => ({ id:`insight-${index}`, text, ...spots[index], color:COLORS[(index + 4) % COLORS.length] }));
+  }
+
+  function layout(groups = [], expandedIds = [], fragments = []) {
     const expanded = expandedIds instanceof Set ? expandedIds : new Set(expandedIds || []);
     const prepared = normalizedGroups(groups).map(group => ({ ...group, laneHeight:Math.max(280, group.books.length * 138 + 110) }));
     const sides = { left:[], right:[] };
@@ -59,7 +73,7 @@ BT.trailMindmap = (() => {
       });
     });
     genres.sort((a, b) => prepared.findIndex(group => group.id === a.id) - prepared.findIndex(group => group.id === b.id));
-    return { width, height, root, genres, nodes:genres.flatMap(genre => genre.books) };
+    return { width, height, root, genres, nodes:genres.flatMap(genre => genre.books), insights:placeInsights(fragments, width, height, root) };
   }
 
   return { layout, curve, colors:COLORS.slice() };

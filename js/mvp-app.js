@@ -15,6 +15,7 @@
     monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
     selectedLibraryBookId: null, memoryDeckKeys: [], memoryDeckSignature: '', memorySessionTotal: 0, memorySessionComplete: false,
     memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all',
+    quizSignature: '', quizQuestionIds: [], quizIndex: 0, quizScore: 0, quizAnswered: false, quizSelected: '', quizStarted: false, quizFinished: false, quizSeed: 0,
     expandedTrailBooks: new Set(), trailYear: 'all', trailStatus: 'all', trailScale: .72, trailViewCenter: null, trailPinch: null, clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map(),
     syncReady: false, syncBusy: false, syncPending: false, syncTimer: null, syncUnsubscribe: null, syncBootstrapping: false, syncErrorShown: false
   };
@@ -440,6 +441,8 @@
   function renderHome() {
     const profile = store.getProfile(), active = store.getCurrentBook(), session = active ? store.getActiveSessionForBook(active.id) : null, goals = store.getGoalProgress();
     const settings = store.getSettings();
+    const libraryBookCount = store.getBooks().filter(book => book.libraryState === 'library').length;
+    const dnaBookTarget = 10, dnaBooksRemaining = Math.max(0, dnaBookTarget - libraryBookCount);
     const memoryColor = SURFACE_COLORS.some(([key]) => key === settings.memoryCardColor) ? settings.memoryCardColor : 'sage';
     const sessionColor = SURFACE_COLORS.some(([key]) => key === settings.sessionCardColor) ? settings.sessionCardColor : 'sage';
     const inProgress = store.getBooks().filter(book => book.status === 'en-cours' && book.libraryState === 'library');
@@ -449,6 +452,8 @@
     const weekPct = pct(goals.week.value, goals.week.target);
     return `
       <section class="page-head"><div><p class="eyebrow">Bonjour ${esc(profile.name)}</p><h1>Où en est votre lecture&nbsp;?</h1><p>Un regard calme sur votre régularité, vos livres et ce que vous souhaitez garder.</p></div><span class="privacy-badge">Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</span></section>
+
+      ${dnaBooksRemaining ? `<section class="dna-onboarding-nudge" aria-labelledby="dna-nudge-title"><span class="dna-onboarding-nudge__mark" aria-hidden="true">✦</span><div><p class="eyebrow">Votre portrait se précise</p><h2 id="dna-nudge-title">Ajoutez encore ${dnaBooksRemaining} livre${dnaBooksRemaining > 1 ? 's' : ''} pour affiner votre ADN</h2><p>BOO-P affine ce portrait à partir des livres réellement présents dans votre bibliothèque. L’ajout rapide permet aussi de scanner leur ISBN.</p><div class="dna-onboarding-nudge__progress" role="progressbar" aria-label="${libraryBookCount} livres sur ${dnaBookTarget}" aria-valuemin="0" aria-valuemax="${dnaBookTarget}" aria-valuenow="${Math.min(libraryBookCount,dnaBookTarget)}"><span style="--dna-progress:${Math.min(100,libraryBookCount * 10)}%"></span></div><small>${libraryBookCount}/${dnaBookTarget} livres ajoutés</small></div><button class="button button--sage button--small" type="button" data-action="add-book">Ajouter un livre</button></section>` : ''}
 
       <section class="card streak-card" aria-labelledby="regularity-title">
         <div class="section-heading"><div><p class="eyebrow">Semaine du lundi au dimanche</p><h2 id="regularity-title">Régularité quotidienne</h2></div><button class="text-link" type="button" data-action="show-week-detail">Voir le détail</button></div>
@@ -487,8 +492,10 @@
         <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} disponible${memory.length > 1 ? 's' : ''}</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez la réponse, touchez une carte pour la retourner ou balayez pour en choisir une autre.</p></div><a class="text-link" href="#path?tab=lexicon">Lexiques</a></div>
         <div class="memory-color-picker bookcase-finish-picker" role="group" aria-label="Couleur des cartes devinettes">${SURFACE_COLORS.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="memory-card-color" data-color="${key}" aria-label="${label}" title="${label}" aria-pressed="${memoryColor === key}"><span aria-hidden="true"></span></button>`).join('')}</div>
         <div class="memory-list memory-list--${memoryColor}" aria-label="Cartes de la mémoire active">${memory.length ? `<div class="memory-carousel" data-memory-carousel tabindex="0" aria-label="Balayez horizontalement entre les cartes">${memory.map((item, index) => renderMemoryQuiz(item, index + 1, memory.length)).join('')}</div><div class="memory-carousel-dots" aria-hidden="true">${memory.map((_, index) => `<span class="${index === Math.min(ui.memoryCursor, memory.length - 1) ? 'is-current' : ''}"></span>`).join('')}</div>` : renderMemoryComplete()}</div>
-        <p class="memory-reminder small muted">Jusqu’à 10 cartes en même temps · une nouvelle entrée du lexique arrive automatiquement après « Retrouvé ».</p>
+        <p class="memory-reminder small muted">Les cartes sont réservées aux mots nouveaux · une nouvelle entrée arrive automatiquement après « Retrouvé ».</p>
       </section>
+
+      ${renderLexiconQuiz()}
 
       <button class="button button--sage home-add-book-fab" type="button" data-action="add-book" aria-label="Scanner un ISBN ou ajouter un livre"><span class="barcode-add-icon" aria-hidden="true"></span><span>Ajouter un livre</span></button>`;
   }
@@ -500,17 +507,8 @@
   }
 
   function goalStatusText(progress) {
+    if (progress.period === 'year') return `${String(progress.filledValue).replace('.', ',')} / ${progress.target} livre${progress.target > 1 ? 's' : ''}`;
     return `${progress.value} lu${progress.value > 1 ? 's' : ''}${progress.inProgress ? ` · ${progress.inProgress} en cours` : ''} / ${progress.target}`;
-  }
-
-  function makeClozeMemory(text, source, kind = 'Citation à compléter', date = new Date().toISOString(), memoryKey = '', detail = '') {
-    const stopWords = new Set(['alors','après','avant','avec','avoir','cette','comme','dans','depuis','entre','était','faire','leurs','livre','mais','même','notre','parce','pour','quand','sans','sous','toute','très','votre']);
-    const words = String(text || '').match(/[A-Za-zÀ-ÖØ-öø-ÿŒœ'-]{5,}/g) || [];
-    const answer = words.filter(word => !stopWords.has(normalize(word))).sort((a, b) => b.length - a.length)[0] || words[0];
-    if (!answer) return null;
-    const escaped = answer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const clue = String(text).replace(new RegExp(escaped, 'i'), '_____');
-    return { kind, question:`Complétez cette citation : « ${clue} »`, answer:String(text), solution:answer, detail, source, date, memoryKey };
   }
 
   function memoryDefinitionClue(definition, answer) {
@@ -527,7 +525,7 @@
   }
 
   function getMemoryItems() {
-    const personal = store.getLexicon().map(item => {
+    const personal = store.getLexicon().filter(item => item.kind === 'word').map(item => {
       const memoryKey = `lexicon:${item.id}`;
       const source = [item.bookTitle || 'Note personnelle', item.author, item.page ? `p. ${item.page}` : ''].filter(Boolean).join(' · ');
       const clue = memoryDefinitionClue(item.definition, item.word).trim().replace(/[.!?]+$/, '');
@@ -535,9 +533,7 @@
       const wordQuestion = /^(un|une|le|la|les|l['’]|du|des|de la)\b/i.test(clue)
         ? `Je suis ${riddle}. Qui suis-je ?`
         : `Je désigne l’idée suivante : « ${clue || 'une idée rencontrée pendant votre lecture'} ». Quel mot suis-je ?`;
-      const content = item.kind === 'citation'
-        ? makeClozeMemory(item.word, source, 'Citation à compléter', item.updatedAt, memoryKey, item.definition)
-        : { kind:item.kind === 'expression' ? 'Expression à retrouver' : 'Mot à retrouver', question:item.kind === 'expression' ? `Cette situation correspond à : « ${clue || item.note || 'un sens rencontré dans votre lecture'} ». Quelle expression utiliseriez-vous ?` : wordQuestion, answer:item.word, detail:item.definition, source, date:item.updatedAt, memoryKey };
+      const content = { kind:'Mot à retrouver', question:wordQuestion, answer:item.word, detail:item.definition, source, date:item.updatedAt, memoryKey };
       return { ...content, ...lexiconMemoryMeta(item) };
     }).filter(Boolean).sort((a,b) => {
       const aDue = a.nextDueAt ? new Date(a.nextDueAt).getTime() : Number.MAX_SAFE_INTEGER;
@@ -552,10 +548,11 @@
       { kind:'Mot à retrouver', question:'Je désigne un jugement fin, lucide et perspicace. Qui suis-je ?', answer:'Sagacité', detail:'La capacité à comprendre rapidement et justement.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Chez les philosophes antiques, je suis la tranquillité de l’âme libérée des troubles. Qui suis-je ?', answer:'Ataraxie', detail:'Un état de sérénité et d’absence de trouble.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je donne l’impression d’être présent partout à la fois. Qui suis-je ?', answer:'Ubiquité', detail:'Le fait d’être ou de sembler être en plusieurs lieux simultanément.', source:'Exemple BOO-P' },
-      { kind:'Expression à retrouver', question:'Je suis une phrase brève qui condense une pensée ou une vérité. Qui suis-je ?', answer:'Aphorisme', detail:'Une formule concise exprimant une idée générale.', source:'Exemple BOO-P' },
+      { kind:'Mot à retrouver', question:'Je suis une phrase brève qui condense une pensée ou une vérité. Qui suis-je ?', answer:'Aphorisme', detail:'Une formule concise exprimant une idée générale.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je me situe au seuil d’un ouvrage et j’en ouvre la lecture. Qui suis-je ?', answer:'Liminaire', detail:'Ce qui est placé au commencement d’un texte ou sert d’introduction.', source:'Exemple BOO-P' },
       { kind:'Mot à retrouver', question:'Je ne peux pas être exprimé avec des mots tant je dépasse le langage. Qui suis-je ?', answer:'Indicible', detail:'Ce qu’on ne peut pas dire ou décrire.', source:'Exemple BOO-P' },
-      { kind:'Mot à retrouver', question:'Je suis la capacité à se reconstruire après une épreuve. Qui suis-je ?', answer:'Résilience', detail:'La faculté de retrouver un équilibre après un choc ou une difficulté.', source:'Exemple BOO-P' }
+      { kind:'Mot à retrouver', question:'Je suis la capacité à se reconstruire après une épreuve. Qui suis-je ?', answer:'Résilience', detail:'La faculté de retrouver un équilibre après un choc ou une difficulté.', source:'Exemple BOO-P' },
+      { kind:'Mot à retrouver', question:'Je suis le sentiment de nouveauté et de surprise provoqué par un changement de cadre. Qui suis-je ?', answer:'Dépaysement', detail:'Le changement agréable ou déroutant ressenti loin de ses habitudes.', source:'Exemple BOO-P' }
     ].map((item,index) => ({ ...item, memoryKey:`example:${index}:${normalize(item.answer)}`, date:new Date(0).toISOString() }));
     return personal.concat(examples.slice(0, Math.max(0, 10 - personal.length)));
   }
@@ -576,13 +573,13 @@
   }
 
   function renderMemoryQuiz(item, position, total) {
-    const label = item.kind === 'Citation à compléter' ? 'Afficher la citation complète' : `Afficher la réponse à la devinette : ${item.question}`;
+    const label = `Afficher la réponse à la devinette : ${item.question}`;
     return `<article class="memory-card-shell" data-memory-key="${attr(item.memoryKey)}">
       <div class="memory-deck-status"><span>Carte ${position} sur ${total}</span><span>Balayer ↔</span></div>
       <button class="memory-flip-card" type="button" data-action="flip-memory" data-front-label="${attr(label)}" aria-pressed="false" aria-label="${attr(label)}">
         <span class="memory-flip-card__inner">
           <span class="memory-flip-card__face memory-flip-card__front" aria-hidden="false"><span class="status-chip">${esc(item.kind)}</span><span class="memory-flip-card__question">${esc(item.question)}</span><span class="memory-flip-card__gesture"><span aria-hidden="true">↻</span> Toucher pour retourner</span></span>
-          <span class="memory-flip-card__face memory-flip-card__back" aria-hidden="true"><span class="eyebrow">Réponse</span><strong class="memory-flip-card__answer ${item.kind === 'Citation à compléter' ? 'memory-flip-card__answer--quote' : ''}">${esc(item.answer)}</strong>${item.solution ? `<span class="memory-flip-card__solution">Mot masqué : ${esc(item.solution)}</span>` : ''}${item.detail ? `<span class="memory-flip-card__detail">${esc(item.detail)}</span>` : ''}<small>${esc(item.source)}</small></span>
+          <span class="memory-flip-card__face memory-flip-card__back" aria-hidden="true"><span class="eyebrow">Réponse</span><strong class="memory-flip-card__answer">${esc(item.answer)}</strong>${item.detail ? `<span class="memory-flip-card__detail">${esc(item.detail)}</span>` : ''}<small>${esc(item.source)}</small></span>
         </span>
       </button>
       <div class="memory-review-actions" hidden><small class="muted">${esc(item.reviewLabel || 'Exemple BOO-P · entraînement local')}</small><p>Avant de retourner la carte, aviez-vous retrouvé la réponse&nbsp;?</p><div class="memory-rating-row"><button class="button button--ghost button--small" type="button" data-action="memory-rate" data-quality="retry" data-id="${attr(item.memoryId || '')}" data-memory-key="${attr(item.memoryKey)}">À revoir</button><button class="button button--secondary button--small" type="button" data-action="memory-rate" data-quality="almost" data-id="${attr(item.memoryId || '')}" data-memory-key="${attr(item.memoryKey)}">Presque</button><button class="button button--sage button--small" type="button" data-action="memory-rate" data-quality="recalled" data-id="${attr(item.memoryId || '')}" data-memory-key="${attr(item.memoryKey)}">Retrouvé</button></div></div>
@@ -590,8 +587,88 @@
   }
 
   function renderMemoryComplete() {
-    if (!ui.memorySessionComplete) return '<div class="memory-complete"><p class="eyebrow">Rien à réviser</p><h3>Votre mémoire est au calme</h3><p>Ajoutez un mot, une expression ou une citation dans votre lexique pour préparer une prochaine carte.</p><a class="button button--secondary" href="#path?tab=lexicon">Ouvrir mon lexique</a></div>';
+    if (!ui.memorySessionComplete) return '<div class="memory-complete"><p class="eyebrow">Rien à réviser</p><h3>Votre mémoire est au calme</h3><p>Ajoutez un nouveau mot dans votre lexique pour préparer une prochaine carte.</p><a class="button button--secondary" href="#path?tab=lexicon">Ouvrir mon lexique</a></div>';
     return `<div class="memory-complete"><span class="memory-complete__mark" aria-hidden="true">✓</span><p class="eyebrow">Séance terminée</p><h3>${ui.memorySessionTotal} carte${ui.memorySessionTotal > 1 ? 's' : ''} travaillée${ui.memorySessionTotal > 1 ? 's' : ''}</h3><p>Les prochaines cartes reviendront selon vos réponses, sans surcharger votre journée.</p><button class="button button--secondary" type="button" data-action="restart-memory">Revoir dix cartes</button></div>`;
+  }
+
+  const QUIZ_EXAMPLES = [
+    { id:'quiz-exp-page', demo:true, kind:'expression', word:'tourner la page', definition:'Laisser une période derrière soi et avancer.', note:'Après une épreuve, une personne décide de ne plus rester enfermée dans le passé.' },
+    { id:'quiz-exp-lines', demo:true, kind:'expression', word:'lire entre les lignes', definition:'Comprendre ce qui est suggéré sans être écrit explicitement.', note:'Le sens véritable d’un message se cache dans ses sous-entendus.' },
+    { id:'quiz-exp-cart', demo:true, kind:'expression', word:'mettre la charrue avant les bœufs', definition:'Faire les choses dans le désordre en commençant par ce qui devrait venir après.', note:'Une personne prépare les détails avant même d’avoir posé les bases de son projet.' },
+    { id:'quiz-exp-book', demo:true, kind:'expression', word:'dévorer un livre', definition:'Lire un livre très vite avec beaucoup d’intérêt.', note:'Le roman était si prenant que la lectrice l’a terminé en une soirée.' },
+    { id:'quiz-quote-candide', demo:true, kind:'citation', word:'Il faut cultiver notre jardin.', definition:'Une invitation à agir concrètement sur ce qui dépend de nous.', bookTitle:'Candide', author:'Voltaire' },
+    { id:'quiz-quote-pantagruel', demo:true, kind:'citation', word:'Science sans conscience n’est que ruine de l’âme.', definition:'Le savoir doit rester guidé par une exigence morale.', bookTitle:'Pantagruel', author:'François Rabelais' },
+    { id:'quiz-quote-pensees', demo:true, kind:'citation', word:'Le cœur a ses raisons que la raison ne connaît point.', definition:'Les sentiments obéissent à une logique qui échappe parfois à l’analyse rationnelle.', bookTitle:'Pensées', author:'Blaise Pascal' },
+    { id:'quiz-quote-discours', demo:true, kind:'citation', word:'Je pense, donc je suis.', definition:'La pensée consciente constitue une première certitude de l’existence.', bookTitle:'Discours de la méthode', author:'René Descartes' }
+  ];
+
+  function quizChoices(correct, pool, seed, limit = 4) {
+    const normalizedCorrect = normalize(correct);
+    const distractors = [...new Set(pool.filter(Boolean))].filter(value => normalize(value) !== normalizedCorrect).sort((a,b) => recommendationHash(`${seed}:${a}`) - recommendationHash(`${seed}:${b}`)).slice(0, Math.max(2, limit - 1));
+    return [correct, ...distractors].sort((a,b) => recommendationHash(`${seed}:choice:${a}`) - recommendationHash(`${seed}:choice:${b}`));
+  }
+
+  function splitCitation(value) {
+    const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+    if (words.length < 6) return null;
+    const cut = Math.min(words.length - 2, Math.max(3, Math.round(words.length * .48)));
+    return { beginning:words.slice(0, cut).join(' '), ending:words.slice(cut).join(' ') };
+  }
+
+  function getQuizCandidates() {
+    const books = store.getBooks().filter(book => book.libraryState === 'library');
+    const personal = store.getLexicon().filter(item => ['expression','citation'].includes(item.kind)).map(item => {
+      const book = item.bookId ? books.find(value => value.id === item.bookId) : null;
+      return { ...item, demo:false, bookTitle:item.bookTitle || book?.title || '', author:item.author || book?.authors?.join(', ') || '' };
+    });
+    const entries = [...personal, ...QUIZ_EXAMPLES];
+    const expressions = entries.filter(item => item.kind === 'expression');
+    const citations = entries.filter(item => item.kind === 'citation');
+    const expressionAnswers = expressions.map(item => item.word);
+    const bookAnswers = [...new Set(citations.map(item => item.bookTitle).filter(Boolean))];
+    const authorAnswers = [...new Set(citations.map(item => item.author).filter(Boolean))];
+    const citationEndings = citations.map(item => splitCitation(item.word)?.ending).filter(Boolean);
+    const questions = [];
+    expressions.forEach(item => {
+      const id = item.id || `quiz-expression-${recommendationHash(item.word)}`;
+      questions.push({ id:`${id}:meaning`, entryId:item.demo ? '' : item.id, kind:'Expression en situation', prompt:`Quelle expression correspond à cette situation ?\n${item.note || item.definition || 'Retrouvez l’expression qui convient.'}`, choices:quizChoices(item.word, expressionAnswers, `${id}:meaning`), correct:item.word, explanation:item.definition || 'Expression rencontrée dans votre lecture.', source:[item.bookTitle, item.author].filter(Boolean).join(' · ') || 'Exemple BOO-P', bookId:item.bookId || null });
+      if (item.bookTitle && bookAnswers.length >= 3) questions.push({ id:`${id}:book`, entryId:item.demo ? '' : item.id, kind:'Expression et livre', prompt:`Dans quel livre avez-vous conservé l’expression « ${item.word} » ?`, choices:quizChoices(item.bookTitle, bookAnswers, `${id}:book`), correct:item.bookTitle, explanation:item.definition || item.note || 'Expression conservée dans votre lexique.', source:[item.bookTitle, item.author].filter(Boolean).join(' · '), bookId:item.bookId || null });
+    });
+    citations.forEach(item => {
+      const id = item.id || `quiz-citation-${recommendationHash(item.word)}`;
+      const parts = splitCitation(item.word);
+      if (parts && citationEndings.length >= 3) questions.push({ id:`${id}:continue`, entryId:item.demo ? '' : item.id, kind:'Suite de citation', prompt:`Quelle suite complète cette citation ?\n« ${parts.beginning}… »`, choices:quizChoices(parts.ending, citationEndings, `${id}:continue`), correct:parts.ending, explanation:item.definition || 'Retrouvez la formulation exacte de la citation.', source:[item.bookTitle, item.author].filter(Boolean).join(' · ') || 'Citation personnelle', fullText:item.word, bookId:item.bookId || null });
+      if (item.bookTitle && bookAnswers.length >= 3) questions.push({ id:`${id}:book`, entryId:item.demo ? '' : item.id, kind:'Citation et livre', prompt:`Dans quel livre trouve-t-on cette citation ?\n« ${item.word} »`, choices:quizChoices(item.bookTitle, bookAnswers, `${id}:book`), correct:item.bookTitle, explanation:item.definition || 'Citation conservée dans votre lexique.', source:[item.bookTitle, item.author].filter(Boolean).join(' · '), fullText:item.word, bookId:item.bookId || null });
+      if (item.author && authorAnswers.length >= 3) questions.push({ id:`${id}:author`, entryId:item.demo ? '' : item.id, kind:'Retrouver l’auteur', prompt:`Qui est l’auteur de cette citation ?\n« ${item.word} »`, choices:quizChoices(item.author, authorAnswers, `${id}:author`), correct:item.author, explanation:item.definition || 'Citation conservée dans votre lexique.', source:[item.bookTitle, item.author].filter(Boolean).join(' · '), fullText:item.word, bookId:item.bookId || null });
+    });
+    return questions.sort((a,b) => Number(Boolean(b.entryId)) - Number(Boolean(a.entryId)) || recommendationHash(a.id) - recommendationHash(b.id));
+  }
+
+  function getQuizDeck() {
+    const candidates = getQuizCandidates();
+    const signature = candidates.map(item => item.id).sort().join('|');
+    if (signature !== ui.quizSignature) {
+      ui.quizSignature = signature;
+      ui.quizQuestionIds = [];
+      ui.quizStarted = false;
+      ui.quizFinished = false;
+      ui.quizIndex = 0;
+      ui.quizScore = 0;
+    }
+    const byId = new Map(candidates.map(item => [item.id, item]));
+    return { candidates, questions:ui.quizQuestionIds.map(id => byId.get(id)).filter(Boolean) };
+  }
+
+  function renderLexiconQuiz() {
+    const { candidates, questions } = getQuizDeck();
+    const personalCount = store.getLexicon().filter(item => ['expression','citation'].includes(item.kind)).length;
+    if (!ui.quizStarted) return `<section class="section-block lexicon-quiz" aria-labelledby="lexicon-quiz-title"><div class="section-heading"><div><p class="eyebrow">Expressions & citations</p><h2 id="lexicon-quiz-title">Quiz de lecture</h2><p class="small muted">Sens, contexte, auteur et livre d’origine : cinq questions pour faire revenir les phrases autrement.</p></div></div><div class="card quiz-intro"><span class="quiz-intro__mark" aria-hidden="true">?</span><div><strong>${personalCount ? `${personalCount} souvenir${personalCount > 1 ? 's' : ''} personnel${personalCount > 1 ? 's' : ''} prêt${personalCount > 1 ? 's' : ''}` : 'Quiz de découverte prêt'}</strong><p class="small muted">Les exemples BOO-P complètent vos propres expressions et citations lorsque le lexique est encore court.</p></div><button class="button button--primary" type="button" data-action="start-quiz" ${candidates.length ? '' : 'disabled'}>Lancer 5 questions</button></div></section>`;
+    if (ui.quizFinished || !questions.length) return `<section class="section-block lexicon-quiz" aria-labelledby="lexicon-quiz-title"><div class="section-heading"><div><p class="eyebrow">Quiz terminé</p><h2 id="lexicon-quiz-title">${ui.quizScore}/${questions.length || 5} bonnes réponses</h2><p class="small muted">Les réponses difficiles reviendront plus tôt dans vos prochaines révisions.</p></div><button class="button button--secondary button--small" type="button" data-action="restart-quiz">Recommencer</button></div></section>`;
+    const question = questions[ui.quizIndex];
+    if (!question) return '';
+    const selected = ui.quizSelected, answered = ui.quizAnswered, correct = selected === question.correct;
+    const book = question.bookId ? store.getBookById(question.bookId) : store.getBooks().find(item => normalize(item.title) === normalize(question.source?.split(' · ')[0]));
+    return `<section class="section-block lexicon-quiz" aria-labelledby="lexicon-quiz-title"><div class="section-heading"><div><p class="eyebrow">Question ${ui.quizIndex + 1} sur ${questions.length}</p><h2 id="lexicon-quiz-title">Quiz expressions & citations</h2></div><span class="quiz-score">${ui.quizScore} point${ui.quizScore > 1 ? 's' : ''}</span></div><article class="card quiz-card" aria-live="polite"><span class="status-chip">${esc(question.kind)}</span><h3>${esc(question.prompt).replace(/\n/g, '<br>')}</h3><div class="quiz-choices">${question.choices.map(choice => `<button class="quiz-choice ${answered && choice === question.correct ? 'is-correct' : ''} ${answered && choice === selected && choice !== question.correct ? 'is-wrong' : ''}" type="button" data-action="quiz-answer" data-answer="${attr(choice)}" ${answered ? 'disabled' : ''}><span aria-hidden="true"></span>${esc(choice)}</button>`).join('')}</div>${answered ? `<div class="quiz-feedback ${correct ? 'is-correct' : 'is-wrong'}"><div>${book ? cover(book,'small') : `<span class="quiz-feedback__mark" aria-hidden="true">${correct ? '✓' : '↺'}</span>`}</div><div><strong>${correct ? 'Bonne réponse' : `La réponse était : ${esc(question.correct)}`}</strong>${question.fullText ? `<q>${esc(question.fullText)}</q>` : ''}<p>${esc(question.explanation)}</p><small>${esc(question.source)}</small></div></div><button class="button button--primary quiz-next" type="button" data-action="next-quiz">${ui.quizIndex + 1 >= questions.length ? 'Voir mon résultat' : 'Question suivante'}</button>` : ''}</article></section>`;
   }
 
   function renderSessionPositionSlider(book, value, { id = 'session-page-slider', name = '', dataChange = '' } = {}) {
@@ -948,7 +1025,8 @@
     });
     const genreGroups = [...grouped.entries()].sort(([a],[b]) => a.localeCompare(b, 'fr')).map(([name, genreBooks], index) => ({ id:`genre-${recommendationHash(name)}`, name, color:palette[index % palette.length], books:genreBooks }));
     const lexicon = store.getLexicon(), traces = store.getTraces(), posts = store.getCommunity().posts;
-    const layout = window.BT.trailMindmap?.layout?.(genreGroups, ui.expandedTrailBooks) || { width:2360, height:920, root:{ x:1180, y:460 }, genres:[], nodes:[] };
+    const readerDNA = store.getReaderDNA();
+    const layout = window.BT.trailMindmap?.layout?.(genreGroups, ui.expandedTrailBooks, readerDNA.fragments) || { width:2360, height:920, root:{ x:1180, y:460 }, genres:[], nodes:[], insights:[] };
     const details = new Map(books.map(book => {
       const bookLexicon = lexicon.filter(item => item.bookId === book.id);
       const bookTraces = traces.filter(item => item.bookId === book.id);
@@ -964,6 +1042,7 @@
     }));
     const paths = layout.genres.map(genre => `<path class="trail-canvas-link trail-canvas-link--genre" style="--trail-branch-color:${attr(genre.color)}" d="${attr(genre.path)}"></path>${genre.books.map(node => `<path class="trail-canvas-link trail-canvas-link--book" style="--trail-branch-color:${attr(genre.color)}" d="${attr(node.path)}"></path>${node.branches.map(branch => `<path class="trail-canvas-link trail-canvas-link--detail" style="--trail-branch-color:${attr(genre.color)}" d="${attr(branch.path)}"></path>`).join('')}`).join('')}`).join('');
     const genreNodes = layout.genres.map(genre => `<article class="trail-genre-node trail-genre-node--${genre.side}" style="--x:${genre.x}px;--y:${genre.y}px;--trail-branch-color:${attr(genre.color)}"><span aria-hidden="true">${genre.books.length > 3 ? '✺' : '✦'}</span><strong>${esc(genre.name)}</strong><small>${genre.books.length} livre${genre.books.length > 1 ? 's' : ''}</small></article>`).join('');
+    const dnaFragments = (layout.insights || []).map(insight => `<blockquote class="trail-adn-fragment trail-adn-fragment--${insight.align}" style="--x:${insight.x}px;--y:${insight.y}px;--adn-color:${attr(insight.color)};--adn-tilt:${insight.tilt}deg">${esc(insight.text)}</blockquote>`).join('');
     const bookNodes = layout.nodes.map(node => {
       const book = books.find(item => item.id === node.id); if (!book) return '';
       const expanded = ui.expandedTrailBooks.has(book.id), branches = details.get(book.id) || [];
@@ -976,7 +1055,7 @@
     }).join('');
     const filters = `<div class="trail-toolbar"><div><label for="trail-year">Année</label><select id="trail-year" data-change="trail-year"><option value="all" ${ui.trailYear === 'all' ? 'selected' : ''}>Toutes</option>${years.map(year => `<option value="${year}" ${String(year) === ui.trailYear ? 'selected' : ''}>${year}</option>`).join('')}</select></div><div><label for="trail-status">Statut</label><select id="trail-status" data-change="trail-status"><option value="all" ${ui.trailStatus === 'all' ? 'selected' : ''}>Tous les livres</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.trailStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div><span>${books.length} livre${books.length > 1 ? 's' : ''} affiché${books.length > 1 ? 's' : ''}</span></div>`;
     const profile = store.getProfile(), scaledWidth = Math.round(layout.width * ui.trailScale), scaledHeight = Math.round(layout.height * ui.trailScale);
-    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Votre univers part de vous, se ramifie par genres littéraires, puis par livres. Touchez un livre pour afficher ses lexiques, commentaires et notes.</p></div></div>${filters}<div class="trail-legend" aria-label="Légende des statuts">${Object.entries(STATUS_LABELS).map(([value,label]) => `<span class="trail-legend__${value}"><i></i>${label}</span>`).join('')}</div>${books.length ? `<div class="trail-map-frame"><div class="trail-map-controls" role="group" aria-label="Zoom de la carte"><button type="button" data-action="trail-zoom-out" aria-label="Dézoomer" title="Dézoomer">−</button><output data-trail-zoom-value>${Math.round(ui.trailScale * 100)} %</output><button type="button" data-action="trail-zoom-in" aria-label="Zoomer" title="Zoomer">+</button><button class="trail-map-controls__fit" type="button" data-action="trail-zoom-fit" aria-label="Afficher toute l’étendue de la carte" title="Afficher toute la carte"><span aria-hidden="true">⛶</span> Étendue</button></div><p class="trail-pan-hint"><span aria-hidden="true">↔</span> Glissez pour explorer · pincez à deux doigts pour zoomer</p><div class="trail-canvas-shell" data-trail-shell data-root-x="${layout.root.x}" data-root-y="${layout.root.y}" tabindex="0" aria-label="Carte mentale interactive. Pincez à deux doigts, utilisez les boutons de zoom ou faites glisser la carte."><div class="trail-zoom-stage" data-trail-stage style="width:${scaledWidth}px;height:${scaledHeight}px"><div class="trail-canvas" data-trail-canvas data-width="${layout.width}" data-height="${layout.height}" data-scale="${ui.trailScale}" style="width:${layout.width}px;height:${layout.height}px;transform:scale(${ui.trailScale})"><svg viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true" focusable="false">${paths}</svg><div class="trail-root" style="--x:${layout.root.x}px;--y:${layout.root.y}px"><span class="trail-root__avatar" aria-hidden="true">${esc(initials(profile.name))}</span><strong>${esc(profile.name)}</strong><small>${genreGroups.length} genre${genreGroups.length > 1 ? 's' : ''} · ${allBooks.length} livre${allBooks.length > 1 ? 's' : ''}</small></div>${genreNodes}${bookNodes}</div></div></div></div>` : `<div class="empty-state"><h3>Aucun livre dans ce filtre</h3><p>Affichez toutes les années et tous les statuts, ou ajoutez un livre à votre bibliothèque.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
+    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Votre univers part de vous, se ramifie par genres littéraires, puis par livres. Les fragments de votre ADN se glissent dans les espaces libres de la carte.</p></div></div>${filters}<div class="trail-legend" aria-label="Légende des statuts">${Object.entries(STATUS_LABELS).map(([value,label]) => `<span class="trail-legend__${value}"><i></i>${label}</span>`).join('')}</div>${books.length ? `<div class="trail-map-frame"><div class="trail-map-controls" role="group" aria-label="Zoom de la carte"><button type="button" data-action="trail-zoom-out" aria-label="Dézoomer" title="Dézoomer">−</button><output data-trail-zoom-value>${Math.round(ui.trailScale * 100)} %</output><button type="button" data-action="trail-zoom-in" aria-label="Zoomer" title="Zoomer">+</button><button class="trail-map-controls__fit" type="button" data-action="trail-zoom-fit" aria-label="Afficher toute l’étendue de la carte" title="Afficher toute la carte"><span aria-hidden="true">⛶</span> Étendue</button></div><p class="trail-pan-hint"><span aria-hidden="true">↔</span> Glissez pour explorer · pincez à deux doigts pour zoomer</p><div class="trail-canvas-shell" data-trail-shell data-root-x="${layout.root.x}" data-root-y="${layout.root.y}" tabindex="0" aria-label="Carte mentale interactive. Pincez à deux doigts, utilisez les boutons de zoom ou faites glisser la carte."><div class="trail-zoom-stage" data-trail-stage style="width:${scaledWidth}px;height:${scaledHeight}px"><div class="trail-canvas" data-trail-canvas data-width="${layout.width}" data-height="${layout.height}" data-scale="${ui.trailScale}" style="width:${layout.width}px;height:${layout.height}px;transform:scale(${ui.trailScale})"><svg viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true" focusable="false">${paths}</svg><div class="trail-root" style="--x:${layout.root.x}px;--y:${layout.root.y}px"><span class="trail-root__avatar" aria-hidden="true">${esc(initials(profile.name))}</span><strong>${esc(profile.name)}</strong><small>${genreGroups.length} genre${genreGroups.length > 1 ? 's' : ''} · ${allBooks.length} livre${allBooks.length > 1 ? 's' : ''}</small></div>${dnaFragments}${genreNodes}${bookNodes}</div></div></div></div>` : `<div class="empty-state"><h3>Aucun livre dans ce filtre</h3><p>Affichez toutes les années et tous les statuts, ou ajoutez un livre à votre bibliothèque.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
   }
 
   function renderLexicon() {
@@ -989,11 +1068,11 @@
 
   function renderGoals() {
     const progress = store.getGoalProgress(), state = store.getState().goals;
-    return `<div class="grid-3">
+    return `<div class="goal-accordion">
       ${goalCard('week','Cette semaine',`${progress.week.value}/${progress.week.target} jours`,`Lire ${state.week.dailyMinutes} min par jour`,pct(progress.week.value,progress.week.target),state.week.history)}
       ${goalCard('month','Ce mois',goalStatusText(progress.month),'Chaque livre choisi vaut une part : vert s’il est lu, orange s’il est en cours.',progress.month,state.month.history)}
-      ${goalCard('year','Cette année',goalStatusText(progress.year),'Même calcul sur toute l’année pour les livres choisis.',progress.year,state.year.history)}
-    </div><p class="small muted section-block">La progression mensuelle et annuelle se recalcule immédiatement selon le statut et la date de fin des livres sélectionnés. Un livre à lire ne remplit rien ; un livre en cours remplit sa part en orange ; un livre lu pendant la période remplit sa part en vert.</p>
+      ${goalCard('year','Cette année',goalStatusText(progress.year),'Calcul automatique sur toute la bibliothèque : un livre terminé vaut 1, un livre en cours ou en pause vaut 0,5.',progress.year,state.year.history)}
+    </div><p class="small muted section-block">Dépliez un objectif pour voir son détail et les livres qui composent sa progression. L’objectif annuel ne demande plus aucune sélection manuelle.</p>
     <section class="card monthly-report-cta section-block" aria-labelledby="monthly-report-title"><div><p class="eyebrow">Carte 1080 × 1350 · prête à partager</p><h2 id="monthly-report-title">Votre mois de lecture mérite sa couverture</h2><p class="small muted">Retrouvez les livres terminés, en cours, en pause ou abandonnés ce mois, avec leurs couvertures et vos statistiques dans une image signée BOO-P.</p></div><button class="button button--primary" type="button" data-action="open-monthly-report">Créer ma carte du mois</button></section>`;
   }
 
@@ -1001,10 +1080,13 @@
     const contributingIds = new Set(progress.bookIds || []);
     return books.map(book => {
       const contributes = contributingIds.has(book.id);
-      const detail = contributes && book.status === 'lu'
-        ? `Lu le ${formatDate(book.completedAt)}`
-        : contributes && book.status === 'en-cours'
-          ? 'En cours · compte en orange'
+      const contribution = progress.bookScores?.[book.id] || 0;
+      const detail = contribution === 1 && book.status === 'lu'
+        ? `1 livre · terminé le ${formatDate(book.completedAt)}`
+        : contribution === .5
+          ? `${STATUS_LABELS[book.status]} · compte pour 0,5 livre`
+          : contributes && book.status === 'en-cours'
+            ? 'En cours · compte en orange'
           : book.status === 'lu' && book.completedAt
             ? `Lu le ${formatDate(book.completedAt)} · hors période`
             : STATUS_LABELS[book.status] || 'À lire';
@@ -1012,24 +1094,31 @@
     }).join('');
   }
 
-  function goalBooksBlock(progress) {
+  function goalBooksBlock(progress, period) {
     const libraryBooks = store.getBooks().filter(book => book.libraryState === 'library');
     const selectedIds = Array.isArray(progress.selectedBookIds) ? progress.selectedBookIds : [];
-    const books = selectedIds.length
-      ? selectedIds.map(id => libraryBooks.find(book => book.id === id)).filter(Boolean)
-      : libraryBooks;
+    const books = period === 'year'
+      ? (progress.bookIds || []).map(id => libraryBooks.find(book => book.id === id)).filter(Boolean)
+      : selectedIds.length
+        ? selectedIds.map(id => libraryBooks.find(book => book.id === id)).filter(Boolean)
+        : libraryBooks;
     const firstBooks = books.slice(0, 4), remainingBooks = books.slice(4);
-    const scope = selectedIds.length
+    const scope = period === 'year'
+      ? `${books.length} lecture${books.length > 1 ? 's' : ''} contribue${books.length > 1 ? 'nt' : ''} automatiquement`
+      : selectedIds.length
       ? `${books.length} livre${books.length > 1 ? 's' : ''} choisi${books.length > 1 ? 's' : ''}`
       : `Toute la bibliothèque · ${books.length} livre${books.length > 1 ? 's' : ''}`;
-    if (!books.length) return '<section class="goal-books"><p class="eyebrow">Livres concernés</p><p class="small muted">Ajoutez un livre à votre bibliothèque pour alimenter cet objectif.</p></section>';
+    if (!books.length) return `<section class="goal-books"><p class="eyebrow">Livres concernés</p><p class="small muted">${period === 'year' ? 'Terminez ou commencez une lecture pour alimenter automatiquement cet objectif.' : 'Ajoutez un livre à votre bibliothèque pour alimenter cet objectif.'}</p></section>`;
     return `<section class="goal-books" aria-label="Livres concernés par cet objectif"><p class="eyebrow">Livres concernés</p><p class="micro muted">${scope}</p><ul class="goal-book-list">${goalBookRows(firstBooks, progress)}</ul>${remainingBooks.length ? `<details class="goal-books-more"><summary>Afficher ${remainingBooks.length} autre${remainingBooks.length > 1 ? 's' : ''} livre${remainingBooks.length > 1 ? 's' : ''}</summary><ul class="goal-book-list">${goalBookRows(remainingBooks, progress)}</ul></details>` : ''}</section>`;
   }
 
   function goalCard(period, title, value, description, progress, history) {
     const mixed = typeof progress === 'object';
     const green = mixed ? progress.greenPct : progress, orange = mixed ? progress.orangePct : 0, total = Math.min(100, green + orange);
-    return `<article class="card goal-card"><div class="goal-card__head"><div><p class="eyebrow">Objectif principal</p><h2>${title}</h2></div><span class="progress-ring ${mixed ? 'progress-ring--mixed' : ''}" style="--pct:${green};--green-pct:${green};--orange-pct:${orange};--total-pct:${total}"><span>${total}%</span></span></div><p class="goal-card__value">${value}</p><p class="small muted">${description}</p>${mixed ? `<div class="goal-segment-bar" role="img" aria-label="${green} pour cent terminé en vert et ${orange} pour cent en cours en orange"><span class="goal-segment-bar__read" style="--segment:${green}%"></span><span class="goal-segment-bar__reading" style="--segment:${orange}%"></span></div><div class="goal-segment-legend"><span><i class="is-read"></i>${progress.value} lu${progress.value > 1 ? 's' : ''}</span><span><i class="is-reading"></i>${progress.inProgress} en cours</span></div>${goalBooksBlock(progress)}` : ''}<div class="goal-detail-list">${(history || []).map(item => `<span><span>${esc(item.label)}</span><strong>${esc(item.result)}</strong></span>`).join('')}</div><button class="button button--secondary button--small" type="button" data-action="edit-goal" data-period="${period}">Modifier</button></article>`;
+    const readingLegend = period === 'year'
+      ? `${progress.inProgress} en cours ou en pause · ${String(progress.inProgressValue).replace('.', ',')} livre`
+      : `${progress.inProgress} en cours`;
+    return `<details class="card goal-card goal-disclosure"><summary><span><span class="eyebrow">Objectif principal</span><strong>${title}</strong><small>${value}</small></span><span class="progress-ring ${mixed ? 'progress-ring--mixed' : ''}" style="--pct:${green};--green-pct:${green};--orange-pct:${orange};--total-pct:${total}"><span>${total}%</span></span></summary><div class="goal-disclosure__body"><p class="small muted">${description}</p>${mixed ? `<div class="goal-segment-bar" role="img" aria-label="${green} pour cent terminé en vert et ${orange} pour cent commencé en orange"><span class="goal-segment-bar__read" style="--segment:${green}%"></span><span class="goal-segment-bar__reading" style="--segment:${orange}%"></span></div><div class="goal-segment-legend"><span><i class="is-read"></i>${progress.value} terminé${progress.value > 1 ? 's' : ''}</span><span><i class="is-reading"></i>${readingLegend}</span></div>${goalBooksBlock(progress, period)}` : ''}<div class="goal-detail-list">${(history || []).map(item => `<span><span>${esc(item.label)}</span><strong>${esc(item.result)}</strong></span>`).join('')}</div><button class="button button--secondary button--small" type="button" data-action="edit-goal" data-period="${period}">Modifier</button></div></details>`;
   }
 
   function renderBookDetail() {
@@ -1047,13 +1136,12 @@
 
   function renderProfile() {
     const profile = store.getProfile(), settings = store.getSettings(), stats = store.getStats();
-    let adn = store.getBooks().filter(book => book.isADN).sort((a,b) => (a.adnOrder ?? 99) - (b.adnOrder ?? 99)).slice(0,3);
-    if (adn.length < 3) adn = adn.concat(store.getBooks().filter(book => !adn.some(item => item.id === book.id)).slice(0, 3 - adn.length));
+    const dna = store.getReaderDNA();
     const badges = store.getBadges();
     return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main"><span class="profile-avatar">${esc(initials(profile.name))}</span><div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button></section>
-      <section class="section-block"><div class="section-heading"><div><p class="eyebrow">Trois livres, une ligne</p><h2>ADN du lecteur</h2></div><button class="text-link" type="button" data-action="edit-adn">Modifier</button></div><div class="adn-row">${adn.map(book => `<div class="adn-book">${cover(book)}<strong>${esc(book.title)}</strong></div>`).join('')}</div></section>
+      <section class="section-block" aria-labelledby="reader-dna-title"><div class="section-heading"><div><p class="eyebrow">Portrait vivant</p><h2 id="reader-dna-title">ADN du lecteur</h2></div><button class="text-link" type="button" data-action="open-dna-history">Voir mon évolution</button></div><article class="reader-dna-card"><span class="reader-dna-card__mark" aria-hidden="true">✦</span><div><p class="eyebrow">Aujourd’hui</p><blockquote>${esc(dna.phrase)}</blockquote>${dna.topGenres.length ? `<div class="reader-dna-traits" aria-label="Territoires littéraires dominants">${dna.topGenres.map(genre => `<span>${esc(genre)}</span>`).join('')}</div>` : ''}<details class="reader-dna-evidence"><summary>Ce qui façonne cet ADN</summary><ul><li>${dna.metrics.completedCount} livre${dna.metrics.completedCount > 1 ? 's' : ''} terminé${dna.metrics.completedCount > 1 ? 's' : ''}</li><li>${store.getLexicon().length} élément${store.getLexicon().length > 1 ? 's' : ''} conservé${store.getLexicon().length > 1 ? 's' : ''} dans le lexique</li><li>${store.getTraces().length} Trace${store.getTraces().length > 1 ? 's' : ''} personnelle${store.getTraces().length > 1 ? 's' : ''}</li></ul></details></div></article></section>
       <section class="section-block"><h2>Statistiques</h2><div class="stats-grid"><div class="card stat-card"><strong>${stats.booksRead}</strong><span>livres lus</span></div><div class="card stat-card"><strong>${Math.floor(stats.totalMinutes/60)} h ${stats.totalMinutes%60}</strong><span>temps de lecture</span></div><div class="card stat-card"><strong>${stats.streak}</strong><span>jours de série</span></div><div class="card stat-card"><strong>${stats.totalTraces}</strong><span>Traces et lexique</span></div><div class="card stat-card"><strong>${stats.booksTransmitted}</strong><span>prêtés ou donnés</span></div></div></section>
-      <section class="section-block profile-goals" id="profile-goals"><div class="section-heading"><div><p class="eyebrow">Progression personnelle</p><h2>Objectifs</h2><p class="small muted">Choisissez vos livres et suivez séparément les lectures terminées et celles qui sont encore en cours.</p></div></div>${renderGoals()}</section>
+      <section class="section-block profile-goals" id="profile-goals"><div class="section-heading"><div><p class="eyebrow">Progression personnelle</p><h2>Objectifs</h2><p class="small muted">Ouvrez seulement la période que vous souhaitez consulter ou modifier.</p></div></div>${renderGoals()}</section>
       ${renderLatestBadge(badges)}
       <section class="section-block"><h2>Compte et préférences</h2><div class="settings-list">
         <details class="setting-card"><summary>Informations du compte</summary><div class="setting-card__body"><p><strong>${esc(profile.email)}</strong></p><p class="small muted">Compte sécurisé et session persistante gérés par Supabase.</p><button class="button button--secondary button--small" type="button" data-action="simulated-password">Changer le mot de passe</button></div></details>
@@ -1068,6 +1156,16 @@
     const latest = badges.items.filter(item => item.unlockedAt).sort((a,b) => new Date(b.unlockedAt) - new Date(a.unlockedAt))[0];
     const acquired = badges.items.filter(item => item.unlockedAt).length;
     return `<section class="section-block" aria-labelledby="badges-title"><div class="section-heading section-heading--compact"><div><p class="eyebrow">Progression personnelle</p><h2 id="badges-title">Dernier badge</h2></div><button class="text-link small" type="button" data-action="open-badges">Voir les ${badges.items.length} badges</button></div>${latest ? `<article class="latest-badge-card"><span class="latest-badge-card__medal" aria-hidden="true"><span>${esc(latest.icon)}</span></span><div><span class="status-chip">${acquired} acquis</span><h3>${esc(latest.name)}</h3><p>${esc(latest.description)}</p><small>Obtenu le ${formatDate(latest.unlockedAt)} · visible uniquement par vous</small></div></article>` : `<div class="latest-badge-card latest-badge-card--empty"><span class="latest-badge-card__medal" aria-hidden="true"><span>✦</span></span><div><h3>Votre premier badge vous attend</h3><p>Terminez une première session pour marquer ce premier pas.</p><button class="text-link small" type="button" data-action="open-badges">Découvrir les badges</button></div></div>`}</section>`;
+  }
+
+  function openReaderDNAHistory() {
+    const dna = store.getReaderDNA();
+    const snapshots = dna.history || [];
+    const cards = snapshots.map((snapshot, index) => {
+      const books = (snapshot.sourceBookIds || []).map(id => store.getBookById(id)).filter(Boolean).slice(0, 4);
+      return `<article class="dna-history-card ${index === 0 ? 'is-current' : ''}"><header><div><p class="eyebrow">${index === 0 ? 'Aujourd’hui' : esc(snapshot.label || 'Étape précédente')}</p><time datetime="${attr(snapshot.createdAt)}">${formatDate(snapshot.createdAt)}</time></div>${index === 0 ? '<span class="status-chip">ADN actuel</span>' : ''}</header><blockquote>${esc(snapshot.phrase)}</blockquote>${snapshot.topGenres?.length ? `<div class="reader-dna-traits">${snapshot.topGenres.map(genre => `<span>${esc(genre)}</span>`).join('')}</div>` : ''}${books.length ? `<div class="dna-history-books" aria-label="Lectures ayant façonné cette étape">${books.map(book => `<span title="${attr(book.title)}">${cover(book,'small')}</span>`).join('')}</div>` : ''}</article>`;
+    }).join('');
+    openDialog({ title:'Évolution de votre ADN', eyebrow:`${snapshots.length} étape${snapshots.length > 1 ? 's' : ''} conservée${snapshots.length > 1 ? 's' : ''}`, wide:true, body:`<p class="small muted">Ce portrait évolue après une lecture terminée, un changement de chemin important ou plusieurs nouvelles Traces et entrées de lexique. Les résultats aux quiz ne modifient pas votre ADN.</p><div class="dna-history">${cards || '<div class="empty-state"><h3>Votre première étape se prépare</h3><p>Ajoutez quelques lectures pour commencer votre histoire.</p></div>'}</div>` });
   }
 
   function openBadgesDialog() {
@@ -1243,7 +1341,10 @@
   function openGoalDialog(period) {
     const goals = store.getState().goals, goal = goals[period], books = store.getBooks().filter(book => book.libraryState === 'library');
     const labels = { week:'Cette semaine', month:'Ce mois', year:'Cette année' };
-    openDialog({ title: `Objectif · ${labels[period]}`, eyebrow: 'Un seul objectif principal', body: `<form class="form-grid" data-form="goal" data-period="${period}">${period === 'week' ? `<div class="field-row"><label class="field">Minutes par jour<input type="number" name="dailyMinutes" min="5" max="240" step="5" value="${goal.dailyMinutes}"></label><label class="field">Nombre de jours à atteindre<input type="number" name="daysTarget" min="1" max="7" value="${goal.daysTarget}"></label></div>` : `<label class="field">Livres à terminer<input type="number" name="targetBooks" min="1" max="100" value="${goal.targetBooks}"></label>`}<fieldset><legend>Livres concernés</legend><label class="checkbox-row"><input type="checkbox" name="allBooks" data-change="goal-all-books" ${!goal.bookIds.length ? 'checked' : ''}> Tous les livres</label><div class="form-grid">${books.map(book => `<label class="checkbox-row"><input type="checkbox" name="bookIds" data-change="goal-book" value="${attr(book.id)}" ${goal.bookIds.includes(book.id) ? 'checked' : ''}> ${esc(book.title)}</label>`).join('')}</div></fieldset><p class="small muted">Choisir un titre désactive automatiquement « Tous les livres ». Après l’enregistrement, la progression est recalculée à partir des livres choisis.</p><button class="button button--primary" type="submit">Enregistrer l’objectif</button></form>` });
+    const weeklyFields = `<div class="field-row"><label class="field">Minutes par jour<input type="number" name="dailyMinutes" min="5" max="240" step="5" value="${goal.dailyMinutes}"></label><label class="field">Nombre de jours à atteindre<input type="number" name="daysTarget" min="1" max="7" value="${goal.daysTarget}"></label></div><p class="small muted">La semaine va du lundi au dimanche et se renouvelle automatiquement.</p>`;
+    const monthlyFields = `<label class="field">Livres à terminer<input type="number" name="targetBooks" min="1" max="100" value="${goal.targetBooks}"></label><fieldset><legend>Livres concernés</legend><label class="checkbox-row"><input type="checkbox" name="allBooks" data-change="goal-all-books" ${!goal.bookIds.length ? 'checked' : ''}> Tous les livres</label><div class="form-grid">${books.map(book => `<label class="checkbox-row"><input type="checkbox" name="bookIds" data-change="goal-book" value="${attr(book.id)}" ${goal.bookIds.includes(book.id) ? 'checked' : ''}> ${esc(book.title)}</label>`).join('')}</div></fieldset><p class="small muted">Choisir un titre désactive automatiquement « Tous les livres ». La progression est recalculée à partir des dates de fin du mois.</p>`;
+    const yearlyFields = `<label class="field">Nombre de livres souhaité<input type="number" name="targetBooks" min="1" max="500" value="${goal.targetBooks}"></label><div class="goal-form-note"><strong>Calcul automatique</strong><p>Chaque livre terminé cette année vaut 1. Chaque livre en cours ou en pause vaut 0,5. Les livres abandonnés et la wishlist ne comptent pas.</p></div>`;
+    openDialog({ title: `Objectif · ${labels[period]}`, eyebrow: 'Un seul objectif principal', body: `<form class="form-grid" data-form="goal" data-period="${period}">${period === 'week' ? weeklyFields : period === 'month' ? monthlyFields : yearlyFields}<button class="button button--primary" type="submit">Enregistrer l’objectif</button></form>` });
   }
 
   function monthlyReportOptions(selected = window.BT.monthlyReport.normalizeMonthKey()) {
@@ -1296,12 +1397,6 @@
     openDialog({ title: 'Modifier le profil', eyebrow: 'Identité du lecteur', body: `<form class="form-grid" data-form="profile"><label class="field">Nom ou pseudonyme<input name="name" required value="${attr(profile.name)}"></label><label class="field">Identifiant<input name="handle" value="${attr(profile.handle || '')}"></label><label class="field">Phrase de profil<input name="title" value="${attr(profile.title || '')}"></label><label class="field">Biographie<textarea name="bio">${esc(profile.bio || '')}</textarea></label><label class="field">Centres d’intérêt<input name="interests" value="${attr((profile.interests || []).join(', '))}"><span class="field-help">Séparés par des virgules</span></label><button class="button button--primary" type="submit">Enregistrer</button></form>` });
   }
 
-  function openAdnDialog() {
-    const books = store.getBooks(), selected = books.filter(book => book.isADN).sort((a,b) => (a.adnOrder ?? 99) - (b.adnOrder ?? 99)).slice(0,3);
-    const ids = selected.map(book => book.id); while (ids.length < 3) { const next = books.find(book => !ids.includes(book.id)); if (!next) break; ids.push(next.id); }
-    openDialog({ title: 'Modifier l’ADN du lecteur', eyebrow: 'Exactement trois livres', body: `<form class="form-grid" data-form="adn">${[0,1,2].map(index => `<label class="field">Position ${index+1}<select name="adn${index}" required>${books.map(book => `<option value="${attr(book.id)}" ${ids[index] === book.id ? 'selected' : ''}>${esc(book.title)}</option>`).join('')}</select></label>`).join('')}<p class="small muted">Choisissez trois livres différents. Leur ordre sera conservé sur une seule ligne.</p><div class="button-row"><button class="button button--primary" type="submit">Enregistrer l’ordre</button><button class="button button--secondary" type="button" data-action="add-book">Ajouter un nouveau livre</button></div></form>` });
-  }
-
   function openFinishSessionDialog() {
     const session = store.getActiveSession(), book = store.getBookById(session.bookId);
     const audio = book.mediaType === 'audio', total = audio ? book.durationMinutes : book.totalPages;
@@ -1348,6 +1443,10 @@
       case 'memory-card-color': store.saveSettings({ memoryCardColor:trigger.dataset.color }); render(); break;
       case 'session-card-color': store.saveSettings({ sessionCardColor:trigger.dataset.color }); render(); break;
       case 'restart-memory': ui.memoryDeckSignature = ''; ui.memoryDeckKeys = []; ui.memoryCompletedKeys = []; ui.memorySessionComplete = false; ui.memoryCursor = 0; render(); break;
+      case 'start-quiz': startLexiconQuiz(); break;
+      case 'quiz-answer': answerLexiconQuiz(trigger.dataset.answer || ''); break;
+      case 'next-quiz': nextLexiconQuizQuestion(); break;
+      case 'restart-quiz': ui.quizSeed += 1; ui.quizStarted = false; ui.quizFinished = false; ui.quizQuestionIds = []; ui.quizIndex = 0; ui.quizScore = 0; render(); break;
       case 'show-day': showDayDetail(trigger.dataset.day); break;
       case 'show-week-detail': showWeekDetail(); break;
       case 'create-post': openPostDialog(); break;
@@ -1407,7 +1506,7 @@
       case 'share-monthly-report': await shareMonthlyReport(); break;
       case 'edit-monthly-report': openMonthlyReportDialog(ui.monthlyReportData?.monthKey); break;
       case 'edit-profile': openProfileDialog(); break;
-      case 'edit-adn': openAdnDialog(); break;
+      case 'open-dna-history': openReaderDNAHistory(); break;
       case 'open-badges': openBadgesDialog(); break;
       case 'toggle-theme': { const settings = store.getSettings(); settings.theme = settings.theme === 'dark' ? 'light' : 'dark'; store.saveSettings(settings); applyTheme(); render(); break; }
       case 'select-rating': selectRating(trigger, Number(trigger.dataset.value)); break;
@@ -1479,7 +1578,7 @@
     const data = new FormData(form), kind = form.dataset.form;
     const handlers = {
       trace: submitTrace, 'manual-session': submitManualSession, 'isbn-lookup': submitISBNLookup, book: submitBook, lexicon: submitLexicon,
-      goal: submitGoal, 'monthly-report':submitMonthlyReport, profile: submitProfile, adn: submitAdn, 'finish-session': submitFinishSession,
+      goal: submitGoal, 'monthly-report':submitMonthlyReport, profile: submitProfile, 'finish-session': submitFinishSession,
       comment: submitComment, privacy: submitPrivacy, 'notification-settings': submitNotificationSettings,
       post: submitPost, club: submitClub, 'club-edit': submitClubEdit, 'club-member': submitClubMember,
       'club-post':submitClubPost, 'club-comment':submitClubComment, 'club-book':submitClubBook,
@@ -1547,6 +1646,46 @@
       recalled:'Retrouvé · cette carte d’entraînement est terminée pour cette séance.'
     };
     showToast(id ? messages[normalizedQuality] : exampleMessages[normalizedQuality]);
+    render();
+  }
+
+  function startLexiconQuiz() {
+    const candidates = getQuizCandidates();
+    const selected = [];
+    const ranked = (items, salt) => items.slice().sort((a,b) => Number(Boolean(b.entryId)) - Number(Boolean(a.entryId)) || recommendationHash(`${ui.quizSeed}:${salt}:${a.id}`) - recommendationHash(`${ui.quizSeed}:${salt}:${b.id}`));
+    const addQuestions = (items, count, salt) => ranked(items, salt).forEach(question => { if (count > 0 && !selected.some(item => item.id === question.id)) { selected.push(question); count -= 1; } });
+    addQuestions(candidates.filter(item => item.kind === 'Expression en situation'), 3, 'sens');
+    addQuestions(candidates.filter(item => ['Citation et livre','Expression et livre','Retrouver l’auteur'].includes(item.kind)), 1, 'source');
+    addQuestions(candidates.filter(item => item.kind === 'Suite de citation'), 1, 'suite');
+    addQuestions(candidates, Math.max(0, 5 - selected.length), 'complement');
+    ui.quizQuestionIds = selected.map(item => item.id);
+    ui.quizStarted = true;
+    ui.quizFinished = false;
+    ui.quizIndex = 0;
+    ui.quizScore = 0;
+    ui.quizAnswered = false;
+    ui.quizSelected = '';
+    render();
+  }
+
+  function answerLexiconQuiz(answer) {
+    if (ui.quizAnswered) return;
+    const { questions } = getQuizDeck(), question = questions[ui.quizIndex];
+    if (!question) return;
+    const correct = answer === question.correct;
+    ui.quizSelected = answer;
+    ui.quizAnswered = true;
+    if (correct) ui.quizScore += 1;
+    if (question.entryId) store.reviewLexiconWord(question.entryId, correct ? 'recalled' : 'retry');
+    render();
+  }
+
+  function nextLexiconQuizQuestion() {
+    const { questions } = getQuizDeck();
+    if (ui.quizIndex + 1 >= questions.length) ui.quizFinished = true;
+    else ui.quizIndex += 1;
+    ui.quizAnswered = false;
+    ui.quizSelected = '';
     render();
   }
   function showDayDetail(key) {
@@ -1994,9 +2133,12 @@
 
   function submitGoal(form, data) {
     const period = form.dataset.period, selectedBookIds = data.getAll('bookIds');
-    const updates = { bookIds: data.get('allBooks') === 'on' && !selectedBookIds.length ? [] : selectedBookIds };
+    const updates = {};
     if (period === 'week') { updates.dailyMinutes = clamp(data.get('dailyMinutes'), 5, 240); updates.daysTarget = clamp(data.get('daysTarget'), 1, 7); }
-    else updates.targetBooks = clamp(data.get('targetBooks'), 1, 100);
+    else {
+      updates.targetBooks = clamp(data.get('targetBooks'), 1, period === 'year' ? 500 : 100);
+      updates.bookIds = period === 'year' ? [] : (data.get('allBooks') === 'on' && !selectedBookIds.length ? [] : selectedBookIds);
+    }
     store.updateGoal(period, updates); closeDialog(); showToast('Objectif modifié · progression recalculée'); render();
   }
 
@@ -2006,13 +2148,6 @@
     try { await window.BT.auth.updateProfile({ displayName:data.get('name').trim(), handle:data.get('handle').trim(), profileTitle:data.get('title').trim(), bio:data.get('bio').trim(), interests:store.getProfile().interests }); }
     catch (error) { showToast(error.message || 'Profil conservé localement ; synchronisation différée'); return; }
     closeDialog(); showToast('Profil mis à jour'); render();
-  }
-
-  function submitAdn(form, data) {
-    const ids = [data.get('adn0'),data.get('adn1'),data.get('adn2')];
-    if (new Set(ids).size !== 3) { showToast('Choisissez exactement trois livres différents'); return; }
-    store.getBooks().forEach(book => store.updateBook(book.id, { isADN: ids.includes(book.id), adnOrder: ids.includes(book.id) ? ids.indexOf(book.id) : null }));
-    closeDialog(); showToast('ADN du lecteur réorganisé'); render();
   }
 
   async function submitFinishSession(form, data) {
@@ -2427,7 +2562,7 @@
       document.documentElement.dataset.authMode = document.body.dataset.authMode;
       document.getElementById('guest-banner').hidden = !guest;
       const completedRemotely = guest || localPreview || Boolean(user?.profile?.onboarding_completed);
-      if (completedRemotely && !store.isOnboardingComplete()) store.saveOnboarding({ completed:true, version:5, restoredFromProfile:true, completedAt:new Date().toISOString() });
+      if (completedRemotely && !store.isOnboardingComplete()) store.saveOnboarding({ completed:true, version:5.5, restoredFromProfile:true, completedAt:new Date().toISOString() });
       if (!completedRemotely && !store.isOnboardingComplete()) { location.replace('onboarding.html'); return; }
       if (user) await bootstrapUserDataSync({ quiet:true });
       init();

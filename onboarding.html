@@ -109,6 +109,13 @@
       animation: fade-up 1s var(--ease-out) 0.5s both;
     }
 
+    .onboarding-book-intro {
+      max-width: 620px;
+      margin: calc(var(--space-4) * -1) auto var(--space-5);
+      color: var(--on-surface-variant);
+      text-align: center;
+    }
+
     .onboarding-sparks {
       display: grid;
       gap: var(--space-3);
@@ -225,6 +232,10 @@
       z-index: 1;
     }
 
+    .book-tile__title strong,
+    .book-tile__title small { display:block; }
+    .book-tile__title small { margin-top:4px; color:rgba(255,255,255,.82); font:500 10px/1.25 var(--font-body); }
+
     .book-tile__cover {
       position: absolute;
       inset: 0;
@@ -240,6 +251,9 @@
       margin-bottom: var(--space-4);
       animation: fade-up 1s var(--ease-out) 0.4s both;
     }
+    .onboarding-book-tools { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:calc(var(--space-2) * -1) 0 var(--space-5); }
+    .onboarding-book-tools p { min-height:1.4em; margin:0; color:var(--on-surface-variant); font-size:11px; }
+    .onboarding-scan-button { flex:0 0 auto; }
     
     .search-input {
       width: 100%;
@@ -305,7 +319,10 @@
     .selection-counter {
       font: var(--text-label-sm);
       color: var(--on-surface-variant);
+      text-align: center;
     }
+
+    .selection-counter strong { color:var(--color-bleu-nuit); }
 
     /* Indicators */
     .step-indicators {
@@ -546,12 +563,14 @@
     .onboarding-home-link:hover { opacity: 1; }
     .onboarding-brand { display:flex; align-items:center; justify-content:center; gap:12px; }
     .onboarding-brand img { width:58px; height:58px; border-radius:16px; box-shadow:var(--shadow-ambient); }
+    @media (min-width: 720px) { .book-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
     .privacy-options { display:grid; gap:14px; margin:28px 0; }
     .privacy-option { display:flex; gap:14px; align-items:flex-start; padding:18px; border:1px solid var(--outline-subtle); border-radius:18px; background:var(--surface-container-lowest); cursor:pointer; box-shadow:var(--shadow-soft); }
     .privacy-option:has(input:checked) { border-color:var(--color-vert-sauge); box-shadow:var(--shadow-glow-sauge); }
     .privacy-option input { margin-top:5px; accent-color:var(--color-vert-sauge); }
     .privacy-option strong { display:block; margin-bottom:4px; color:var(--color-bleu-nuit); }
     .privacy-option span span { display:block; color:var(--on-surface-variant); font-size:12px; line-height:1.5; }
+    @media (max-width: 479px) { .onboarding-book-tools { align-items:stretch; flex-direction:column; } .onboarding-scan-button { width:100%; } }
     @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.001ms !important; transition-duration:.001ms !important; } }
   </style>
 </head>
@@ -563,10 +582,17 @@
     <!-- STEP 1: Éveil des Souvenirs -->
     <div class="step-wrapper active" id="step1">
       <div class="onboarding-logo onboarding-brand" aria-label="BOO-P"><img src="assets/brand/closed-book-proposals/boo-p-closed-01-signet.png" alt=""><span>BOO-P</span></div>
-      <h1 class="onboarding-title text-display-md">Quels livres ont laissé une trace en vous ?</h1>
+      <h1 class="onboarding-title text-display-md">Quels livres avez-vous déjà lus&nbsp;?</h1>
+      <p class="onboarding-book-intro text-body-md">Choisissez jusqu’à 5 livres, anciens ou récents, pour donner une première direction à votre ADN de lecteur. Cette étape est facultative.</p>
       
       <div class="search-wrapper">
         <input type="search" class="search-input" id="bookSearch" placeholder="Rechercher un livre..." aria-label="Rechercher un livre">
+      </div>
+
+      <div class="onboarding-book-tools">
+        <button class="button button--secondary button--small onboarding-scan-button" type="button" id="scanOnboardingBook">▥ Scanner un livre</button>
+        <input type="file" id="onboardingBookScan" accept="image/*" capture="environment" hidden>
+        <p id="onboardingScanStatus" role="status" aria-live="polite">Photographiez le code-barres ISBN d’un livre que vous avez lu.</p>
       </div>
 
       <div class="book-grid" id="bookGrid">
@@ -638,7 +664,7 @@
 
     <!-- Bottom Action Bar -->
     <div class="bottom-action-bar">
-      <div class="selection-counter" id="selectionCounter">0/3 sélectionnés</div>
+      <div class="selection-counter" id="selectionCounter"><strong>0/5</strong> sélectionnés · étape facultative</div>
       <button class="btn-continue" id="btnContinue" disabled>Continuer</button>
       <div class="step-indicators">
         <div class="indicator-dot active" id="dot1"></div>
@@ -650,8 +676,10 @@
 
   </div>
 
-  <script src="js/store.js?v=20260826-3"></script>
-  <script src="js/onboarding.js?v=20260826-1"></script>
+  <script src="js/store.js?v=20260908-3"></script>
+  <script src="js/book-lookup.js?v=20260824-5"></script>
+  <script src="js/onboarding-catalog.js?v=20260908-1"></script>
+  <script src="js/onboarding.js?v=20260908-2"></script>
   <script src="js/pwa.js?v=20260820-1"></script>
 </body>
 </html>

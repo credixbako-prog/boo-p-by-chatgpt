@@ -14,7 +14,7 @@ BT.store = (() => {
   let STATE_KEY = LEGACY_STATE_KEY;
   let ONBOARDING_KEY = LEGACY_ONBOARDING_KEY;
   let activeUserId = null;
-  const SCHEMA_VERSION = 11;
+  const SCHEMA_VERSION = 12;
   const listeners = new Set();
 
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -162,6 +162,7 @@ BT.store = (() => {
   function makeDefaultState() {
     const year = new Date().getFullYear();
     const periods = currentPeriodKeys();
+    const initializedAt = nowISO();
     return {
       schemaVersion: SCHEMA_VERSION,
       profile: { name: 'Dixon', handle: '@dixonlit', title: 'LECTEUR EXPLORATEUR', bio: 'Je marche de livre en livre, sans me presser.', email: 'dixon@prototype.local', interests: ['Philosophie', 'Roman', 'Histoire'], visibility: 'private', createdAt: nowISO() },
@@ -184,12 +185,33 @@ BT.store = (() => {
         month: { periodKey:periods.month, targetBooks: 2, bookIds: [], history: [{ label: 'Mois précédent', result: '1/2 livre' }] },
         year: { periodKey:periods.year, targetBooks: 12, bookIds: [], history: [{ label: String(year - 1), result: '9/10 livres' }] }, celebrated: {}
       },
+      readerDNA: { snapshots:[], lastSignature:'' },
       community: demoCommunity(),
       notifications: [],
       badges: { unlocked: {} },
       settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, memoryCardColor: 'sage', sessionCardColor: 'sage', dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
-      outbox: [], timeline: [], meta: { initializedAt: nowISO(), updatedAt: nowISO(), simulated: true }
+      outbox: [], timeline: [], meta: { initializedAt, updatedAt:initializedAt, simulated: true }
     };
+  }
+
+  function makeEmptyAccountState() {
+    const fresh = makeDefaultState();
+    fresh.books = [];
+    fresh.activeBookId = null;
+    fresh.sessions = [];
+    fresh.activeSession = null;
+    fresh.activeSessions = [];
+    fresh.focusedSessionId = null;
+    fresh.traces = [];
+    fresh.lexicon = [];
+    fresh.timeline = [];
+    fresh.notifications = [];
+    fresh.readerDNA = { snapshots:[], lastSignature:'' };
+    fresh.badges = { unlocked:{} };
+    fresh.goals.week.history = [];
+    fresh.goals.month.history = [];
+    fresh.goals.year.history = [];
+    return fresh;
   }
 
   function migrateLegacy(base) {
@@ -242,6 +264,7 @@ BT.store = (() => {
     state.community.posts = normalizedPosts.concat(base.community.posts.filter(post => !savedPostIds.has(post.id)));
     state.notifications = Array.isArray(state.notifications) ? state.notifications : base.notifications;
     state.badges = { ...base.badges, ...(state.badges || {}), unlocked: state.badges?.unlocked || {} };
+    state.readerDNA = { ...base.readerDNA, ...(state.readerDNA || {}), snapshots:Array.isArray(state.readerDNA?.snapshots) ? state.readerDNA.snapshots.slice(0, 24) : [] };
     state.settings = { ...base.settings, ...(state.settings || {}), notifications: { ...base.settings.notifications, ...(state.settings?.notifications || {}) }, blockedUsers: state.settings?.blockedUsers || [], recentSearches: state.settings?.recentSearches || [], dismissedRecommendationIds: state.settings?.dismissedRecommendationIds || [], collapsedLibraryGenres:state.settings?.collapsedLibraryGenres || [] };
     state.settings.libraryFinish = ['terracotta','blue','sage','red','black','white'].includes(state.settings.libraryFinish) ? state.settings.libraryFinish : 'terracotta';
     state.settings.memoryCardColor = ['terracotta','blue','sage','red','black','white'].includes(state.settings.memoryCardColor) ? state.settings.memoryCardColor : 'sage';
@@ -334,7 +357,10 @@ BT.store = (() => {
     STATE_KEY = `${LEGACY_STATE_KEY}:${cleanId}`;
     ONBOARDING_KEY = `${LEGACY_ONBOARDING_KEY}:${cleanId}`;
     const legacyOwner = localStorage.getItem(LEGACY_OWNER_KEY);
-    const canMigrateLegacy = cleanId !== 'guest' && (!legacyOwner || legacyOwner === cleanId);
+    const legacyJourneyStarted = Boolean(readJSON(LEGACY_ONBOARDING_KEY, null)?.completed);
+    const legacyState = readJSON(LEGACY_STATE_KEY, null);
+    const legacyWasEdited = Boolean(legacyState?.meta?.initializedAt && legacyState?.meta?.updatedAt && legacyState.meta.initializedAt !== legacyState.meta.updatedAt);
+    const canMigrateLegacy = cleanId !== 'guest' && (legacyOwner === cleanId || (!legacyOwner && (legacyJourneyStarted || legacyWasEdited)));
     if (!localStorage.getItem(STATE_KEY) && localStorage.getItem(LEGACY_STATE_KEY) && canMigrateLegacy) {
       localStorage.setItem(STATE_KEY, localStorage.getItem(LEGACY_STATE_KEY));
       localStorage.setItem(LEGACY_OWNER_KEY, cleanId);
@@ -342,6 +368,7 @@ BT.store = (() => {
     if (!localStorage.getItem(ONBOARDING_KEY) && localStorage.getItem(LEGACY_ONBOARDING_KEY) && canMigrateLegacy) {
       localStorage.setItem(ONBOARDING_KEY, localStorage.getItem(LEGACY_ONBOARDING_KEY));
     }
+    if (!localStorage.getItem(STATE_KEY)) writeJSON(STATE_KEY, cleanId === 'guest' ? makeDefaultState() : makeEmptyAccountState());
     state = normalizeState(readJSON(STATE_KEY, null));
     writeJSON(STATE_KEY, state);
     emit();
@@ -477,16 +504,21 @@ BT.store = (() => {
   function goalBookProgress(period, goal, periodKey) {
     const target = Math.max(1, Number(goal.targetBooks) || 1);
     const selectedIds = Array.isArray(goal.bookIds) ? goal.bookIds : [];
-    const candidates = state.books.filter(book => book.libraryState === 'library' && (!selectedIds.length || selectedIds.includes(book.id)));
+    const candidates = state.books.filter(book => book.libraryState === 'library' && (period === 'year' || !selectedIds.length || selectedIds.includes(book.id)));
     const readBooks = candidates.filter(book => completedDuringGoalPeriod(book, period, periodKey)).slice(0, target);
-    const readingBooks = candidates.filter(book => book.status === 'en-cours').slice(0, Math.max(0, target - readBooks.length));
-    const greenValue = readBooks.length, orangeValue = readingBooks.length;
+    const readingStatuses = period === 'year' ? ['en-cours','en-pause'] : ['en-cours'];
+    const readingBooks = candidates
+      .filter(book => readingStatuses.includes(book.status) && !readBooks.some(read => read.id === book.id))
+      .slice(0, Math.max(0, Math.ceil((target - readBooks.length) / (period === 'year' ? .5 : 1))));
+    const greenValue = readBooks.length, orangeValue = readingBooks.length * (period === 'year' ? .5 : 1);
+    const filledValue = Math.min(target, greenValue + orangeValue);
     const greenPct = Math.min(100, Math.round((greenValue / target) * 100));
     const orangePct = Math.min(100 - greenPct, Math.round((orangeValue / target) * 100));
+    const bookScores = Object.fromEntries([...readBooks.map(book => [book.id, 1]), ...readingBooks.map(book => [book.id, period === 'year' ? .5 : 1])]);
     return {
-      value:greenValue, inProgress:orangeValue, filledValue:greenValue + orangeValue, target,
+      period, value:greenValue, inProgress:readingBooks.length, inProgressValue:orangeValue, filledValue, score:filledValue, target,
       greenPct, orangePct, totalPct:greenPct + orangePct,
-      bookIds:[...readBooks, ...readingBooks].map(book => book.id), selectedBookIds:selectedIds
+      bookIds:[...readBooks, ...readingBooks].map(book => book.id), selectedBookIds:period === 'year' ? [] : selectedIds, bookScores
     };
   }
   function goalPeriodLabel(period, key) {
@@ -502,7 +534,8 @@ BT.store = (() => {
       if (!previousKey) { goal.periodKey = keys[period]; changed = true; return; }
       if (previousKey === keys[period]) return;
       const previous = goalBookProgress(period, goal, previousKey);
-      const historyEntry = { key:previousKey, label:goalPeriodLabel(period, previousKey), result:`${previous.value}/${previous.target} livre${previous.target > 1 ? 's' : ''}` };
+      const previousValue = period === 'year' ? previous.filledValue : previous.value;
+      const historyEntry = { key:previousKey, label:goalPeriodLabel(period, previousKey), result:`${String(previousValue).replace('.', ',')}/${previous.target} livre${previous.target > 1 ? 's' : ''}` };
       goal.history = [historyEntry, ...(Array.isArray(goal.history) ? goal.history.filter(item => item.key !== previousKey) : [])].slice(0, 24);
       goal.periodKey = keys[period];
       delete state.goals.celebrated[`${period}:${keys[period]}`];
@@ -534,7 +567,7 @@ BT.store = (() => {
     state.goals[period] = { ...state.goals[period], ...updates };
     delete state.goals[period].floorProgress;
     const keys = currentPeriodKeys(), progress = getGoalProgress()[period];
-    if (progress.value < progress.target) delete state.goals.celebrated[`${period}:${keys[period]}`];
+    if ((progress.filledValue ?? progress.value) < progress.target) delete state.goals.celebrated[`${period}:${keys[period]}`];
     commit({ queue: 'goal.update' });
     return clone(state.goals[period]);
   }
@@ -573,6 +606,92 @@ BT.store = (() => {
   function markNotification(id, read = true) { const item = state.notifications.find(notification => String(notification.id) === String(id)); if (item) item.read = read; commit(); }
   function markAllNotifications() { state.notifications.forEach(notification => { notification.read = true; }); commit(); }
   function getTimeline() { const events = [...state.timeline]; state.books.forEach(book => { const date = book.completedAt || book.startedAt; if (date) events.push({ id: `book-event-${book.id}`, type: book.completedAt ? 'status-lu' : 'status-en-cours', bookId: book.id, label: `« ${book.title} » ${book.completedAt ? 'terminé' : 'commencé'}`, date }); }); state.sessions.forEach(session => { const book = state.books.find(item => item.id === session.bookId); events.push({ id: `timeline-${session.id}`, type: 'session', bookId: session.bookId, label: `${Math.max(1, Math.round(session.durationSeconds / 60))} min avec « ${book?.title || 'un livre'} »`, date: session.startedAt }); }); return clone(events.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 80)); }
+
+  const DNA_GENRES = [
+    { match:/science-fiction|anticipation/i, label:'les mondes possibles et les grandes questions humaines', fragment:'Les mondes possibles vous aident à regarder le présent autrement.' },
+    { match:/fantasy|fantastique/i, label:'l’imaginaire, le mystère et les mondes cachés', fragment:'Vous aimez franchir la frontière entre le réel et l’imaginaire.' },
+    { match:/policier|thriller|suspense/i, label:'les énigmes, les tensions et les vérités dissimulées', fragment:'Les vérités dissimulées gardent votre curiosité en éveil.' },
+    { match:/philosoph/i, label:'les idées qui déplacent le regard', fragment:'Vous revenez aux livres qui déplacent une certitude.' },
+    { match:/histoire/i, label:'les époques, les héritages et la mémoire collective', fragment:'Comprendre ce qui nous précède nourrit votre chemin.' },
+    { match:/poésie/i, label:'la précision des images et la musique des mots', fragment:'Quelques mots justes peuvent compter autant qu’une longue intrigue.' },
+    { match:/biograph|mémoire/i, label:'les vies racontées et la mémoire intime', fragment:'Les vies singulières deviennent pour vous une autre manière de lire le monde.' },
+    { match:/essai|sciences humaines|sociologie|psychologie/i, label:'les idées, les sociétés et les chemins de pensée', fragment:'Vous cherchez dans les livres des outils pour mieux comprendre le monde.' },
+    { match:/spiritual/i, label:'les textes de transmission et la quête de sens', fragment:'Votre bibliothèque garde une place pour les textes qui traversent le temps.' },
+    { match:/jeunesse/i, label:'les récits d’apprentissage et l’émerveillement', fragment:'Vous gardez un passage ouvert vers l’émerveillement et les récits d’apprentissage.' },
+    { match:/bande dessinée|manga|graphique/i, label:'les récits où l’image et le texte avancent ensemble', fragment:'Vous aimez quand l’image prolonge la voix du récit.' },
+    { match:/roman/i, label:'les vies intérieures, les liens et les zones grises', fragment:'Vous revenez aux vies intérieures et aux nuances des personnages.' }
+  ];
+
+  function dnaGenreLanguage(genre) {
+    return DNA_GENRES.find(item => item.match.test(String(genre || '')))
+      || { label:`les univers de ${String(genre || 'vos lectures').toLocaleLowerCase('fr')}`, fragment:`Le rayon ${genre || 'de vos lectures'} dessine une branche singulière de votre parcours.` };
+  }
+
+  function computeReaderDNA() {
+    const libraryBooks = state.books.filter(book => book.libraryState === 'library');
+    const weights = { lu:3, 'en-cours':2, 'en-pause':1.25, 'a-lire':.35, abandonne:.15 };
+    const genreScores = new Map();
+    libraryBooks.forEach(book => {
+      const genres = book.genres?.length ? book.genres : [book.genre || 'À classer'];
+      genres.forEach(genre => genreScores.set(genre, (genreScores.get(genre) || 0) + (weights[book.status] || .25)));
+    });
+    const topGenres = [...genreScores.entries()].filter(([genre]) => genre && genre !== 'À classer').sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0], 'fr')).slice(0, 3).map(([genre, score]) => ({ genre, score, ...dnaGenreLanguage(genre) }));
+    const completed = libraryBooks.filter(book => book.status === 'lu');
+    const active = libraryBooks.filter(book => book.status === 'en-cours');
+    const paused = libraryBooks.filter(book => book.status === 'en-pause');
+    const lexicon = state.lexicon.filter(item => !item.bookId || libraryBooks.some(book => book.id === item.bookId));
+    const words = lexicon.filter(item => item.kind === 'word');
+    const phrases = lexicon.filter(item => ['expression','citation'].includes(item.kind));
+    const traces = state.traces.filter(item => !item.bookId || libraryBooks.some(book => book.id === item.bookId));
+    const meaningfulCount = completed.length + active.length + paused.length;
+    const themes = topGenres.map(item => item.label);
+    let phrase = 'Votre ADN de lecteur se dessine encore. Chaque nouvelle lecture précisera peu à peu les chemins qui vous ressemblent.';
+    if (meaningfulCount >= 3 && themes.length) {
+      const opening = themes.length > 1
+        ? `Votre chemin relie ${themes[0]} à ${themes[1]}.`
+        : `Vous revenez volontiers vers ${themes[0]}.`;
+      const relation = words.length >= 3 && traces.length >= 2
+        ? 'Vous lisez autant pour comprendre les mots que pour garder ce que les livres vous laissent.'
+        : words.length >= 3
+          ? 'Les mots nouveaux deviennent des repères durables dans votre parcours.'
+          : traces.length >= 2
+            ? 'Vous prolongez volontiers la lecture par une pensée ou une Trace personnelle.'
+            : topGenres.length >= 3
+              ? 'Votre curiosité préfère les passerelles aux frontières entre les rayons.'
+              : 'Votre bibliothèque se construit avec attention, un livre après l’autre.';
+      phrase = `${opening} ${relation}`;
+    }
+    const fragments = [
+      ...topGenres.map(item => item.fragment),
+      words.length ? `${words.length} mot${words.length > 1 ? 's' : ''} gardé${words.length > 1 ? 's' : ''} jalonnent déjà votre mémoire.` : '',
+      phrases.length ? 'Vous gardez les expressions et les citations qui continuent de résonner après la lecture.' : '',
+      traces.length ? 'Vos Traces relient les livres à ce qu’ils ont réellement changé en vous.' : '',
+      active.length > 1 ? `Votre attention sait cheminer entre ${active.length} lectures en parallèle.` : '',
+      new Set(libraryBooks.map(book => book.mediaType)).size >= 3 ? 'Papier, numérique et audio ouvrent plusieurs portes vers une même curiosité.' : '',
+      completed.length >= 5 ? `${completed.length} livres terminés donnent déjà de la profondeur à ce portrait.` : '',
+      meaningfulCount < 3 ? 'Chaque lecture ajoutera une nouvelle nuance à cette carte.' : ''
+    ].filter(Boolean).filter((item, index, values) => values.indexOf(item) === index).slice(0, 8);
+    const sourceBookIds = libraryBooks.slice().sort((a,b) => (weights[b.status] || 0) - (weights[a.status] || 0) || new Date(b.completedAt || b.startedAt || b.addedAt) - new Date(a.completedAt || a.startedAt || a.addedAt)).slice(0, 5).map(book => book.id);
+    const monthKey = localDateKey().slice(0, 7);
+    const metrics = { completedCount:completed.length, activeCount:active.length, pausedCount:paused.length, lexiconMilestone:Math.floor(lexicon.length / 3), traceMilestone:Math.floor(traces.length / 2), genreCount:genreScores.size };
+    const signature = JSON.stringify({ monthKey, completed:completed.map(book => book.id).sort(), active:[...active, ...paused].map(book => `${book.id}:${book.status}`).sort(), topGenres:topGenres.map(item => item.genre), lexiconMilestone:metrics.lexiconMilestone, traceMilestone:metrics.traceMilestone });
+    return { phrase, fragments, topGenres:topGenres.map(item => item.genre), sourceBookIds, metrics, signature, monthKey, confidence:meaningfulCount >= 3 ? 'formed' : 'emerging' };
+  }
+
+  function getReaderDNA() {
+    const current = computeReaderDNA();
+    state.readerDNA ||= { snapshots:[], lastSignature:'' };
+    if (state.readerDNA.lastSignature !== current.signature) {
+      const createdAt = nowISO();
+      const snapshot = { id:uid('dna'), createdAt, periodKey:current.monthKey, label:new Intl.DateTimeFormat('fr-FR', { month:'long', year:'numeric' }).format(new Date()), phrase:current.phrase, fragments:current.fragments, topGenres:current.topGenres, sourceBookIds:current.sourceBookIds, metrics:current.metrics, signature:current.signature };
+      state.readerDNA.snapshots = [snapshot, ...(state.readerDNA.snapshots || []).filter(item => item.signature !== current.signature)].slice(0, 24);
+      state.readerDNA.lastSignature = current.signature;
+      state.meta.updatedAt = createdAt;
+      writeJSON(STATE_KEY, state);
+    }
+    return clone({ ...current, history:state.readerDNA.snapshots || [] });
+  }
+
   function getStats() { const libraryBooks = state.books.filter(book => book.libraryState === 'library'); const totalSeconds = state.sessions.reduce((sum, session) => sum + (Number(session.durationSeconds) || 0), 0) + state.activeSessions.reduce((sum, session) => sum + activeDuration(session), 0); const readDates = new Set(state.sessions.map(session => localDateKey(session.startedAt))); let streak = 0; const cursor = new Date(); if (!readDates.has(localDateKey(cursor))) cursor.setDate(cursor.getDate() - 1); while (readDates.has(localDateKey(cursor))) { streak += 1; cursor.setDate(cursor.getDate() - 1); } const progress = getGoalProgress(); return { totalBooks: libraryBooks.length, wishlistBooks: state.books.filter(book => book.libraryState === 'wishlist').length, booksRead: libraryBooks.filter(book => book.status === 'lu').length, booksInProgress: libraryBooks.filter(book => book.status === 'en-cours').length, booksToRead: libraryBooks.filter(book => book.status === 'a-lire').length, booksTransmitted: libraryBooks.filter(book => ['prete','donne'].includes(book.situation)).length, totalHours: Math.floor(totalSeconds / 3600), totalMinutes: Math.round(totalSeconds / 60), totalSessions: state.sessions.length, totalTraces: state.traces.length + state.lexicon.length, streak, booksReadThisYear: progress.year.value, dailyGoalMinutes: state.goals.week.dailyMinutes, todayReadingMinutes: Math.round(getTodayReadingTime() / 60) }; }
 
   function getBadges() {
@@ -598,7 +717,7 @@ BT.store = (() => {
       { id:'goal-day', icon:'1', name:'Journée accomplie', description:'Objectif de lecture du jour atteint.', unlocked:progress.week.todayMinutes >= progress.week.dailyTarget },
       { id:'goal-week', icon:'7', name:'Semaine accomplie', description:'Objectif principal de la semaine atteint.', unlocked:progress.week.value >= progress.week.target },
       { id:'goal-month', icon:'M', name:'Mois accompli', description:'Objectif principal du mois atteint.', unlocked:progress.month.value >= progress.month.target },
-      { id:'goal-year', icon:'A', name:'Année accomplie', description:'Objectif principal de l’année atteint.', unlocked:progress.year.value >= progress.year.target }
+      { id:'goal-year', icon:'A', name:'Année accomplie', description:'Objectif principal de l’année atteint.', unlocked:progress.year.filledValue >= progress.year.target }
     ];
     let changed = false;
     definitions.forEach(badge => { if (badge.unlocked && !state.badges.unlocked[badge.id]) { state.badges.unlocked[badge.id] = nowISO(); changed = true; } });
@@ -620,7 +739,7 @@ BT.store = (() => {
     getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, reviewLexiconWord, deleteLexiconWord,
     getGoal, saveGoal, getGoalProgress, updateGoal, markGoalCelebrated, isGoalCelebrated,
     getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, addGroup, getGroups, updateGroup, toggleClub, addGroupMember, removeGroupMember, addGroupPost, addGroupComment, toggleGroupPostEncouragement, addGroupBook, updateGroupBook, updateSalon, addSalon, addSalonMessage,
-    getNotifications, replaceNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getStats, getBadges, exportData, flushOutbox, clearAll, loadDemoData,
+    getNotifications, replaceNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getReaderDNA, getStats, getBadges, exportData, flushOutbox, clearAll, loadDemoData,
     statusLabel, situationLabel, localDateKey
   };
 })();

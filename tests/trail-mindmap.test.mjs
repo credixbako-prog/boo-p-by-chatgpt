@@ -40,3 +40,19 @@ test('un livre déployé fait apparaître les trois ramifications demandées san
   assert.equal(expanded.nodes.find(node => node.id === 'b').branches.length, 3);
   assert.equal(expanded.nodes.find(node => node.id === 'a').branches.length, 0);
 });
+
+test('les fragments de l’ADN occupent plusieurs espaces libres de la carte', () => {
+  const groups = [{ id:'romans', name:'Romans', books:[{ id:'a' }, { id:'b' }] }];
+  const fragments = [
+    'Les vies intérieures reviennent souvent dans ce parcours.',
+    'Les mots gardés deviennent des repères.',
+    'La curiosité relie plusieurs rayons.',
+    'Les Traces prolongent les livres.'
+  ];
+  const result = api().layout(groups, [], fragments);
+  assert.equal(result.insights.length, fragments.length);
+  assert.equal(new Set(result.insights.map(item => `${item.x}:${item.y}`)).size, fragments.length);
+  assert.ok(result.insights.some(item => item.align === 'left'));
+  assert.ok(result.insights.some(item => item.align === 'right'));
+  assert.ok(result.insights.some(item => item.align === 'center'));
+});

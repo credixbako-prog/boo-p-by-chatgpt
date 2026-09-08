@@ -14,8 +14,8 @@ test('inscription: les trois mots de passe disposent d’un contrôle de visibil
   assert.match(script, /Votre sentier attend son premier pas/);
 });
 
-test('onboarding: quatre étapes, première Trace, objectif et thème libre', async () => {
-  const [html, script, store] = await Promise.all([read('onboarding.html'), read('js/onboarding.js'), read('js/store.js')]);
+test('onboarding: quatre étapes, choix facultatif de cinq livres, objectif et thème libre', async () => {
+  const [html, script, catalog, store, app, css] = await Promise.all([read('onboarding.html'), read('js/onboarding.js'), read('js/onboarding-catalog.js'), read('js/store.js'), read('js/mvp-app.js'), read('css/mvp-v5.css')]);
   assert.equal((html.match(/class="step-wrapper/g) || []).length, 4);
   assert.doesNotMatch(html, /id="step5"/);
   assert.equal((html.match(/class="indicator-dot/g) || []).length, 4);
@@ -29,10 +29,44 @@ test('onboarding: quatre étapes, première Trace, objectif et thème libre', as
   assert.match(script, /BT\.store\.saveTrace/);
   assert.match(script, /setTimeout\(finishOnboarding/);
   assert.match(script, /const visibility = 'private'/);
-  for (const title of ['La Sainte Bible', 'L’Étranger', 'La Femme de ménage', 'Shining', 'Hunger Games', 'La Dernière Allumette']) {
-    assert.match(script, new RegExp(title));
-    assert.match(store, new RegExp(title));
+  assert.match(script, /MAX_SELECTED_BOOKS = 5/);
+  assert.match(script, /Passer cette étape/);
+  assert.match(html, /jusqu’à 5 livres/i);
+  assert.match(html, /js\/onboarding-catalog\.js/);
+  assert.match(html, /capture="environment"/);
+  assert.match(script, /scanPhysicalBook/);
+  assert.match(script, /scanISBNFromImage/);
+  const catalogContext = { window:{} };
+  vm.runInNewContext(catalog, catalogContext);
+  const onboardingBooks = catalogContext.window.BT.ONBOARDING_BOOKS;
+  assert.ok(onboardingBooks.length >= 20);
+  assert.ok(Math.min(...onboardingBooks.map(book => book.year)) < 1900);
+  assert.ok(Math.max(...onboardingBooks.map(book => book.year)) >= 2023);
+  for (const title of ['Les Misérables', 'L’Étranger', 'Harry Potter à l’école des sorciers', 'Americanah', 'La Femme de ménage', 'La Dernière Allumette']) {
+    assert.match(catalog, new RegExp(title));
   }
+  assert.match(app, /dnaBooksRemaining/);
+  assert.match(app, /dnaBookTarget = 10/);
+  assert.match(app, /livres ajoutés/);
+  assert.match(app, /data-action="add-book"/);
+  assert.match(css, /\.dna-onboarding-nudge/);
+  assert.match(store, /makeEmptyAccountState/);
+});
+
+test('nouveau compte: la bibliothèque commence vide avant les choix de l’onboarding', async () => {
+  const source = await read('js/store.js');
+  const memory = new Map();
+  const localStorage = {
+    getItem:key => memory.has(key) ? memory.get(key) : null,
+    setItem:(key,value) => memory.set(key,String(value)),
+    removeItem:key => memory.delete(key)
+  };
+  const BT = {};
+  const context = { BT, window:{ BT, addEventListener(){} }, localStorage, navigator:{ onLine:true }, console, Date, Math, JSON, Set, Map, Intl };
+  vm.runInNewContext(source, context);
+  context.BT.store.useUser('new-reader');
+  assert.equal(context.BT.store.getBooks().length, 0);
+  assert.equal(context.BT.store.getTraces().length, 0);
 });
 
 test('mémoire, communauté et parcours exposent les fonctions demandées', async () => {
@@ -111,7 +145,11 @@ test('lexique: dictionnaire, questions ciblées et répétition espacée', async
   assert.match(html, /js\/dictionary\.js/);
   assert.match(app, /data-action="session-lexicon"/);
   assert.match(app, /data-action="dictionary-lookup"/);
-  assert.match(app, /Complétez cette citation/);
+  assert.match(app, /Quiz de lecture/);
+  assert.match(app, /Expression en situation/);
+  assert.match(app, /Dans quel livre trouve-t-on cette citation/);
+  assert.match(app, /Qui est l’auteur de cette citation/);
+  assert.match(app, /filter\(item => item\.kind === 'word'\)/);
   assert.match(app, /data-action="flip-memory"/);
   assert.match(app, /data-action="memory-rate"/);
   assert.match(app, /data-quality="retry"/);
@@ -210,7 +248,7 @@ test('communauté: adhésions, salons et messages sont persistants et protégés
   assert.match(clubSpaces, /enable row level security/);
 });
 
-test('objectifs: mois et année mélangent les parts vertes et orange des livres choisis', async () => {
+test('objectifs: le mois conserve sa sélection et l’année calcule automatiquement les demi-livres', async () => {
   const source = await read('js/store.js');
   const values = new Map();
   const localStorage = {
@@ -225,24 +263,34 @@ test('objectifs: mois et année mélangent les parts vertes et orange des livres
   };
   vm.runInNewContext(source, context);
   const store = context.BT.store;
+  store.getBooks().forEach(book => store.deleteBook(book.id));
   const monthKey = store.localDateKey().slice(0, 7);
   const finished = store.addBook({ title:'Terminé ce mois', author:'Lectrice test', status:'lu', completedAt:`${monthKey}-02T12:00:00.000Z` });
-  const selected = [finished.id,'book-etranger'];
+  const reading = store.addBook({ title:'Lecture en cours', author:'Lectrice test', status:'en-cours' });
+  const paused = store.addBook({ title:'Lecture en pause', author:'Lectrice test', status:'en-pause' });
+  const abandoned = store.addBook({ title:'Lecture abandonnée', author:'Lectrice test', status:'abandonne' });
+  const selected = [finished.id,reading.id];
   store.updateGoal('month', { targetBooks:2, bookIds:selected });
-  store.updateGoal('year', { targetBooks:2, bookIds:selected });
+  store.updateGoal('year', { targetBooks:4, bookIds:[abandoned.id] });
   const progress = store.getGoalProgress();
-  for (const period of ['month','year']) {
-    assert.equal(progress[period].value, 1);
-    assert.equal(progress[period].inProgress, 1);
-    assert.equal(progress[period].greenPct, 50);
-    assert.equal(progress[period].orangePct, 50);
-    assert.equal(progress[period].totalPct, 100);
-  }
+  assert.equal(progress.month.value, 1);
+  assert.equal(progress.month.inProgress, 1);
+  assert.equal(progress.month.greenPct, 50);
+  assert.equal(progress.month.orangePct, 50);
+  assert.equal(progress.year.value, 1);
+  assert.equal(progress.year.inProgress, 2);
+  assert.equal(progress.year.filledValue, 2);
+  assert.equal(progress.year.greenPct, 25);
+  assert.equal(progress.year.orangePct, 25);
+  assert.equal(progress.year.selectedBookIds.length, 0);
+  assert.equal(progress.year.bookScores[reading.id], .5);
+  assert.equal(progress.year.bookScores[paused.id], .5);
+  assert.equal(progress.year.bookScores[abandoned.id], undefined);
   const historical = store.addBook({ title:'Lecture d’avant BOO-P datée', author:'Lectrice test', status:'lu', historicalBeforeJoin:true, completedAt:`${monthKey}-03T12:00:00.000Z` });
   store.updateGoal('month', { targetBooks:1, bookIds:[historical.id] });
-  store.updateGoal('year', { targetBooks:1, bookIds:[historical.id] });
+  store.updateGoal('year', { targetBooks:10, bookIds:[historical.id] });
   assert.equal(store.getGoalProgress().month.value, 1, 'une lecture antérieure à l’inscription compte si sa date appartient au mois');
-  assert.equal(store.getGoalProgress().year.value, 1, 'une lecture antérieure à l’inscription compte si sa date appartient à l’année');
+  assert.equal(store.getGoalProgress().year.value, 2, 'une lecture antérieure à l’inscription compte si sa date appartient à l’année');
   const undatedHistorical = store.addBook({ title:'Lecture d’avant BOO-P non datée', author:'Lectrice test', status:'lu', historicalBeforeJoin:true });
   store.updateGoal('month', { targetBooks:1, bookIds:[undatedHistorical.id] });
   assert.equal(store.getGoalProgress().month.value, 0, 'une lecture historique sans date ne doit pas être attribuée à une période arbitraire');
@@ -257,6 +305,9 @@ test('objectifs: l’écran montre les livres concernés et leur état daté', a
   assert.match(app, /completedAt: status === 'lu' \? readingDateISO\(completedDate\) : null/);
   assert.match(css, /\.goal-book-list/);
   assert.match(css, /\.goal-books-more/);
+  assert.match(css, /\.goal-accordion/);
+  assert.match(app, /L’objectif annuel ne demande plus aucune sélection manuelle/);
+  assert.match(app, /updates\.bookIds = period === 'year' \? \[\]/);
 });
 
 test('bibliothèque: six finitions visuelles et rayons horizontaux restent contenus', async () => {
@@ -326,7 +377,7 @@ test('lexique: la recherche tolérante retrouve une définition française', asy
 });
 
 test('profil: annuaire réel, amitiés et carnet de badges privés', async () => {
-  const [api, auth, app] = await Promise.all([read('js/community-api.js'), read('js/auth.js'), read('js/mvp-app.js')]);
+  const [api, auth, app, store, css] = await Promise.all([read('js/community-api.js'), read('js/auth.js'), read('js/mvp-app.js'), read('js/store.js'), read('css/mvp-v5.css')]);
   assert.match(api, /profile_directory/);
   assert.match(api, /friendships/);
   assert.match(api, /profile_shared_details/);
@@ -336,8 +387,39 @@ test('profil: annuaire réel, amitiés et carnet de badges privés', async () =>
   assert.match(app, /data-action="open-badges"/);
   assert.match(app, /Tous les badges/);
   assert.match(app, /À acquérir/);
+  assert.match(app, /data-action="open-dna-history"/);
+  assert.match(app, /Évolution de votre ADN/);
+  assert.doesNotMatch(app, /data-action="edit-adn"/);
+  assert.match(store, /function getReaderDNA/);
+  assert.match(store, /readerDNA: \{ snapshots:\[\]/);
+  assert.match(css, /\.reader-dna-card/);
+  assert.match(css, /\.dna-history-card/);
   assert.match(app, /Profil privé · verrouillé avant acceptation/);
   assert.match(app, /Voir l’aperçu/);
+});
+
+test('ADN: le portrait automatique conserve un historique sans dépendre des résultats du quiz', async () => {
+  const source = await read('js/store.js');
+  const memory = new Map();
+  const localStorage = {
+    getItem:key => memory.has(key) ? memory.get(key) : null,
+    setItem:(key,value) => memory.set(key,String(value)),
+    removeItem:key => memory.delete(key)
+  };
+  const BT = {};
+  const context = { BT, window:{ BT, addEventListener(){} }, localStorage, navigator:{ onLine:true }, console, Date, Math, JSON, Set, Map, Intl };
+  vm.runInNewContext(source, context);
+  const store = context.BT.store;
+  const initial = store.getReaderDNA();
+  assert.ok(initial.phrase.length > 40);
+  assert.ok(initial.fragments.length >= 3);
+  assert.equal(initial.history.length, 1);
+  store.reviewLexiconWord('lex-1', 'recalled');
+  assert.equal(store.getReaderDNA().history.length, 1, 'un résultat de mémorisation ne change pas l’ADN');
+  for (const word of ['Nuance','Élan','Lisière']) store.addLexiconWord({ kind:'word', word, definition:`Définition de ${word}` });
+  const evolved = store.getReaderDNA();
+  assert.equal(evolved.history.length, 2);
+  assert.match(memory.get('boop_mvp_v5'), /readerDNA/);
 });
 
 test('Supabase: l’annuaire minimal et les profils privés sont protégés par RLS', async () => {
@@ -621,9 +703,10 @@ test('modèle local: plusieurs sessions, un seul chrono et rappels persistants',
   store.updateGoal('month', { targetBooks:2, bookIds:[planned.id] });
   assert.equal(store.getGoalProgress().month.value, 0);
   store.updateGoal('year', { targetBooks:2, bookIds:[finished.id] });
-  assert.equal(store.getGoalProgress().year.value, 1);
+  const automaticAnnualValue = store.getGoalProgress().year.value;
+  assert.equal(automaticAnnualValue, 2);
   store.updateGoal('year', { targetBooks:2, bookIds:[planned.id] });
-  assert.equal(store.getGoalProgress().year.value, 0);
+  assert.equal(store.getGoalProgress().year.value, automaticAnnualValue, 'la sélection de titres ne modifie plus l’objectif annuel');
   const previousMonth = new Date();
   previousMonth.setDate(1);
   previousMonth.setMonth(previousMonth.getMonth() - 1);
@@ -633,7 +716,7 @@ test('modèle local: plusieurs sessions, un seul chrono et rappels persistants',
   assert.equal(store.getGoalProgress().month.value, 0, 'un livre terminé le mois précédent ne doit pas remplir le nouvel objectif mensuel');
   const expiredYearBook = store.addBook({ title:'Terminé l’année précédente', author:'Lectrice test', status:'lu', completedAt:`${new Date().getFullYear() - 1}-06-15T12:00:00.000Z` });
   store.updateGoal('year', { targetBooks:1, bookIds:[expiredYearBook.id] });
-  assert.equal(store.getGoalProgress().year.value, 0, 'un livre terminé l’année précédente ne doit pas remplir le nouvel objectif annuel');
+  assert.equal(store.getGoalProgress().year.bookScores[expiredYearBook.id], undefined, 'un livre terminé l’année précédente ne doit pas remplir le nouvel objectif annuel');
   assert.equal(store.getState().goals.month.periodKey, store.localDateKey().slice(0, 7));
   assert.equal(store.getState().goals.year.periodKey, store.localDateKey().slice(0, 4));
   assert.match(memory.get('boop_mvp_v5'), /reviewSuccesses/);
@@ -779,12 +862,13 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v34/);
+  assert.match(worker, /boo-p-webapp-v36/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);
   assert.match(worker, /js\/user-data-sync-api\.js/);
   assert.match(worker, /js\/components\/trail-mindmap\.js/);
+  assert.match(worker, /js\/onboarding-catalog\.js/);
   assert.match(worker, /\['script', 'style', 'worker'\]/);
   assert.match(worker, /ignoreSearch: true/);
   assert.match(workflow, /actions\/deploy-pages@v4/);
