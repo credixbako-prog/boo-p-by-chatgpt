@@ -98,9 +98,13 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.match(store, /mediaType/);
   assert.match(store, /collapsedLibraryGenres/);
   assert.match(store, /genre: genres\[0\]/);
-  assert.match(app, /data-action="memory-card-color"/);
+  assert.match(app, /surfaceColorPicker\('memory-card-color'/);
   assert.match(app, /memory-list--\$\{memoryColor\}/);
   assert.match(store, /memoryCardColor: 'sage'/);
+  assert.match(app, /surfaceColorPicker\('quiz-card-color'/);
+  assert.match(store, /quizCardColor: 'terracotta'/);
+  assert.match(css, /\.surface-color-picker/);
+  assert.match(css, /\.quiz-surface--black/);
   assert.match(css, /\.memory-list \{[^}]*display: grid;[^}]*gap: 10px/);
   assert.match(css, /\.memory-list--black/);
   assert.match(css, /\.book-spine span/);
@@ -321,7 +325,7 @@ test('bibliothèque: six finitions visuelles et rayons horizontaux restent conte
   assert.doesNotMatch(app, /<span aria-hidden="true"><\/span>\$\{label\}<\/button>/);
   assert.match(store, /libraryFinish: 'terracotta'/);
   assert.match(store, /sessionCardColor: 'sage'/);
-  assert.match(app, /data-action="session-card-color"/);
+  assert.match(app, /surfaceColorPicker\('session-card-color'/);
   assert.match(app, /class="active-book-actions"/);
   assert.match(css, /\.active-book-card--black/);
   assert.match(css, /\.goal-mini \{[^}]*grid-template-rows:/);
@@ -396,6 +400,31 @@ test('profil: annuaire réel, amitiés et carnet de badges privés', async () =>
   assert.match(css, /\.dna-history-card/);
   assert.match(app, /Profil privé · verrouillé avant acceptation/);
   assert.match(app, /Voir l’aperçu/);
+});
+
+test('profil: photo compressée, privée et visible dans le profil et l’annuaire', async () => {
+  const [auth, api, app, store, css, migration] = await Promise.all([
+    read('js/auth.js'), read('js/community-api.js'), read('js/mvp-app.js'), read('js/store.js'),
+    read('css/mvp-v5.css'), read('supabase/migrations/20260908154010_profile_avatars.sql')
+  ]);
+  assert.match(auth, /AVATAR_BUCKET = 'profile-avatars'/);
+  assert.match(auth, /AVATAR_EDGE = 512/);
+  assert.match(auth, /function prepareAvatar/);
+  assert.match(auth, /createSignedUrl\(path, 3600\)/);
+  assert.match(auth, /async function updateAvatar/);
+  assert.match(auth, /async function removeAvatar/);
+  assert.match(api, /avatar_path/);
+  assert.match(api, /signedAvatarUrl/);
+  assert.match(app, /id="profile-photo-file"/);
+  assert.match(app, /data-action="remove-profile-photo"/);
+  assert.match(app, /avatarBubble\(profile,'profile-avatar'\)/);
+  assert.match(store, /avatarPath: ''/);
+  assert.match(css, /\.profile-photo-preview/);
+  assert.match(migration, /values \('profile-avatars', 'profile-avatars', false, 1048576/);
+  assert.match(migration, /profile_avatars_insert_own/);
+  assert.match(migration, /profile_avatars_update_own/);
+  assert.match(migration, /name = \(select auth\.uid\(\)\)::text \|\| '\/avatar\.jpg'/);
+  assert.match(migration, /allowed_mime_types/);
 });
 
 test('ADN: le portrait automatique conserve un historique sans dépendre des résultats du quiz', async () => {
@@ -862,7 +891,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v36/);
+  assert.match(worker, /boo-p-webapp-v37/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

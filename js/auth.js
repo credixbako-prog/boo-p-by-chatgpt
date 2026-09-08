@@ -13,7 +13,11 @@ BT.auth = (function () {
   const PERSISTENCE_KEY = 'boop_auth_persistence_v1';
   const LEGACY_SESSION_KEY = 'boop_auth_session_v1';
   const GUEST_KEY = 'boop_guest_mode_v1';
+  const AVATAR_BUCKET = 'profile-avatars';
+  const MAX_AVATAR_INPUT_BYTES = 15 * 1024 * 1024;
+  const AVATAR_EDGE = 512;
   const config = window.BOOP_SUPABASE_CONFIG;
+  const avatarUrlCache = new Map();
 
   let client = null;
   let currentSession = null;
@@ -113,6 +117,78 @@ BT.auth = (function () {
     return new Error(error?.message || fallback);
   }
 
+  async function decodeAvatarImage(file) {
+    try {
+      if ('createImageBitmap' in window) return await createImageBitmap(file, { imageOrientation:'from-image' });
+    } catch { /* fallback below */ }
+    return await new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const image = new Image();
+      image.onload = () => { URL.revokeObjectURL(url); resolve(image); };
+      image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Cette photo ne peut pas être lue sur cet appareil.')); };
+      image.src = url;
+    });
+  }
+
+  function avatarCanvasBlob(canvas, quality) {
+    return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('La photo de profil ne peut pas être préparée.')), 'image/jpeg', quality));
+  }
+
+  async function prepareAvatar(file) {
+    if (!file?.size) throw new Error('Choisissez une photo de profil.');
+    const inputType = String(file.type || '').toLowerCase();
+    const inputExtension = String(file.name || '').split('.').pop().toLowerCase();
+    const allowed = ['image/jpeg','image/png','image/webp','image/heic','image/heif'].includes(inputType)
+      || ['jpg','jpeg','png','webp','heic','heif'].includes(inputExtension);
+    if (!allowed) throw new Error('Choisissez une photo JPEG, PNG, WebP ou HEIC.');
+    if (file.size > MAX_AVATAR_INPUT_BYTES) throw new Error('Cette photo dépasse 15 Mo. Choisissez une image moins lourde.');
+
+    let source;
+    try { source = await decodeAvatarImage(file); }
+    catch {
+      if (['image/heic','image/heif'].includes(inputType) || ['heic','heif'].includes(inputExtension)) {
+        throw new Error('Cette photo HEIC ne peut pas être convertie par ce navigateur. Sur iPhone, choisissez une photo compatible ou utilisez le format « Le plus compatible ».');
+      }
+      throw new Error('Cette photo ne peut pas être lue. Essayez une image JPEG ou PNG.');
+    }
+
+    const width = source.width || source.naturalWidth;
+    const height = source.height || source.naturalHeight;
+    const side = Math.min(width, height);
+    const sourceX = Math.max(0, (width - side) / 2);
+    const sourceY = Math.max(0, (height - side) / 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = AVATAR_EDGE;
+    canvas.height = AVATAR_EDGE;
+    const context = canvas.getContext('2d', { alpha:false });
+    context.fillStyle = '#f6f1e8';
+    context.fillRect(0, 0, AVATAR_EDGE, AVATAR_EDGE);
+    context.drawImage(source, sourceX, sourceY, side, side, 0, 0, AVATAR_EDGE, AVATAR_EDGE);
+    source.close?.();
+
+    let blob = await avatarCanvasBlob(canvas, .84);
+    if (blob.size > 1024 * 1024) blob = await avatarCanvasBlob(canvas, .68);
+    if (blob.size > 1024 * 1024) throw new Error('La photo reste trop lourde après compression. Choisissez une autre image.');
+    return new File([blob], 'avatar.jpg', { type:'image/jpeg', lastModified:Date.now() });
+  }
+
+  async function signedAvatarUrl(path) {
+    if (!path || !client) return '';
+    const cached = avatarUrlCache.get(path);
+    if (cached && cached.expiresAt > Date.now()) return cached.url;
+    const { data, error } = await client.storage.from(AVATAR_BUCKET).createSignedUrl(path, 3600);
+    if (error) { console.warn('Photo de profil BOO-P indisponible', error); return ''; }
+    const url = data?.signedUrl || '';
+    if (url) avatarUrlCache.set(path, { url, expiresAt:Date.now() + 55 * 60000 });
+    return url;
+  }
+
+  async function withAvatarUrl(profile) {
+    if (!profile) return null;
+    const avatarPath = profile.avatar_path || '';
+    return { ...profile, avatar_path:avatarPath, avatar_url:await signedAvatarUrl(avatarPath) };
+  }
+
   function redirectUrl(page) {
     if (!['http:', 'https:'].includes(window.location.protocol)) return undefined;
     return new URL(page, window.location.href).href;
@@ -136,7 +212,7 @@ BT.auth = (function () {
 
     const existing = await client
       .from('profiles')
-      .select('user_id, display_name, onboarding_completed, profile_visibility, daily_goal_minutes, interests, created_at, updated_at')
+      .select('user_id, display_name, onboarding_completed, profile_visibility, daily_goal_minutes, interests, avatar_path, created_at, updated_at')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -144,7 +220,7 @@ BT.auth = (function () {
     if (existing.data) {
       const directory = await ensureDirectory(existing.data, user);
       const shared = await ensureSharedDetails(existing.data, user);
-      currentProfile = { ...existing.data, ...shared, handle:directory?.handle || '' };
+      currentProfile = await withAvatarUrl({ ...existing.data, ...shared, avatar_path:existing.data.avatar_path || shared?.avatar_path || directory?.avatar_path || '', handle:directory?.handle || '' });
       return currentProfile;
     }
 
@@ -152,31 +228,31 @@ BT.auth = (function () {
     const created = await client
       .from('profiles')
       .insert({ user_id: user.id, display_name: displayName.length >= 2 ? displayName : 'Lecteur BOO-P' })
-      .select('user_id, display_name, onboarding_completed, profile_visibility, daily_goal_minutes, interests, created_at, updated_at')
+      .select('user_id, display_name, onboarding_completed, profile_visibility, daily_goal_minutes, interests, avatar_path, created_at, updated_at')
       .single();
 
     if (created.error) throw friendlyError(created.error, 'Le profil BOO-P ne peut pas être créé.');
     const directory = await ensureDirectory(created.data, user);
     const shared = await ensureSharedDetails(created.data, user);
-    currentProfile = { ...created.data, ...shared, handle:directory?.handle || '' };
+    currentProfile = await withAvatarUrl({ ...created.data, ...shared, avatar_path:created.data.avatar_path || shared?.avatar_path || directory?.avatar_path || '', handle:directory?.handle || '' });
     return currentProfile;
   }
 
   async function ensureDirectory(profile, user) {
-    const existing = await client.from('profile_directory').select('user_id, handle, display_name, profile_visibility').eq('user_id', user.id).maybeSingle();
+    const existing = await client.from('profile_directory').select('user_id, handle, display_name, profile_visibility, avatar_path').eq('user_id', user.id).maybeSingle();
     if (existing.error) throw friendlyError(existing.error, 'L’annuaire BOO-P ne peut pas être chargé.');
     if (existing.data) return existing.data;
     const handle = normalizeHandle(user.user_metadata?.full_name || profile.display_name, user.id);
-    const created = await client.from('profile_directory').insert({ user_id:user.id, handle, display_name:profile.display_name, profile_visibility:profile.profile_visibility || 'private' }).select().single();
+    const created = await client.from('profile_directory').insert({ user_id:user.id, handle, display_name:profile.display_name, profile_visibility:profile.profile_visibility || 'private', avatar_path:profile.avatar_path || null }).select().single();
     if (created.error) throw friendlyError(created.error, 'L’annuaire BOO-P ne peut pas être créé.');
     return created.data;
   }
 
   async function ensureSharedDetails(profile, user) {
-    const existing = await client.from('profile_shared_details').select('profile_title, bio, interests, profile_visibility').eq('user_id', user.id).maybeSingle();
+    const existing = await client.from('profile_shared_details').select('profile_title, bio, interests, profile_visibility, avatar_path').eq('user_id', user.id).maybeSingle();
     if (existing.error) throw friendlyError(existing.error, 'Les détails du profil BOO-P ne peuvent pas être chargés.');
     if (existing.data) return existing.data;
-    const created = await client.from('profile_shared_details').insert({ user_id:user.id, interests:profile.interests || [], profile_visibility:profile.profile_visibility || 'private' }).select('profile_title, bio, interests, profile_visibility').single();
+    const created = await client.from('profile_shared_details').insert({ user_id:user.id, interests:profile.interests || [], profile_visibility:profile.profile_visibility || 'private', avatar_path:profile.avatar_path || null }).select('profile_title, bio, interests, profile_visibility, avatar_path').single();
     if (created.error) throw friendlyError(created.error, 'Les détails du profil BOO-P ne peuvent pas être créés.');
     return created.data;
   }
@@ -298,17 +374,45 @@ BT.auth = (function () {
     if (updates.profileVisibility !== undefined) allowed.profile_visibility = updates.profileVisibility === 'public' ? 'public' : 'private';
     if (updates.dailyGoalMinutes !== undefined) allowed.daily_goal_minutes = Math.max(5, Math.min(240, Number(updates.dailyGoalMinutes) || 15));
     if (updates.interests !== undefined) allowed.interests = Array.isArray(updates.interests) ? updates.interests.map(String).slice(0, 12) : [];
+    if (updates.avatarPath !== undefined) {
+      const avatarPath = String(updates.avatarPath || '');
+      allowed.avatar_path = avatarPath === `${user.id}/avatar.jpg` ? avatarPath : null;
+    }
     allowed.updated_at = new Date().toISOString();
 
     const { data, error } = await client.from('profiles').update(allowed).eq('user_id', user.id).select().single();
     if (error) throw friendlyError(error, 'Le profil BOO-P ne peut pas être mis à jour.');
     const handle = updates.handle !== undefined ? normalizeHandle(updates.handle, user.id) : (currentProfile?.handle || normalizeHandle(data.display_name, user.id));
-    const directory = await client.from('profile_directory').upsert({ user_id:user.id, handle, display_name:data.display_name, profile_visibility:data.profile_visibility, updated_at:new Date().toISOString() }, { onConflict:'user_id' }).select().single();
+    const directory = await client.from('profile_directory').upsert({ user_id:user.id, handle, display_name:data.display_name, profile_visibility:data.profile_visibility, avatar_path:data.avatar_path || null, updated_at:new Date().toISOString() }, { onConflict:'user_id' }).select().single();
     if (directory.error) throw friendlyError(directory.error, 'Le profil public minimal ne peut pas être mis à jour.');
-    const shared = await client.from('profile_shared_details').upsert({ user_id:user.id, profile_title:updates.profileTitle ?? currentProfile?.profile_title ?? '', bio:updates.bio ?? currentProfile?.bio ?? '', interests:data.interests || [], profile_visibility:data.profile_visibility, updated_at:new Date().toISOString() }, { onConflict:'user_id' }).select('profile_title, bio, interests, profile_visibility').single();
+    const shared = await client.from('profile_shared_details').upsert({ user_id:user.id, profile_title:updates.profileTitle ?? currentProfile?.profile_title ?? '', bio:updates.bio ?? currentProfile?.bio ?? '', interests:data.interests || [], profile_visibility:data.profile_visibility, avatar_path:data.avatar_path || null, updated_at:new Date().toISOString() }, { onConflict:'user_id' }).select('profile_title, bio, interests, profile_visibility, avatar_path').single();
     if (shared.error) throw friendlyError(shared.error, 'Les détails partageables du profil ne peuvent pas être mis à jour.');
-    currentProfile = { ...data, ...shared.data, handle:directory.data.handle };
+    currentProfile = await withAvatarUrl({ ...data, ...shared.data, handle:directory.data.handle });
     return { ...currentProfile };
+  }
+
+  async function updateAvatar(file) {
+    await readyPromise;
+    const user = currentSession?.user;
+    if (!user) throw new Error('Votre session a expiré. Reconnectez-vous.');
+    const avatar = await prepareAvatar(file);
+    const path = `${user.id}/avatar.jpg`;
+    avatarUrlCache.delete(path);
+    const { error } = await client.storage.from(AVATAR_BUCKET).upload(path, avatar, { contentType:'image/jpeg', cacheControl:'3600', upsert:true });
+    if (error) throw friendlyError(error, 'La photo de profil ne peut pas être envoyée.');
+    return updateProfile({ avatarPath:path });
+  }
+
+  async function removeAvatar() {
+    await readyPromise;
+    const user = currentSession?.user;
+    if (!user) throw new Error('Votre session a expiré. Reconnectez-vous.');
+    const path = `${user.id}/avatar.jpg`;
+    const profile = await updateProfile({ avatarPath:null });
+    avatarUrlCache.delete(path);
+    const { error } = await client.storage.from(AVATAR_BUCKET).remove([path]);
+    if (error && !/not found/i.test(String(error.message || ''))) console.warn('Ancienne photo de profil BOO-P non supprimée', error);
+    return profile;
   }
 
   async function updatePassword(password) {
@@ -338,6 +442,9 @@ BT.auth = (function () {
     signOut,
     updatePassword,
     updateProfile,
+    updateAvatar,
+    removeAvatar,
+    prepareAvatar,
     ensureProfile,
     isAuthenticated,
     getCurrentUser,

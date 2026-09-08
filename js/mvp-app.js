@@ -9,7 +9,7 @@
     libraryQuery: '', libraryStatus: 'tous', notificationFilter: 'all',
     openComments: new Set(), friendQuery: '', lexiconQuery: '', timer: null, heartbeat: null,
     lastFocus: null, pendingCover: '', pendingCoverKind: '', pendingISBNPhoto: '', pendingISBNPhotoFile: null, bookSuggestions: [],
-    pendingPostPhotoUrl: '', searchQuery: '', communityLoaded: false,
+    pendingPostPhotoUrl: '', pendingProfilePhotoUrl: '', pendingProfilePhotoFile: null, removeProfilePhoto:false, searchQuery: '', communityLoaded: false,
     friendResults: [], friendSearchBusy: false, friendSearchTimer: null,
     catalogRecommendations: [], recommendationsBusy: false, currentRecommendations: [],
     monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
@@ -69,6 +69,13 @@
   const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
   const pct = (value, total) => total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
   const initials = name => String(name || 'L').trim().split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase();
+  const avatarSource = profile => profile?.avatarUrl || profile?.avatar_url || profile?.avatarData || '';
+  const avatarInner = profile => {
+    const source = avatarSource(profile);
+    return `${source ? `<img src="${attr(source)}" alt="" loading="lazy" decoding="async" onerror="this.hidden=true">` : ''}<span class="avatar-fallback" aria-hidden="true">${esc(initials(profile?.name || profile?.display_name))}</span>`;
+  };
+  const avatarBubble = (profile, className = 'avatar') => `<span class="${className}" aria-hidden="true">${avatarInner(profile)}</span>`;
+  const surfaceColorPicker = (action, color, label, className = '') => `<details class="surface-color-picker ${className}"><summary aria-label="${attr(label)}" title="${attr(label)}"><span aria-hidden="true">◐</span></summary><div class="surface-color-picker__menu" role="group" aria-label="${attr(label)}">${SURFACE_COLORS.map(([key,name]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="${attr(action)}" data-color="${key}" aria-label="${name}" title="${name}" aria-pressed="${color === key}"><span aria-hidden="true"></span></button>`).join('')}</div></details>`;
   const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
   const formatDate = value => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: new Date(value).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined }).format(new Date(value));
   const dateInputValue = value => /^\d{4}-\d{2}-\d{2}/.test(String(value || '')) ? String(value).slice(0, 10) : '';
@@ -111,7 +118,22 @@
     const user = isGuestMode() ? null : window.BT.auth?.getCurrentUser?.();
     const profile = store.getProfile();
     if (isGuestMode() && (profile.name === 'Dixon' || !profile.name)) store.saveProfile({ name:'Invité BOO-P', handle:'@invite', visibility:'public' });
-    if (user && (profile.email !== user.email || (!profile.name || profile.name === 'Dixon') || (!profile.handle && user.profile?.handle))) store.saveProfile({ email: user.email, name: profile.name === 'Dixon' ? user.name : profile.name, handle:profile.handle || (user.profile?.handle ? `@${user.profile.handle}` : '') });
+    if (user) {
+      const remote = user.profile || {};
+      const synchronized = {
+        email:user.email,
+        name:remote.display_name || (profile.name === 'Dixon' ? user.name : profile.name),
+        handle:remote.handle ? `@${remote.handle}` : profile.handle,
+        title:remote.profile_title || profile.title,
+        bio:remote.bio ?? profile.bio,
+        interests:Array.isArray(remote.interests) ? remote.interests : profile.interests,
+        visibility:remote.profile_visibility || profile.visibility,
+        avatarPath:remote.avatar_path || '',
+        avatarUrl:remote.avatar_url || '',
+        avatarData:''
+      };
+      if (Object.entries(synchronized).some(([key,value]) => JSON.stringify(profile[key]) !== JSON.stringify(value))) store.saveProfile(synchronized);
+    }
     ui.memoryIndex = Number(store.getSettings().memoryIndex) || 0;
     applyTheme();
     bindGlobalEvents();
@@ -386,7 +408,7 @@
   function updateHeader() {
     const profile = store.getProfile();
     const shortcut = document.getElementById('profile-shortcut');
-    shortcut.textContent = initials(profile.name); shortcut.setAttribute('aria-label', `Ouvrir le profil de ${profile.name}`);
+    shortcut.innerHTML = avatarInner(profile); shortcut.setAttribute('aria-label', `Ouvrir le profil de ${profile.name}`);
     const unread = store.getNotifications().filter(item => !item.read).length;
     const badge = document.getElementById('notification-badge');
     badge.hidden = unread === 0; badge.textContent = unread > 9 ? '9+' : String(unread);
@@ -471,7 +493,7 @@
       </section>
 
       <section class="section-block card active-book-card active-book-card--${sessionColor}" aria-labelledby="active-book-title">
-        <details class="session-card-color-picker"><summary aria-label="Personnaliser la couleur de la session" title="Couleur de la session"><span aria-hidden="true">◐</span></summary><div role="group" aria-label="Couleur de la carte de session">${SURFACE_COLORS.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="session-card-color" data-color="${key}" aria-label="${label}" title="${label}" aria-pressed="${sessionColor === key}"><span aria-hidden="true"></span></button>`).join('')}</div></details>
+        ${surfaceColorPicker('session-card-color', sessionColor, 'Personnaliser la couleur de la session', 'session-card-color-picker')}
         <div class="active-book-main">
           ${active ? cover(active) : `<div class="book-cover" style="background:linear-gradient(145deg,#17324d,#6f927c)"><span>Votre prochain livre</span></div>`}
           <div class="active-book-info">
@@ -488,9 +510,8 @@
         ${openSessions.length > 1 ? `<div class="open-session-list" aria-label="Sessions ouvertes">${openSessions.map(item => { const itemBook = store.getBookById(item.bookId); return `<button class="open-session-chip" type="button" data-action="focus-session" data-id="${attr(item.id)}"><span>${item.status === 'running' ? '▶' : 'Ⅱ'}</span><strong>${esc(itemBook?.title || 'Livre')}</strong><small>${formatDuration(store.activeDuration(item))}</small></button>`; }).join('')}</div>` : ''}
       </section>
 
-      <section class="section-block" aria-labelledby="memory-title">
-        <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} disponible${memory.length > 1 ? 's' : ''}</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez la réponse, touchez une carte pour la retourner ou balayez pour en choisir une autre.</p></div><a class="text-link" href="#path?tab=lexicon">Lexiques</a></div>
-        <div class="memory-color-picker bookcase-finish-picker" role="group" aria-label="Couleur des cartes devinettes">${SURFACE_COLORS.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="memory-card-color" data-color="${key}" aria-label="${label}" title="${label}" aria-pressed="${memoryColor === key}"><span aria-hidden="true"></span></button>`).join('')}</div>
+      <section class="section-block memory-section" aria-labelledby="memory-title">
+        <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} disponible${memory.length > 1 ? 's' : ''}</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez la réponse, touchez une carte pour la retourner ou balayez pour en choisir une autre.</p></div><div class="section-heading__actions"><a class="text-link" href="#path?tab=lexicon">Lexiques</a>${surfaceColorPicker('memory-card-color', memoryColor, 'Personnaliser la couleur des cartes devinettes', 'memory-color-picker')}</div></div>
         <div class="memory-list memory-list--${memoryColor}" aria-label="Cartes de la mémoire active">${memory.length ? `<div class="memory-carousel" data-memory-carousel tabindex="0" aria-label="Balayez horizontalement entre les cartes">${memory.map((item, index) => renderMemoryQuiz(item, index + 1, memory.length)).join('')}</div><div class="memory-carousel-dots" aria-hidden="true">${memory.map((_, index) => `<span class="${index === Math.min(ui.memoryCursor, memory.length - 1) ? 'is-current' : ''}"></span>`).join('')}</div>` : renderMemoryComplete()}</div>
         <p class="memory-reminder small muted">Les cartes sont réservées aux mots nouveaux · une nouvelle entrée arrive automatiquement après « Retrouvé ».</p>
       </section>
@@ -662,13 +683,18 @@
   function renderLexiconQuiz() {
     const { candidates, questions } = getQuizDeck();
     const personalCount = store.getLexicon().filter(item => ['expression','citation'].includes(item.kind)).length;
-    if (!ui.quizStarted) return `<section class="section-block lexicon-quiz" aria-labelledby="lexicon-quiz-title"><div class="section-heading"><div><p class="eyebrow">Expressions & citations</p><h2 id="lexicon-quiz-title">Quiz de lecture</h2><p class="small muted">Sens, contexte, auteur et livre d’origine : cinq questions pour faire revenir les phrases autrement.</p></div></div><div class="card quiz-intro"><span class="quiz-intro__mark" aria-hidden="true">?</span><div><strong>${personalCount ? `${personalCount} souvenir${personalCount > 1 ? 's' : ''} personnel${personalCount > 1 ? 's' : ''} prêt${personalCount > 1 ? 's' : ''}` : 'Quiz de découverte prêt'}</strong><p class="small muted">Les exemples BOO-P complètent vos propres expressions et citations lorsque le lexique est encore court.</p></div><button class="button button--primary" type="button" data-action="start-quiz" ${candidates.length ? '' : 'disabled'}>Lancer 5 questions</button></div></section>`;
-    if (ui.quizFinished || !questions.length) return `<section class="section-block lexicon-quiz" aria-labelledby="lexicon-quiz-title"><div class="section-heading"><div><p class="eyebrow">Quiz terminé</p><h2 id="lexicon-quiz-title">${ui.quizScore}/${questions.length || 5} bonnes réponses</h2><p class="small muted">Les réponses difficiles reviendront plus tôt dans vos prochaines révisions.</p></div><button class="button button--secondary button--small" type="button" data-action="restart-quiz">Recommencer</button></div></section>`;
+    const settings = store.getSettings();
+    const quizColor = SURFACE_COLORS.some(([key]) => key === settings.quizCardColor) ? settings.quizCardColor : 'terracotta';
+    const colorPicker = surfaceColorPicker('quiz-card-color', quizColor, 'Personnaliser la couleur du quiz', 'quiz-color-picker');
+    if (!ui.quizStarted) return `<section class="section-block lexicon-quiz" aria-labelledby="lexicon-quiz-title"><div class="section-heading"><div><p class="eyebrow">Expressions & citations</p><h2 id="lexicon-quiz-title">Quiz de lecture</h2><p class="small muted">Sens, contexte, auteur et livre d’origine : cinq questions pour faire revenir les phrases autrement.</p></div>${colorPicker}</div><div class="card quiz-intro quiz-surface quiz-surface--${quizColor}"><span class="quiz-intro__mark" aria-hidden="true">?</span><div><strong>${personalCount ? `${personalCount} souvenir${personalCount > 1 ? 's' : ''} personnel${personalCount > 1 ? 's' : ''} prêt${personalCount > 1 ? 's' : ''}` : 'Quiz de découverte prêt'}</strong><p class="small muted">Les exemples BOO-P complètent vos propres expressions et citations lorsque le lexique est encore court.</p></div><button class="button button--primary" type="button" data-action="start-quiz" ${candidates.length ? '' : 'disabled'}>Lancer 5 questions</button></div></section>`;
+    if (ui.quizFinished || !questions.length) return `<section class="section-block lexicon-quiz" aria-labelledby="lexicon-quiz-title"><div class="section-heading"><div><p class="eyebrow">Quiz terminé</p><h2 id="lexicon-quiz-title">${ui.quizScore}/${questions.length || 5} bonnes réponses</h2><p class="small muted">Les réponses difficiles reviendront plus tôt dans vos prochaines révisions.</p></div><div class="section-heading__actions"><button class="button button--secondary button--small" type="button" data-action="restart-quiz">Recommencer</button>${colorPicker}</div></div></section>`;
     const question = questions[ui.quizIndex];
     if (!question) return '';
     const selected = ui.quizSelected, answered = ui.quizAnswered, correct = selected === question.correct;
     const book = question.bookId ? store.getBookById(question.bookId) : store.getBooks().find(item => normalize(item.title) === normalize(question.source?.split(' · ')[0]));
-    return `<section class="section-block lexicon-quiz" aria-labelledby="lexicon-quiz-title"><div class="section-heading"><div><p class="eyebrow">Question ${ui.quizIndex + 1} sur ${questions.length}</p><h2 id="lexicon-quiz-title">Quiz expressions & citations</h2></div><span class="quiz-score">${ui.quizScore} point${ui.quizScore > 1 ? 's' : ''}</span></div><article class="card quiz-card" aria-live="polite"><span class="status-chip">${esc(question.kind)}</span><h3>${esc(question.prompt).replace(/\n/g, '<br>')}</h3><div class="quiz-choices">${question.choices.map(choice => `<button class="quiz-choice ${answered && choice === question.correct ? 'is-correct' : ''} ${answered && choice === selected && choice !== question.correct ? 'is-wrong' : ''}" type="button" data-action="quiz-answer" data-answer="${attr(choice)}" ${answered ? 'disabled' : ''}><span aria-hidden="true"></span>${esc(choice)}</button>`).join('')}</div>${answered ? `<div class="quiz-feedback ${correct ? 'is-correct' : 'is-wrong'}"><div>${book ? cover(book,'small') : `<span class="quiz-feedback__mark" aria-hidden="true">${correct ? '✓' : '↺'}</span>`}</div><div><strong>${correct ? 'Bonne réponse' : `La réponse était : ${esc(question.correct)}`}</strong>${question.fullText ? `<q>${esc(question.fullText)}</q>` : ''}<p>${esc(question.explanation)}</p><small>${esc(question.source)}</small></div></div><button class="button button--primary quiz-next" type="button" data-action="next-quiz">${ui.quizIndex + 1 >= questions.length ? 'Voir mon résultat' : 'Question suivante'}</button>` : ''}</article></section>`;
+    const choices = question.choices.map(choice => `<button class="quiz-choice ${answered && choice === question.correct ? 'is-correct' : ''} ${answered && choice === selected && choice !== question.correct ? 'is-wrong' : ''}" type="button" data-action="quiz-answer" data-answer="${attr(choice)}" ${answered ? 'disabled' : ''}><span aria-hidden="true"></span>${esc(choice)}</button>`).join('');
+    const feedback = answered ? `<div class="quiz-feedback ${correct ? 'is-correct' : 'is-wrong'}"><div>${book ? cover(book,'small') : `<span class="quiz-feedback__mark" aria-hidden="true">${correct ? '✓' : '↺'}</span>`}</div><div><strong>${correct ? 'Bonne réponse' : `La réponse était : ${esc(question.correct)}`}</strong>${question.fullText ? `<q>${esc(question.fullText)}</q>` : ''}<p>${esc(question.explanation)}</p><small>${esc(question.source)}</small></div></div><button class="button button--primary quiz-next" type="button" data-action="next-quiz">${ui.quizIndex + 1 >= questions.length ? 'Voir mon résultat' : 'Question suivante'}</button>` : '';
+    return `<section class="section-block lexicon-quiz" aria-labelledby="lexicon-quiz-title"><div class="section-heading"><div><p class="eyebrow">Question ${ui.quizIndex + 1} sur ${questions.length}</p><h2 id="lexicon-quiz-title">Quiz expressions & citations</h2></div><div class="section-heading__actions"><span class="quiz-score">${ui.quizScore} point${ui.quizScore > 1 ? 's' : ''}</span>${colorPicker}</div></div><article class="card quiz-card quiz-surface quiz-surface--${quizColor}" aria-live="polite"><span class="status-chip">${esc(question.kind)}</span><h3>${esc(question.prompt).replace(/\n/g, '<br>')}</h3><div class="quiz-choices">${choices}</div>${feedback}</article></section>`;
   }
 
   function renderSessionPositionSlider(book, value, { id = 'session-page-slider', name = '', dataChange = '' } = {}) {
@@ -847,7 +873,7 @@
         : 'Profil privé · verrouillé avant acceptation';
     return `<label class="search-field friend-search" for="friend-search"><span aria-hidden="true">⌕</span><span class="sr-only">Rechercher un lecteur ou un pseudonyme</span><input id="friend-search" data-input="friend-search" type="search" value="${attr(ui.friendQuery)}" placeholder="Rechercher un lecteur…"></label>
       <p class="small muted">Recherche réelle parmi les comptes BOO-P. Les profils privés restent limités à leur aperçu tant que la demande n’est pas acceptée.</p>
-      ${ui.friendSearchBusy ? '<div class="view-loading" role="status"><span class="loader" aria-hidden="true"></span> Recherche des lecteurs…</div>' : `<div class="grid-2">${users.length ? users.map(user => `<article class="card friend-card"><span class="avatar">${esc(user.initials)}</span><div class="card-content"><h3>${esc(user.name)}</h3><p class="micro muted">${esc(user.handle || '')}</p><p class="small muted">${accessLabel(user)}</p><div class="card-actions">${friendAction(user)}<button class="button button--ghost button--small" type="button" data-action="view-user" data-id="${attr(user.id)}">${user.profileVisibility === 'private' && user.friendState !== 'friend' ? 'Voir l’aperçu' : 'Voir le profil'}</button></div></div><details class="safety-menu"><summary aria-label="Options de sécurité">•••</summary><div class="safety-menu__panel"><button type="button" data-action="report-user" data-id="${attr(user.id)}">Signaler</button><button type="button" data-action="block-user" data-id="${attr(user.id)}">Bloquer</button></div></details></article>`).join('') : `<div class="empty-state"><h3>Aucun lecteur trouvé</h3><p>${ui.friendQuery ? 'Essayez un prénom ou un pseudonyme plus court.' : 'Aucun autre compte BOO-P n’est encore visible.'}</p></div>`}</div>`}`;
+      ${ui.friendSearchBusy ? '<div class="view-loading" role="status"><span class="loader" aria-hidden="true"></span> Recherche des lecteurs…</div>' : `<div class="grid-2">${users.length ? users.map(user => `<article class="card friend-card">${avatarBubble(user)}<div class="card-content"><h3>${esc(user.name)}</h3><p class="micro muted">${esc(user.handle || '')}</p><p class="small muted">${accessLabel(user)}</p><div class="card-actions">${friendAction(user)}<button class="button button--ghost button--small" type="button" data-action="view-user" data-id="${attr(user.id)}">${user.profileVisibility === 'private' && user.friendState !== 'friend' ? 'Voir l’aperçu' : 'Voir le profil'}</button></div></div><details class="safety-menu"><summary aria-label="Options de sécurité">•••</summary><div class="safety-menu__panel"><button type="button" data-action="report-user" data-id="${attr(user.id)}">Signaler</button><button type="button" data-action="block-user" data-id="${attr(user.id)}">Bloquer</button></div></details></article>`).join('') : `<div class="empty-state"><h3>Aucun lecteur trouvé</h3><p>${ui.friendQuery ? 'Essayez un prénom ou un pseudonyme plus court.' : 'Aucun autre compte BOO-P n’est encore visible.'}</p></div>`}</div>`}`;
   }
   function friendAction(user) {
     const map = {
@@ -1138,7 +1164,7 @@
     const profile = store.getProfile(), settings = store.getSettings(), stats = store.getStats();
     const dna = store.getReaderDNA();
     const badges = store.getBadges();
-    return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main"><span class="profile-avatar">${esc(initials(profile.name))}</span><div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button></section>
+    return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main">${avatarBubble(profile,'profile-avatar')}<div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button></section>
       <section class="section-block" aria-labelledby="reader-dna-title"><div class="section-heading"><div><p class="eyebrow">Portrait vivant</p><h2 id="reader-dna-title">ADN du lecteur</h2></div><button class="text-link" type="button" data-action="open-dna-history">Voir mon évolution</button></div><article class="reader-dna-card"><span class="reader-dna-card__mark" aria-hidden="true">✦</span><div><p class="eyebrow">Aujourd’hui</p><blockquote>${esc(dna.phrase)}</blockquote>${dna.topGenres.length ? `<div class="reader-dna-traits" aria-label="Territoires littéraires dominants">${dna.topGenres.map(genre => `<span>${esc(genre)}</span>`).join('')}</div>` : ''}<details class="reader-dna-evidence"><summary>Ce qui façonne cet ADN</summary><ul><li>${dna.metrics.completedCount} livre${dna.metrics.completedCount > 1 ? 's' : ''} terminé${dna.metrics.completedCount > 1 ? 's' : ''}</li><li>${store.getLexicon().length} élément${store.getLexicon().length > 1 ? 's' : ''} conservé${store.getLexicon().length > 1 ? 's' : ''} dans le lexique</li><li>${store.getTraces().length} Trace${store.getTraces().length > 1 ? 's' : ''} personnelle${store.getTraces().length > 1 ? 's' : ''}</li></ul></details></div></article></section>
       <section class="section-block"><h2>Statistiques</h2><div class="stats-grid"><div class="card stat-card"><strong>${stats.booksRead}</strong><span>livres lus</span></div><div class="card stat-card"><strong>${Math.floor(stats.totalMinutes/60)} h ${stats.totalMinutes%60}</strong><span>temps de lecture</span></div><div class="card stat-card"><strong>${stats.streak}</strong><span>jours de série</span></div><div class="card stat-card"><strong>${stats.totalTraces}</strong><span>Traces et lexique</span></div><div class="card stat-card"><strong>${stats.booksTransmitted}</strong><span>prêtés ou donnés</span></div></div></section>
       <section class="section-block profile-goals" id="profile-goals"><div class="section-heading"><div><p class="eyebrow">Progression personnelle</p><h2>Objectifs</h2><p class="small muted">Ouvrez seulement la période que vous souhaitez consulter ou modifier.</p></div></div>${renderGoals()}</section>
@@ -1394,7 +1420,12 @@
 
   function openProfileDialog() {
     const profile = store.getProfile();
-    openDialog({ title: 'Modifier le profil', eyebrow: 'Identité du lecteur', body: `<form class="form-grid" data-form="profile"><label class="field">Nom ou pseudonyme<input name="name" required value="${attr(profile.name)}"></label><label class="field">Identifiant<input name="handle" value="${attr(profile.handle || '')}"></label><label class="field">Phrase de profil<input name="title" value="${attr(profile.title || '')}"></label><label class="field">Biographie<textarea name="bio">${esc(profile.bio || '')}</textarea></label><label class="field">Centres d’intérêt<input name="interests" value="${attr((profile.interests || []).join(', '))}"><span class="field-help">Séparés par des virgules</span></label><button class="button button--primary" type="submit">Enregistrer</button></form>` });
+    if (ui.pendingProfilePhotoUrl) URL.revokeObjectURL(ui.pendingProfilePhotoUrl);
+    ui.pendingProfilePhotoUrl = '';
+    ui.pendingProfilePhotoFile = null;
+    ui.removeProfilePhoto = false;
+    const hasPhoto = Boolean(avatarSource(profile));
+    openDialog({ title: 'Modifier le profil', eyebrow: 'Identité du lecteur', body: `<form class="form-grid" data-form="profile"><div class="profile-photo-field"><span class="profile-photo-preview" id="profile-photo-preview" aria-hidden="true">${avatarInner(profile)}</span><div><label class="button button--secondary button--small profile-photo-button" for="profile-photo-file">${hasPhoto ? 'Changer la photo' : 'Ajouter une photo'}<input class="sr-only" id="profile-photo-file" name="avatar" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" data-change="profile-photo"></label><button class="text-link small" id="remove-profile-photo" type="button" data-action="remove-profile-photo" ${hasPhoto ? '' : 'hidden'}>Retirer la photo</button><p class="field-help" id="profile-photo-help">Recadrage carré et compression automatiques · 15 Mo maximum.</p></div></div><label class="field">Nom ou pseudonyme<input name="name" required value="${attr(profile.name)}"></label><label class="field">Identifiant<input name="handle" value="${attr(profile.handle || '')}"></label><label class="field">Phrase de profil<input name="title" value="${attr(profile.title || '')}"></label><label class="field">Biographie<textarea name="bio">${esc(profile.bio || '')}</textarea></label><label class="field">Centres d’intérêt<input name="interests" value="${attr((profile.interests || []).join(', '))}"><span class="field-help">Séparés par des virgules</span></label><button class="button button--primary" type="submit">Enregistrer</button></form>` });
   }
 
   function openFinishSessionDialog() {
@@ -1442,6 +1473,7 @@
       case 'memory-rate': reviewMemory(id, trigger.dataset.quality, trigger.dataset.memoryKey); break;
       case 'memory-card-color': store.saveSettings({ memoryCardColor:trigger.dataset.color }); render(); break;
       case 'session-card-color': store.saveSettings({ sessionCardColor:trigger.dataset.color }); render(); break;
+      case 'quiz-card-color': store.saveSettings({ quizCardColor:trigger.dataset.color }); render(); break;
       case 'restart-memory': ui.memoryDeckSignature = ''; ui.memoryDeckKeys = []; ui.memoryCompletedKeys = []; ui.memorySessionComplete = false; ui.memoryCursor = 0; render(); break;
       case 'start-quiz': startLexiconQuiz(); break;
       case 'quiz-answer': answerLexiconQuiz(trigger.dataset.answer || ''); break;
@@ -1506,6 +1538,7 @@
       case 'share-monthly-report': await shareMonthlyReport(); break;
       case 'edit-monthly-report': openMonthlyReportDialog(ui.monthlyReportData?.monthKey); break;
       case 'edit-profile': openProfileDialog(); break;
+      case 'remove-profile-photo': removePendingProfilePhoto(); break;
       case 'open-dna-history': openReaderDNAHistory(); break;
       case 'open-badges': openBadgesDialog(); break;
       case 'toggle-theme': { const settings = store.getSettings(); settings.theme = settings.theme === 'dark' ? 'light' : 'dark'; store.saveSettings(settings); applyTheme(); render(); break; }
@@ -1548,6 +1581,7 @@
       case 'session-page': { const value = clamp(control.value, 0, control.max || 99999); control.value = value; updateSessionPageOutput(control, value); store.updateActiveSession({ endPage: value }); break; }
       case 'isbn-photo-file': void readISBNPhoto(control.files?.[0]); break;
       case 'post-photo': previewPostPhoto(control.files?.[0]); break;
+      case 'profile-photo': previewProfilePhoto(control.files?.[0]); break;
       case 'salon-pages': void updateSalonSharing(control.dataset.id, control.checked); break;
     }
   }
@@ -1871,6 +1905,43 @@
     store.saveSettings(settings); showToast('Suggestion écartée · une nouvelle proposition est affichée'); render();
   }
 
+  function previewProfilePhoto(file) {
+    const preview = document.getElementById('profile-photo-preview');
+    const help = document.getElementById('profile-photo-help');
+    const removeButton = document.getElementById('remove-profile-photo');
+    if (!preview || !help || !file) return;
+    const extension = String(file.name || '').split('.').pop().toLowerCase();
+    const allowed = ['image/jpeg','image/png','image/webp','image/heic','image/heif'].includes(String(file.type || '').toLowerCase()) || ['jpg','jpeg','png','webp','heic','heif'].includes(extension);
+    if (!allowed || file.size > 15 * 1024 * 1024) {
+      showToast(allowed ? 'Cette photo dépasse 15 Mo' : 'Choisissez une photo JPEG, PNG, WebP ou HEIC');
+      document.getElementById('profile-photo-file').value = '';
+      return;
+    }
+    if (ui.pendingProfilePhotoUrl) URL.revokeObjectURL(ui.pendingProfilePhotoUrl);
+    ui.pendingProfilePhotoUrl = URL.createObjectURL(file);
+    ui.pendingProfilePhotoFile = file;
+    ui.removeProfilePhoto = false;
+    preview.innerHTML = avatarInner({ name:store.getProfile().name, avatarUrl:ui.pendingProfilePhotoUrl });
+    help.textContent = `${file.name} · la photo sera recadrée et compressée lors de l’enregistrement.`;
+    removeButton.hidden = false;
+  }
+
+  function removePendingProfilePhoto() {
+    if (ui.pendingProfilePhotoUrl) URL.revokeObjectURL(ui.pendingProfilePhotoUrl);
+    ui.pendingProfilePhotoUrl = '';
+    ui.pendingProfilePhotoFile = null;
+    ui.removeProfilePhoto = true;
+    const profile = store.getProfile();
+    const preview = document.getElementById('profile-photo-preview');
+    if (preview) preview.innerHTML = avatarInner({ name:profile.name });
+    const input = document.getElementById('profile-photo-file');
+    if (input) input.value = '';
+    const button = document.getElementById('remove-profile-photo');
+    if (button) button.hidden = true;
+    const help = document.getElementById('profile-photo-help');
+    if (help) help.textContent = 'La photo actuelle sera retirée après l’enregistrement.';
+  }
+
   function previewPostPhoto(file) {
     const preview = document.getElementById('post-photo-preview'), help = document.getElementById('post-photo-help');
     if (!preview || !help) return;
@@ -2143,11 +2214,48 @@
   }
 
   async function submitProfile(form, data) {
-    store.saveProfile({ name: data.get('name').trim(), handle: data.get('handle').trim(), title: data.get('title').trim(), bio: data.get('bio').trim(), interests: data.get('interests').split(',').map(item => item.trim()).filter(Boolean).slice(0,12) });
-    if (isGuestMode()) { closeDialog(); showToast('Profil invité conservé sur cet appareil'); render(); return; }
-    try { await window.BT.auth.updateProfile({ displayName:data.get('name').trim(), handle:data.get('handle').trim(), profileTitle:data.get('title').trim(), bio:data.get('bio').trim(), interests:store.getProfile().interests }); }
-    catch (error) { showToast(error.message || 'Profil conservé localement ; synchronisation différée'); return; }
-    closeDialog(); showToast('Profil mis à jour'); render();
+    const submitButton = form.querySelector('[type="submit"]');
+    const originalLabel = submitButton?.textContent || 'Enregistrer';
+    const fields = {
+      name:data.get('name').trim(), handle:data.get('handle').trim(), title:data.get('title').trim(),
+      bio:data.get('bio').trim(), interests:data.get('interests').split(',').map(item => item.trim()).filter(Boolean).slice(0,12)
+    };
+    store.saveProfile(fields);
+    if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Préparation…'; }
+    try {
+      if (isGuestMode()) {
+        if (ui.removeProfilePhoto) store.saveProfile({ avatarData:'', avatarPath:'', avatarUrl:'' });
+        else if (ui.pendingProfilePhotoFile) {
+          const prepared = await window.BT.auth.prepareAvatar(ui.pendingProfilePhotoFile);
+          const avatarData = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(new Error('La photo ne peut pas être conservée sur cet appareil.'));
+            reader.readAsDataURL(prepared);
+          });
+          store.saveProfile({ avatarData, avatarPath:'', avatarUrl:'' });
+        }
+        closeDialog(); showToast('Profil invité conservé sur cet appareil'); render(); return;
+      }
+
+      if (submitButton) submitButton.textContent = 'Enregistrement…';
+      if (ui.removeProfilePhoto) await window.BT.auth.removeAvatar();
+      else if (ui.pendingProfilePhotoFile) await window.BT.auth.updateAvatar(ui.pendingProfilePhotoFile);
+      const remote = await window.BT.auth.updateProfile({ displayName:fields.name, handle:fields.handle, profileTitle:fields.title, bio:fields.bio, interests:fields.interests });
+      store.saveProfile({
+        ...fields,
+        handle:remote.handle ? `@${remote.handle}` : fields.handle,
+        visibility:remote.profile_visibility || store.getProfile().visibility,
+        avatarPath:remote.avatar_path || '', avatarUrl:remote.avatar_url || '', avatarData:''
+      });
+      closeDialog(); showToast(ui.removeProfilePhoto ? 'Photo de profil retirée' : ui.pendingProfilePhotoFile ? 'Photo de profil mise à jour' : 'Profil mis à jour'); render();
+    } catch (error) {
+      showToast(error.message || 'Profil conservé localement ; synchronisation différée');
+    } finally {
+      if (ui.pendingProfilePhotoUrl) URL.revokeObjectURL(ui.pendingProfilePhotoUrl);
+      ui.pendingProfilePhotoUrl = '';
+      if (submitButton?.isConnected) { submitButton.disabled = false; submitButton.textContent = originalLabel; }
+    }
   }
 
   async function submitFinishSession(form, data) {
@@ -2426,7 +2534,10 @@
       catch (error) { showToast(error.message || 'Ce profil ne peut pas être ouvert'); }
     } else details = { bio:user.bio, interests:[] };
     const locked = user.profileVisibility === 'private' && !details;
+    const avatarProfile = { ...user, avatarUrl:details?.avatarUrl || user.avatarUrl || '' };
     openDialog({ title:user.name, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2><p class="muted">${esc(user.handle || '')}</p></div></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'Ce lecteur n’a pas encore rédigé de biographie.')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<p class="small muted">L’adresse e-mail et les lectures privées ne sont jamais affichées dans la recherche.</p>${friendAction(user)}` });
+    const dialogAvatar = document.querySelector('#app-dialog .profile-avatar');
+    if (dialogAvatar) dialogAvatar.innerHTML = avatarInner(avatarProfile);
   }
   function openClubDialog() {
     openDialog({ title:'Créer un club', eyebrow:'Espace partagé et privé par défaut', body:`<form class="form-grid" data-form="club"><label class="field">Nom<input name="name" required maxlength="80"></label><label class="field">Description<textarea name="description" required maxlength="1200"></textarea></label><label class="field">Couverture<select name="color"><option value="#6f927c">Sauge</option><option value="#cf873d">Ocre</option></select></label><div class="field-row"><label class="field">Visibilité<select name="visibility"><option value="private">Privé</option><option value="public">Public</option></select></label><label class="field">Accès public<select name="access"><option value="approval">Sur approbation</option><option value="open">Accès libre</option></select></label></div><label class="field">Livre de ma bibliothèque<select name="bookTitle"><option value="">À choisir plus tard</option>${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Ou un autre livre<input name="customBookTitle" maxlength="240" placeholder="Titre absent de ma bibliothèque"><span class="field-help">BOO-P vous proposera de l’ajouter automatiquement à votre bibliothèque.</span></label><p class="small muted">Après la création, vous pourrez ajouter des membres, modifier le livre et programmer des salons.</p><button class="button button--primary" type="submit">Créer le club</button></form>` });

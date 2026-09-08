@@ -5,9 +5,11 @@ BT.community = (() => {
   'use strict';
 
   const BUCKET = 'community-media';
+  const AVATAR_BUCKET = 'profile-avatars';
   const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
   const MAX_EDGE = 1920;
   const signedUrlCache = new Map();
+  const signedAvatarUrlCache = new Map();
 
   const extensionFromType = type => ({
     'image/jpeg':'jpg', 'image/png':'png', 'image/webp':'webp',
@@ -120,6 +122,17 @@ BT.community = (() => {
     if (error) { console.warn('Photo BOO-P indisponible', error); return null; }
     signedUrlCache.set(path, { url:data.signedUrl, expiresAt:Date.now() + 55 * 60000 });
     return data.signedUrl;
+  }
+
+  async function signedAvatarUrl(path) {
+    if (!path) return '';
+    const cached = signedAvatarUrlCache.get(path);
+    if (cached && cached.expiresAt > Date.now()) return cached.url;
+    const { data, error } = await client().storage.from(AVATAR_BUCKET).createSignedUrl(path, 3600);
+    if (error) { console.warn('Avatar BOO-P indisponible', error); return ''; }
+    const url = data?.signedUrl || '';
+    if (url) signedAvatarUrlCache.set(path, { url, expiresAt:Date.now() + 55 * 60000 });
+    return url;
   }
 
   async function listPosts() {
@@ -542,7 +555,7 @@ BT.community = (() => {
     await window.BT.auth.ready();
     const user = optionalUser(), api = client(), clean = String(query || '').trim().slice(0, 80);
     const base = () => {
-      let request = api.from('profile_directory').select('user_id, handle, display_name, profile_visibility').limit(30);
+      let request = api.from('profile_directory').select('user_id, handle, display_name, profile_visibility, avatar_path').limit(30);
       request = user ? request.neq('user_id', user.id) : request.eq('profile_visibility', 'public');
       return request;
     };
@@ -564,11 +577,12 @@ BT.community = (() => {
       const otherId = relation.requester_id === user.id ? relation.addressee_id : relation.requester_id;
       relationByUser.set(otherId, relation);
     });
-    return [...directory.values()].map(row => {
+    const readers = await Promise.all([...directory.values()].map(async row => {
       const relation = relationByUser.get(row.user_id);
       const friendState = !relation ? 'none' : relation.status === 'accepted' ? 'friend' : relation.requester_id === user?.id ? 'sent' : 'received';
-      return { id:row.user_id, name:row.display_name, handle:`@${row.handle}`, initials:String(row.display_name || 'B').split(/\s+/).map(part => part[0]).slice(0,2).join('').toUpperCase(), bio:'', profileVisibility:row.profile_visibility, friendState, isRemote:true, friendshipId:relation?.id || null };
-    }).sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+      return { id:row.user_id, name:row.display_name, handle:`@${row.handle}`, initials:String(row.display_name || 'B').split(/\s+/).map(part => part[0]).slice(0,2).join('').toUpperCase(), avatarPath:row.avatar_path || '', avatarUrl:await signedAvatarUrl(row.avatar_path), bio:'', profileVisibility:row.profile_visibility, friendState, isRemote:true, friendshipId:relation?.id || null };
+    }));
+    return readers.sort((a, b) => a.name.localeCompare(b.name, 'fr'));
   }
 
   async function updateFriend(userId, action) {
@@ -590,11 +604,11 @@ BT.community = (() => {
   async function getReaderProfile(userId) {
     await window.BT.auth.ready();
     const { data, error } = await client().from('profile_shared_details')
-      .select('profile_title, bio, interests, profile_visibility, updated_at')
+      .select('profile_title, bio, interests, profile_visibility, avatar_path, updated_at')
       .eq('user_id', userId)
       .maybeSingle();
     if (error) throw friendly(error, 'Ce profil ne peut pas être ouvert.');
-    return data || null;
+    return data ? { ...data, avatarUrl:await signedAvatarUrl(data.avatar_path) } : null;
   }
 
   return {

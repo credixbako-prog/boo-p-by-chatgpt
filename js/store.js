@@ -14,7 +14,7 @@ BT.store = (() => {
   let STATE_KEY = LEGACY_STATE_KEY;
   let ONBOARDING_KEY = LEGACY_ONBOARDING_KEY;
   let activeUserId = null;
-  const SCHEMA_VERSION = 12;
+  const SCHEMA_VERSION = 13;
   const listeners = new Set();
 
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -165,7 +165,7 @@ BT.store = (() => {
     const initializedAt = nowISO();
     return {
       schemaVersion: SCHEMA_VERSION,
-      profile: { name: 'Dixon', handle: '@dixonlit', title: 'LECTEUR EXPLORATEUR', bio: 'Je marche de livre en livre, sans me presser.', email: 'dixon@prototype.local', interests: ['Philosophie', 'Roman', 'Histoire'], visibility: 'private', createdAt: nowISO() },
+      profile: { name: 'Dixon', handle: '@dixonlit', title: 'LECTEUR EXPLORATEUR', bio: 'Je marche de livre en livre, sans me presser.', email: 'dixon@prototype.local', interests: ['Philosophie', 'Roman', 'Histoire'], visibility: 'private', avatarPath: '', avatarUrl: '', avatarData: '', createdAt: nowISO() },
       books: demoBooks(), activeBookId: 'book-etranger',
       sessions: [
         { id: 'session-demo-1', bookId: 'book-etranger', startedAt: daysAgo(1), endedAt: daysAgo(1), durationSeconds: 1560, startPage: 65, endPage: 78, note: 'Lecture du soir.', manual: false },
@@ -189,7 +189,7 @@ BT.store = (() => {
       community: demoCommunity(),
       notifications: [],
       badges: { unlocked: {} },
-      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, memoryCardColor: 'sage', sessionCardColor: 'sage', dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
+      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, memoryCardColor: 'sage', sessionCardColor: 'sage', quizCardColor: 'terracotta', dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
       outbox: [], timeline: [], meta: { initializedAt, updatedAt:initializedAt, simulated: true }
     };
   }
@@ -269,6 +269,7 @@ BT.store = (() => {
     state.settings.libraryFinish = ['terracotta','blue','sage','red','black','white'].includes(state.settings.libraryFinish) ? state.settings.libraryFinish : 'terracotta';
     state.settings.memoryCardColor = ['terracotta','blue','sage','red','black','white'].includes(state.settings.memoryCardColor) ? state.settings.memoryCardColor : 'sage';
     state.settings.sessionCardColor = ['terracotta','blue','sage','red','black','white'].includes(state.settings.sessionCardColor) ? state.settings.sessionCardColor : 'sage';
+    state.settings.quizCardColor = ['terracotta','blue','sage','red','black','white'].includes(state.settings.quizCardColor) ? state.settings.quizCardColor : 'terracotta';
     state.outbox = Array.isArray(state.outbox) ? state.outbox : [];
     state.timeline = Array.isArray(state.timeline) ? state.timeline : [];
     state.meta = { ...base.meta, ...(state.meta || {}) };
