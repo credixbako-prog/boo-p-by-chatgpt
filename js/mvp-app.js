@@ -161,23 +161,35 @@
   }
 
   function scheduleUserDataSync(delay = 750) {
-    if (!ui.syncReady || isGuestMode() || !navigator.onLine) return;
+    if (ui.syncStopped || !ui.syncReady || isGuestMode() || !navigator.onLine) return;
     clearTimeout(ui.syncTimer);
     ui.syncTimer = window.setTimeout(() => syncUserDataNow(), delay);
   }
 
   async function syncUserDataNow() {
-    if (!ui.syncReady || isGuestMode() || !navigator.onLine || !window.BT.userDataSync) return;
+    if (ui.syncStopped || !ui.syncReady || isGuestMode() || !navigator.onLine || !window.BT.userDataSync) return;
     if (!store.getDataSyncStatus?.().dirty) return;
-    if (ui.syncBusy) { ui.syncPending = true; return; }
+    if (ui.syncBusy || ui.syncBootstrapping) { ui.syncPending = true; return; }
     ui.syncBusy = true;
+    const sent = store.getSyncedData();
     try {
-      await window.BT.userDataSync.pushAll(store.getSyncedData(), { touch:true, replaceRemote:true });
-      store.markDataSynced();
+      const baseline = store.getSyncBaseline();
+      if (!baseline) throw new Error('Exportez votre copie locale, puis reprenez la version synchronisée depuis les réglages.');
+      const remote = await window.BT.userDataSync.mergeSnapshot(baseline, sent);
+      if (ui.syncStopped) return;
+      if (remote?._sync?.skipped) throw new Error('Session indisponible.');
+      if (JSON.stringify(store.getSyncedData()) === JSON.stringify(sent)) {
+        store.replaceSyncedData(remote);
+        store.markDataSynced(new Date().toISOString(), remote);
+      } else {
+        // Only acknowledge the exact snapshot sent. Later edits remain dirty.
+        store.markDataSynced(new Date().toISOString(), sent);
+        ui.syncPending = true;
+      }
       ui.syncErrorShown = false;
     } catch (error) {
       console.error('BOO-P personal data sync', error);
-      if (!ui.syncErrorShown) { showToast('Vos changements restent sur cet appareil ; synchronisation en attente.'); ui.syncErrorShown = true; }
+      if (!ui.syncErrorShown) { showToast(error.code === 'BOOP_SYNC_CONFLICT' ? error.message : 'Vos changements restent sur cet appareil ; synchronisation en attente.'); ui.syncErrorShown = true; }
     } finally {
       ui.syncBusy = false;
       if (ui.syncPending) { ui.syncPending = false; scheduleUserDataSync(100); }
@@ -185,22 +197,33 @@
   }
 
   async function bootstrapUserDataSync({ quiet = false, refresh = false } = {}) {
-    if (isGuestMode() || !window.BT.userDataSync || !navigator.onLine || ui.syncBootstrapping) return false;
+    if (ui.syncStopped || isGuestMode() || !window.BT.userDataSync || !navigator.onLine || ui.syncBootstrapping || ui.syncBusy) return false;
     if (ui.syncReady && !refresh) return true;
     ui.syncBootstrapping = true;
     try {
       window.BT.userDataSync.configure({ isGuest:isGuestMode });
       const localStatus = store.getDataSyncStatus();
-      const remote = await window.BT.userDataSync.pullAll();
+      const local = store.getSyncedData();
+      const baseline = store.getSyncBaseline();
+      let remote = await window.BT.userDataSync.readSnapshot();
+      if (ui.syncStopped) return false;
       if (remote?._sync?.skipped) return false;
-      if (!remoteSnapshotHasData(remote)) {
-        await window.BT.userDataSync.pushAll(store.getSyncedData(), { touch:true, replaceRemote:true });
-      } else if (localStatus.lastSyncedFingerprint && localStatus.dirty) {
-        await window.BT.userDataSync.pushAll(store.getSyncedData(), { touch:true, replaceRemote:true });
-      } else {
-        store.replaceSyncedData(remote);
+      if (JSON.stringify(local) !== JSON.stringify(store.getSyncedData())) return false;
+      if (baseline && localStatus.dirty) {
+        remote = await window.BT.userDataSync.mergeSnapshot(baseline, local);
+      } else if (!baseline && !localStatus.lastSyncedFingerprint && !remoteSnapshotHasData(remote)) {
+        remote = await window.BT.userDataSync.mergeSnapshot(null, local);
+      } else if (!baseline && (localStatus.dirty || (!localStatus.lastSyncedFingerprint && ['books','sessions','traces','lexicon'].some(key => local[key].length)))) {
+        throw new Error('Ancienne copie locale : exportez-la puis reprenez la version synchronisée depuis les réglages.');
       }
-      store.markDataSynced(remote?._sync?.pulledAt || new Date().toISOString());
+      if (ui.syncStopped) return false;
+      if (remote?._sync?.skipped) return false;
+      if (JSON.stringify(local) === JSON.stringify(store.getSyncedData())) {
+        store.replaceSyncedData(remote);
+        store.markDataSynced(new Date().toISOString(), remote);
+      } else {
+        store.markDataSynced(new Date().toISOString(), local);
+      }
       if (!ui.syncUnsubscribe) ui.syncUnsubscribe = store.subscribe(() => scheduleUserDataSync());
       ui.syncReady = true;
       ui.syncErrorShown = false;
@@ -208,10 +231,11 @@
     } catch (error) {
       console.error('BOO-P initial data sync', error);
       ui.syncReady = false;
-      if (!quiet && !ui.syncErrorShown) { showToast('Synchronisation indisponible pour le moment ; vos données locales sont conservées.'); ui.syncErrorShown = true; }
+      if (!quiet && !ui.syncErrorShown) { showToast(error.message || 'Synchronisation indisponible ; vos données locales sont conservées.'); ui.syncErrorShown = true; }
       return false;
     } finally {
       ui.syncBootstrapping = false;
+      if (ui.syncReady && store.getDataSyncStatus().dirty) scheduleUserDataSync();
     }
   }
 
@@ -1174,8 +1198,8 @@
         <details class="setting-card"><summary>Confidentialité et visibilité</summary><div class="setting-card__body"><form class="form-grid" data-form="privacy"><fieldset><legend>Visibilité du profil</legend><label class="checkbox-row"><input type="radio" name="profileVisibility" value="private" ${profile.visibility === 'private' ? 'checked' : ''}><span><strong>Privé</strong><br><span class="muted">Vos détails sont visibles uniquement par vos amis. Recommandé et sélectionné par défaut.</span></span></label><label class="checkbox-row"><input type="radio" name="profileVisibility" value="public" ${profile.visibility === 'public' ? 'checked' : ''}><span><strong>Public</strong><br><span class="muted">Toute la communauté peut consulter le profil.</span></span></label></fieldset><label class="field">Visibilité par défaut des publications<select name="defaultVisibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
         <details class="setting-card"><summary>Préférences de notifications</summary><div class="setting-card__body"><form class="form-grid" data-form="notification-settings">${Object.entries({ friends:'Amitiés', encouragements:'Encouragements', traces:'Traces et réponses', clubs:'Clubs', salons:'Salons', goals:'Objectifs' }).map(([key,label]) => `<label class="checkbox-row"><input type="checkbox" name="${key}" ${settings.notifications[key] ? 'checked' : ''}> ${label}</label>`).join('')}<label class="checkbox-row"><input type="checkbox" name="remote" ${settings.notifications.remote ? 'checked' : ''} disabled> Notifications système du téléphone <span class="simulated-badge">prochaine étape</span></label><p class="small muted">Les notifications dans BOO-P sont synchronisées en temps réel. Les alertes sur l’écran verrouillé seront activées séparément.</p><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
         <details class="setting-card"><summary>Utilisateurs bloqués</summary><div class="setting-card__body">${settings.blockedUsers.length ? settings.blockedUsers.map(id => { const user = store.getCommunity().users.find(item => item.id === id); return `<div class="history-item"><div class="history-item__content"><strong>${esc(user?.name || 'Utilisateur')}</strong></div><button class="text-link small" type="button" data-action="unblock-user" data-id="${attr(id)}">Débloquer</button></div>`; }).join('') : '<p class="small muted">Aucun utilisateur bloqué.</p>'}</div></details>
-        <details class="setting-card"><summary>Données et aide</summary><div class="setting-card__body"><div class="button-row"><button class="button button--secondary button--small" type="button" data-action="export-data">Exporter mes données</button><button class="button button--secondary button--small" type="button" data-action="help">Aide et signalement</button></div><p class="small muted">L’export est un fichier JSON local. Aucun rapport PDF premium n’est généré dans cette phase.</p></div></details>
-      </div></section><section class="danger-zone section-block"><h2>Fin de session et compte</h2><div class="button-row"><button class="button button--secondary" type="button" data-action="logout">Se déconnecter</button><button class="button button--danger" type="button" data-action="delete-account">Supprimer le compte local</button></div></section>`;
+        <details class="setting-card"><summary>Données et aide</summary><div class="setting-card__body"><div class="button-row"><button class="button button--secondary button--small" type="button" data-action="export-data">Exporter mes données</button><button class="button button--secondary button--small" type="button" data-action="sync-recover">Reprendre la version synchronisée</button><button class="button button--secondary button--small" type="button" data-action="export-recovery">Exporter les copies de récupération</button><button class="button button--secondary button--small" type="button" data-action="help">Aide et signalement</button></div><p class="small muted">L’export est un fichier JSON local. Aucun rapport PDF premium n’est généré dans cette phase.</p></div></details>
+      </div></section><section class="danger-zone section-block"><h2>Fin de session et compte</h2><div class="button-row"><button class="button button--secondary" type="button" data-action="logout">Se déconnecter</button><button class="button button--danger" type="button" data-action="delete-account">Effacer les données locales</button></div></section>`;
   }
 
   function renderLatestBadge(badges) {
@@ -1545,6 +1569,8 @@
       case 'select-rating': selectRating(trigger, Number(trigger.dataset.value)); break;
       case 'simulated-password': openChangePasswordDialog(); break;
       case 'export-data': exportData(); break;
+      case 'sync-recover': await recoverSyncedVersion(); break;
+      case 'export-recovery': exportRecoveryData(); break;
       case 'help': openHelpDialog(); break;
       case 'logout': if (isGuestMode()) { window.BT.auth.leaveGuestMode(); location.href = 'index.html?reason=guest-ended'; } else { await window.BT.auth.signOut(); location.href = 'index.html?reason=signed-out'; } break;
       case 'delete-account': openDeleteAccountDialog(); break;
@@ -2491,8 +2517,8 @@
     try { await window.BT.community.createComment(post.remoteId || post.id, data.get('text'), form.dataset.commentId); closeDialog(); ui.openComments.add(post.id); await refreshCommunity({ quiet:true }); showToast('Réponse ajoutée'); }
     catch (error) { showToast(error.message || 'Réponse non envoyée'); }
   }
-  function submitReport(form, data) { closeDialog(); showToast(`Signalement enregistré localement · motif : ${data.get('reason')}`); }
-  function submitHelp(form, data) { closeDialog(); showToast('Message d’aide conservé localement pour démonstration'); }
+  function submitReport(form, data) { showToast('Signalement non envoyé : le service de modération n’est pas encore disponible.'); }
+  function submitHelp(form, data) { showToast('Message non envoyé : le service d’aide n’est pas encore disponible.'); }
   async function submitChangePassword(form, data) {
     if (data.get('password') !== data.get('confirm')) { showToast('Les deux mots de passe ne correspondent pas'); return; }
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
@@ -2505,7 +2531,21 @@
   }
   async function submitDeleteAccount(form, data) {
     if (data.get('confirmation') !== 'SUPPRIMER') { showToast('Saisissez exactement SUPPRIMER'); return; }
-    store.clearAll(); await window.BT.auth.signOut(); location.href = 'index.html?reason=local-data-deleted';
+    ui.syncStopped = true;
+    ui.syncReady = false;
+    ui.syncPending = false;
+    clearTimeout(ui.syncTimer);
+    ui.syncUnsubscribe?.();
+    ui.syncUnsubscribe = null;
+    try {
+      await window.BT.auth.signOut();
+      clearInterval(ui.timer);
+      clearInterval(ui.heartbeat);
+      store.clearAll();
+      location.href = 'index.html?reason=local-data-deleted';
+    } catch (error) {
+      showToast('Déconnexion impossible : les données locales sont conservées. Réessayez ou rechargez la page.');
+    }
   }
 
   function openPostDialog() {
@@ -2645,15 +2685,51 @@
     openDialog({ title:'Changer le mot de passe', eyebrow:'Compte Supabase sécurisé', body:`<form class="form-grid" data-form="change-password"><label class="field">Nouveau mot de passe<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label class="field">Confirmer le mot de passe<input name="confirm" type="password" required minlength="8" autocomplete="new-password"></label><p class="small muted">Le nouveau mot de passe doit contenir au moins 8 caractères.</p><button class="button button--primary" type="submit">Enregistrer le nouveau mot de passe</button></form>` });
   }
   function openDeleteAccountDialog() {
-    openDialog({ title:'Effacer les données locales', eyebrow:'Confirmation renforcée', body:`<div class="danger-zone"><p>Cette action efface les lectures BOO-P de ce navigateur et vous déconnecte. Votre identifiant de connexion Supabase est conservé.</p><form class="form-grid" data-form="delete-account"><label class="field">Saisissez <strong>SUPPRIMER</strong><input name="confirmation" required autocomplete="off"></label><button class="button button--danger" type="submit">Effacer les données locales</button></form></div>` });
+    openDialog({ title:'Effacer les données locales', eyebrow:'Confirmation renforcée', body:`<div class="danger-zone"><p>Cette action efface les lectures BOO-P de ce navigateur et vous déconnecte. Votre compte, vos lectures synchronisées et vos publications restent conservés en ligne. Cette action ne supprime pas le compte distant. Fermez les autres onglets BOO-P avant de continuer.</p><form class="form-grid" data-form="delete-account"><label class="field">Saisissez <strong>SUPPRIMER</strong><input name="confirmation" required autocomplete="off"></label><button class="button button--danger" type="submit">Effacer les données locales</button></form></div>` });
   }
   function confirmDeleteBook(id) {
     const book = store.getBookById(id); if (!book) return;
     if (confirm(`Supprimer « ${book.title} » ainsi que ses sessions et Traces locales ?`)) { store.deleteBook(id); showToast('Livre supprimé'); location.hash = '#path?tab=library'; }
   }
+  async function recoverSyncedVersion() {
+    if (isGuestMode()) { showToast('Le mode invité reste local.'); return; }
+    if (ui.syncBusy || ui.syncBootstrapping) { showToast('Attendez la fin de la synchronisation en cours.'); return; }
+    if (!confirm('Votre copie locale sera exportée en JSON, puis remplacée par la version en ligne. Conservez le fichier pour retrouver les changements non synchronisés. Continuer ?')) return;
+    ui.syncBootstrapping = true;
+    const before = store.getSyncedData();
+    try {
+      const remote = await window.BT.userDataSync.readSnapshot();
+      if (ui.syncStopped || remote?._sync?.skipped) throw new Error('Session indisponible.');
+      if (JSON.stringify(before) !== JSON.stringify(store.getSyncedData())) throw new Error('Votre copie vient de changer. Réessayez pour la conserver dans l’export.');
+      // Keep an additional local backup: browser downloads can be declined.
+      const recoveryKey = `boop_sync_recovery:${window.BT.auth.getSession().user.id}`;
+      const backups = JSON.parse(localStorage.getItem(recoveryKey) || '[]');
+      backups.push({ savedAt:new Date().toISOString(), data:store.exportData() });
+      localStorage.setItem(recoveryKey, JSON.stringify(backups));
+      exportData();
+      store.replaceSyncedData(remote);
+      store.markDataSynced(new Date().toISOString(), remote);
+      ui.syncReady = true;
+      ui.syncErrorShown = false;
+      if (!ui.syncUnsubscribe) ui.syncUnsubscribe = store.subscribe(() => scheduleUserDataSync());
+      render();
+      showToast('Version synchronisée chargée. Une copie de récupération reste sur cet appareil.');
+    } catch (error) { showToast(error.message || 'Récupération impossible ; copie locale conservée.'); }
+    finally { ui.syncBootstrapping = false; }
+  }
+
   function exportData() {
-    const blob = new Blob([JSON.stringify(store.exportData(), null, 2)], { type:'application/json' });
-    const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `boo-p-export-${store.localDateKey()}.json`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url); showToast('Export local préparé');
+    downloadJSON(store.exportData(), 'export');
+  }
+  function exportRecoveryData() {
+    const userId = window.BT.auth.getSession()?.user?.id;
+    const saved = userId && localStorage.getItem(`boop_sync_recovery:${userId}`);
+    if (!saved) { showToast('Aucune copie de récupération sur cet appareil.'); return; }
+    downloadJSON(JSON.parse(saved), 'recuperation');
+  }
+  function downloadJSON(data, label) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+    const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `boo-p-${label}-${store.localDateKey()}.json`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url); showToast('Export local préparé');
   }
 
   document.addEventListener('DOMContentLoaded', async () => {

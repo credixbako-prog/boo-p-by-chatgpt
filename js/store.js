@@ -295,8 +295,8 @@ BT.store = (() => {
       goals:state.goals
     });
   }
-  function syncedFingerprint() {
-    const serialized = JSON.stringify({ books:state.books, sessions:state.sessions, traces:state.traces, lexicon:state.lexicon, goals:state.goals });
+  function syncedFingerprint(snapshot = getSyncedData()) {
+    const serialized = JSON.stringify(snapshot);
     let hash = 2166136261;
     for (let index = 0; index < serialized.length; index += 1) {
       hash ^= serialized.charCodeAt(index);
@@ -304,17 +304,26 @@ BT.store = (() => {
     }
     return (hash >>> 0).toString(36);
   }
+  function canonicalSyncData(value) {
+    if (Array.isArray(value)) return value.map(canonicalSyncData);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonicalSyncData(value[key])]));
+    return value;
+  }
   function getDataSyncStatus() {
     const fingerprint = syncedFingerprint();
     return clone({
       fingerprint,
       lastSyncedFingerprint:state.meta.lastSyncedFingerprint || '',
       lastSyncedAt:state.meta.lastSyncedAt || null,
-      dirty:Boolean(state.meta.lastSyncedFingerprint && state.meta.lastSyncedFingerprint !== fingerprint)
+      dirty:state.meta.lastSyncedSnapshot
+        ? JSON.stringify(canonicalSyncData(state.meta.lastSyncedSnapshot)) !== JSON.stringify(canonicalSyncData(getSyncedData()))
+        : Boolean(state.meta.lastSyncedFingerprint && state.meta.lastSyncedFingerprint !== fingerprint)
     });
   }
-  function markDataSynced(value = nowISO()) {
-    state.meta.lastSyncedFingerprint = syncedFingerprint();
+  function getSyncBaseline() { return clone(state.meta.lastSyncedSnapshot || null); }
+  function markDataSynced(value = nowISO(), snapshot = getSyncedData()) {
+    state.meta.lastSyncedSnapshot = clone(snapshot);
+    state.meta.lastSyncedFingerprint = syncedFingerprint(snapshot);
     state.meta.lastSyncedAt = value;
     writeJSON(STATE_KEY, state);
     return getDataSyncStatus();
@@ -728,12 +737,18 @@ BT.store = (() => {
 
   function exportData() { return clone(state); }
   function flushOutbox() { if (typeof navigator !== 'undefined' && navigator.onLine && state.outbox.length) { state.outbox = []; commit(); } }
-  function clearAll() { localStorage.removeItem(STATE_KEY); localStorage.removeItem(ONBOARDING_KEY); state = makeDefaultState(); writeJSON(STATE_KEY, state); emit(); }
+  function clearAll() {
+    localStorage.removeItem(STATE_KEY);
+    localStorage.removeItem(ONBOARDING_KEY);
+    if (activeUserId) localStorage.removeItem(`boop_sync_recovery:${activeUserId}`);
+    // This is an erasure, not a reset to the demo. Do not notify sync subscribers.
+    state = makeEmptyAccountState();
+  }
   function loadDemoData() { return getState(); }
   window.addEventListener?.('online', flushOutbox);
 
   return {
-    getState, getSyncedData, replaceSyncedData, getDataSyncStatus, markDataSynced, subscribe, useUser, getOnboarding, saveOnboarding, isOnboardingComplete, getProfile, saveProfile, getSettings, saveSettings,
+    getState, getSyncedData, getSyncBaseline, replaceSyncedData, getDataSyncStatus, markDataSynced, subscribe, useUser, getOnboarding, saveOnboarding, isOnboardingComplete, getProfile, saveProfile, getSettings, saveSettings,
     getBooks, getBookById, addBook, updateBook, deleteBook, getCurrentBook, setActiveBook, setCurrentBook, clearActiveBook, completeBook,
     getSessions, getSessionsForBook, saveSession, updateSession, deleteSession, getTodaySessions, getTodayReadingTime,
     getActiveSession, getActiveSessions, getActiveSessionForBook, focusActiveSession, startActiveSession, recoverActiveSession, heartbeatActiveSession, activeDuration, updateActiveSession, addActiveSessionCitation, pauseActiveSession, resumeActiveSession, finishActiveSession,

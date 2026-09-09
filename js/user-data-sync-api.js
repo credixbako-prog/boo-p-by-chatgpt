@@ -177,36 +177,7 @@ BT.userDataSync = (() => {
 
   async function upsertWithContext(context, kind, records, options = {}) {
     if (context.skipped) return writeSkipped(context);
-    const config = configFor(kind);
-    const normalized = recordsFor(config, records);
-    if (!normalized.length) return { skipped:false, reason:null, count:0, records:[] };
-
-    const saved = [];
-    for (const batch of chunks(normalized)) {
-      const rows = batch.map(item => ({
-        user_id:context.userId,
-        [config.key]:item.id,
-        payload:item.payload,
-        client_updated_at:logicalTimestamp(item.source, options)
-      }));
-      const { data, error } = await context.api
-        .from(config.table)
-        .upsert(rows, { onConflict:`user_id,${config.key}`, ignoreDuplicates:false })
-        .select(`${config.key}, payload, client_updated_at, updated_at`);
-      if (error) throw friendly(error, `La collection ${config.name} ne peut pas être synchronisée.`);
-      saved.push(...(data || []));
-    }
-    return {
-      skipped:false,
-      reason:null,
-      count:saved.length,
-      records:saved.map(row => ({
-        id:row[config.key],
-        payload:row.payload,
-        clientUpdatedAt:row.client_updated_at,
-        serverUpdatedAt:row.updated_at
-      }))
-    };
+    throw new Error('Écriture directe désactivée : utilisez mergeSnapshot avec la dernière base synchronisée.');
   }
 
   async function upsert(kind, records, options = {}) {
@@ -223,20 +194,7 @@ BT.userDataSync = (() => {
 
   async function deleteWithContext(context, kind, ids) {
     if (context.skipped) return { skipped:true, reason:context.reason, count:0, ids:[] };
-    const config = configFor(kind);
-    const normalized = normalizedIds(config, ids);
-    const deleted = [];
-    for (const batch of chunks(normalized)) {
-      const { data, error } = await context.api
-        .from(config.table)
-        .delete()
-        .eq('user_id', context.userId)
-        .in(config.key, batch)
-        .select(config.key);
-      if (error) throw friendly(error, `La suppression dans ${config.name} ne peut pas être synchronisée.`);
-      deleted.push(...(data || []).map(row => row[config.key]));
-    }
-    return { skipped:false, reason:null, count:deleted.length, ids:deleted };
+    throw new Error('Suppression directe désactivée : utilisez mergeSnapshot avec la dernière base synchronisée.');
   }
 
   async function remove(kind, ids) {
@@ -315,53 +273,47 @@ BT.userDataSync = (() => {
     };
   }
 
-  async function deleteMissingWithContext(context, kind, keepIds) {
-    const config = configFor(kind);
-    const { data, error } = await context.api
-      .from(config.table)
-      .select(config.key)
-      .eq('user_id', context.userId);
-    if (error) throw friendly(error, `La collection ${config.name} ne peut pas être réconciliée.`);
-    const keep = new Set(keepIds);
-    const missing = (data || []).map(row => row[config.key]).filter(id => !keep.has(id));
-    return deleteWithContext(context, config.name, missing);
-  }
-
   async function pushAll(snapshot = {}, options = {}) {
     const context = await resolveContext();
     if (context.skipped) return {
       skipped:true, reason:context.reason, count:0, collections:{}
     };
+    throw new Error('Remplacement d’instantané désactivé : utilisez mergeSnapshot avec la dernière base synchronisée.');
 
-    const provided = [];
-    if (Array.isArray(snapshot.books)) provided.push(['books', snapshot.books]);
-    if (Array.isArray(snapshot.sessions)) provided.push(['sessions', snapshot.sessions]);
-    if (Array.isArray(snapshot.traces)) provided.push(['traces', snapshot.traces]);
-    if (Array.isArray(snapshot.lexicon)) provided.push(['lexicon', snapshot.lexicon]);
-    if (snapshot.goals && typeof snapshot.goals === 'object') provided.push(['goals', snapshot.goals]);
+  }
 
-    const collections = {};
-    for (const [kind, records] of provided) {
-      collections[kind] = await upsertWithContext(context, kind, records, { touch:options.touch === true });
+  function checkedSnapshot(data) {
+    if (!data || !['books','sessions','traces','lexicon'].every(key => Array.isArray(data[key]))
+      || !data.goals || typeof data.goals !== 'object' || Array.isArray(data.goals)) {
+      throw new Error('Réponse de synchronisation incomplète ; copie locale conservée.');
     }
+    return data;
+  }
 
-    if (options.replaceRemote === true) {
-      for (const [kind, records] of provided) {
-        const config = configFor(kind);
-        const keepIds = recordsFor(config, records).map(item => item.id);
-        collections[kind].deleted = await deleteMissingWithContext(context, kind, keepIds);
-      }
+  async function readSnapshot() {
+    const context = await resolveContext();
+    if (context.skipped) return emptySnapshot(context.reason);
+    const { data, error } = await context.api.rpc('read_personal_snapshot');
+    if (error) throw friendly(error, 'Les données synchronisées ne peuvent pas être chargées.');
+    return checkedSnapshot(data);
+  }
+
+  async function mergeSnapshot(baseline, desired) {
+    const context = await resolveContext();
+    if (context.skipped) return emptySnapshot(context.reason);
+    const { data, error } = await context.api.rpc('merge_personal_snapshot', { baseline, desired });
+    if (error?.message?.includes('BOOP_SYNC_CONFLICT')) {
+      const conflict = new Error('Un autre appareil a modifié les mêmes données. Votre copie locale est conservée : exportez-la avant de choisir la version à reprendre.');
+      conflict.code = 'BOOP_SYNC_CONFLICT';
+      throw conflict;
     }
-
-    return {
-      skipped:false,
-      reason:null,
-      count:Object.values(collections).reduce((sum, result) => sum + result.count, 0),
-      collections
-    };
+    if (error) throw friendly(error, 'Synchronisation interrompue ; vos changements restent sur cet appareil.');
+    return checkedSnapshot(data);
   }
 
   return Object.freeze({
+    readSnapshot,
+    mergeSnapshot,
     configure,
     isGuestMode,
     pull,

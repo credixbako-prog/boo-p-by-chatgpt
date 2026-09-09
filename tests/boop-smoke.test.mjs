@@ -520,7 +520,8 @@ test('synchronisation: bibliothèque, sessions, Traces, lexiques et objectifs so
   ]);
   assert.match(appHtml, /js\/user-data-sync-api\.js/);
   assert.match(app, /bootstrapUserDataSync/);
-  assert.match(app, /replaceRemote:true/);
+  assert.match(app, /mergeSnapshot/);
+  assert.doesNotMatch(app, /replaceRemote:true/);
   assert.match(store, /function replaceSyncedData/);
   assert.match(store, /function markDataSynced/);
   assert.match(api, /user_books/);
@@ -891,7 +892,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v37/);
+  assert.match(worker, /boo-p-webapp-v39/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

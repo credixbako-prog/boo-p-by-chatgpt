@@ -148,84 +148,6 @@ function loadSync({ api = new MemorySupabase(), guest = false, authenticated = t
   };
 }
 
-test('pushAll puis pullAll synchronisent toutes les données privées', async () => {
-  const { api, sync } = loadSync();
-  const snapshot = {
-    books:[{
-      id:'book-1', title:'Le livre test', status:'lu',
-      startedAt:'2026-01-02T10:00:00.000Z',
-      completedAt:'2026-01-10T18:30:00.000Z', rating:4
-    }],
-    sessions:[{
-      id:'session-1', bookId:'book-1', startedAt:'2026-01-10T17:30:00.000Z',
-      endedAt:'2026-01-10T18:30:00.000Z', durationSeconds:3600
-    }],
-    traces:[{
-      id:'trace-1', bookId:'book-1', text:'Une Trace personnelle.',
-      createdAt:'2026-01-10T18:31:00.000Z', updatedAt:'2026-01-10T18:31:00.000Z'
-    }],
-    lexicon:[{
-      id:'lex-1', bookId:'book-1', word:'Sérendipité', kind:'word',
-      definition:'Découverte heureuse faite par hasard.', updatedAt:'2026-01-10T18:32:00.000Z'
-    }],
-    goals:{
-      week:{ dailyMinutes:20, daysTarget:4 },
-      month:{ targetBooks:2, bookIds:['book-1'] },
-      year:{ targetBooks:12, bookIds:['book-1'] },
-      celebrated:{ 'year:2026':true }
-    }
-  };
-
-  const pushed = await sync.pushAll(snapshot, { touch:true });
-  assert.equal(pushed.skipped, false);
-  assert.equal(pushed.count, 8);
-  assert.equal(api.tables.get('user_books')[0].user_id, USER_ID);
-
-  const pulled = plain(await sync.pullAll());
-  assert.equal(pulled._sync.skipped, false);
-  assert.equal(pulled.books.length, 1);
-  assert.equal(pulled.books[0].startedAt, snapshot.books[0].startedAt);
-  assert.equal(pulled.books[0].completedAt, snapshot.books[0].completedAt);
-  assert.equal(pulled.books[0].rating, 4);
-  assert.deepEqual(pulled.sessions, snapshot.sessions);
-  assert.deepEqual(pulled.traces, snapshot.traces);
-  assert.deepEqual(pulled.lexicon, snapshot.lexicon);
-  assert.deepEqual(pulled.goals, snapshot.goals);
-  assert.ok(pulled._sync.versions.books['book-1'].serverUpdatedAt);
-});
-
-test('upsert et delete ciblés modifient uniquement les enregistrements demandés', async () => {
-  const { api, sync } = loadSync();
-  await sync.upsertBooks([
-    { id:'book-1', title:'Premier', rating:2 },
-    { id:'book-2', title:'Second', rating:3 }
-  ]);
-  await sync.upsertBooks({ id:'book-1', title:'Premier', rating:5 });
-  await sync.upsertSessions({ id:'session-1', bookId:'book-1', durationSeconds:900 });
-  await sync.upsertTraces({ id:'trace-1', bookId:'book-1', text:'À supprimer' });
-  await sync.upsertLexicon({ id:'lex-1', word:'Épure', definition:'Forme essentielle.' });
-  await sync.upsertGoals({ month:{ targetBooks:3 }, year:{ targetBooks:20 } });
-
-  const books = plain(await sync.pullBooks());
-  assert.equal(books.find(book => book.id === 'book-1').rating, 5);
-  assert.equal(books.find(book => book.id === 'book-2').rating, 3);
-
-  const deletedBook = await sync.deleteBooks('book-2');
-  const deletedTrace = await sync.deleteTraces('trace-1');
-  const deletedGoal = await sync.deleteGoals('month');
-  assert.equal(deletedBook.count, 1);
-  assert.equal(deletedTrace.count, 1);
-  assert.equal(deletedGoal.count, 1);
-  assert.equal(api.tables.get('user_books').length, 1);
-
-  const pulled = plain(await sync.pullAll());
-  assert.deepEqual(pulled.books.map(book => book.id), ['book-1']);
-  assert.equal(pulled.traces.length, 0);
-  assert.deepEqual(Object.keys(pulled.goals), ['year']);
-  assert.equal(pulled.sessions.length, 1);
-  assert.equal(pulled.lexicon.length, 1);
-});
-
 test('le mode invité ne contacte jamais Supabase, même pour pull, push, upsert et delete', async () => {
   const api = new MemorySupabase();
   const { sync, getReadyCount } = loadSync({ api, guest:true, authenticated:false });
@@ -251,4 +173,55 @@ test('un utilisateur local simulé sans session réelle ne peut pas écrire à d
   assert.equal(result.skipped, true);
   assert.equal(result.reason, 'unauthenticated');
   assert.equal(api.queryCount, 0);
+});
+
+test('la synchronisation utilise un RPC unique avec la base et la copie envoyée', async () => {
+  const { api, sync } = loadSync();
+  const calls = [];
+  const base = { books:[], sessions:[], traces:[], lexicon:[], goals:{} };
+  const desired = { ...base, books:[{ id:'a',title:'A' }] };
+  api.rpc = async (name,args) => { calls.push({ name,args }); return { data:desired,error:null }; };
+  assert.deepEqual(plain(await sync.mergeSnapshot(base,desired)), desired);
+  assert.deepEqual(plain(calls), [{ name:'merge_personal_snapshot',args:{ baseline:base,desired } }]);
+  assert.equal(api.queryCount,0);
+});
+
+test('la lecture complète passe par un résultat JSON sans limite de lignes de collection', async () => {
+  const { api,sync } = loadSync();
+  const data = { books:Array.from({length:1205},(_,id) => ({id:String(id)})),sessions:[],traces:[],lexicon:[],goals:{} };
+  api.rpc = async name => { assert.equal(name,'read_personal_snapshot'); return {data,error:null}; };
+  assert.equal((await sync.readSnapshot()).books.length,1205);
+});
+
+test('un conflit est explicite et ne déclenche aucune écriture de secours', async () => {
+  const { api,sync } = loadSync();
+  let calls = 0;
+  api.rpc = async () => { calls++; return {data:null,error:{message:'BOOP_SYNC_CONFLICT'}}; };
+  await assert.rejects(sync.mergeSnapshot({},{}),error => error.code === 'BOOP_SYNC_CONFLICT');
+  assert.equal(calls,1);
+  assert.equal(api.queryCount,0);
+});
+
+test('les anciennes méthodes d’écriture échouent avant toute requête destructive', async () => {
+  const { api,sync } = loadSync();
+  await assert.rejects(sync.pushAll({books:[]},{replaceRemote:true}),/désactivé/);
+  await assert.rejects(sync.upsertBooks({id:'a'}),/désactivée/);
+  await assert.rejects(sync.deleteBooks('a'),/désactivée/);
+  assert.equal(api.queryCount,0);
+});
+
+test('invités et sessions absentes ne peuvent pas utiliser les nouveaux RPC', async () => {
+  for (const options of [{guest:true,authenticated:false},{guest:false,authenticated:false}]) {
+    const { api,sync } = loadSync(options);
+    api.rpc = () => { throw new Error('Unexpected RPC'); };
+    assert.equal((await sync.mergeSnapshot(null,{}))._sync.skipped,true);
+    assert.equal((await sync.readSnapshot())._sync.skipped,true);
+  }
+});
+
+test('une réponse RPC incomplète ne devient jamais un carnet vide', async () => {
+  const {api,sync} = loadSync();
+  api.rpc=async () => ({data:{books:[]},error:null});
+  await assert.rejects(sync.readSnapshot(),/incomplète/);
+  await assert.rejects(sync.mergeSnapshot(null,{}),/incomplète/);
 });
