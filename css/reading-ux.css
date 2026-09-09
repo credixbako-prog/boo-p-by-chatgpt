@@ -1,19 +1,19 @@
 /* BOO-P — calmer hierarchy, readable controls and direct reading journeys. */
-body { display: block; padding: 0; background-image: none; font-size: 16px; }
+body { display: block; padding: 0; background-image: none; font-size: var(--boo-text-body); }
 :root { --boo-shadow: 0 3px 14px rgba(20,36,56,.055); --boo-shadow-navy: 0 5px 16px rgba(20,36,56,.1); }
-h1 { font-size: clamp(1.8rem, 4vw, 2.45rem); line-height: 1.15; }
-h2 { font-size: clamp(1.25rem, 3vw, 1.7rem); }
-.small, .field-help, .book-card small { font-size: 14px; }
-.micro, .eyebrow, .status-chip, .privacy-badge, .lexicon-kind, .lexicon-card footer { font-size: 12px; }
-.button { font-size: 14px; min-height: 46px; box-shadow: none; }
+h1 { font-size:var(--boo-text-title); line-height: 1.15; }
+h2 { font-size:var(--boo-text-section); }
+.small, .field-help, .book-card small { font-size: var(--boo-text-small); }
+.micro, .eyebrow, .status-chip, .privacy-badge, .lexicon-kind, .lexicon-card footer { font-size: var(--boo-text-meta); }
+.button { font-size: var(--boo-text-small); min-height: 46px; box-shadow: none; }
 .button:hover, .button:active { transform: none; }
 .button--sage { background: var(--boo-sage-dark); color: #fff; }
-.button--small { min-height: 44px; font-size: 13px; }
+.button--small { min-height: 44px; font-size: var(--boo-text-small); }
 .icon-button, .avatar-button { width: 44px; height: 44px; box-shadow: none; }
 .text-link { display: inline-flex; align-items: center; min-height: 44px; }
-.nav-link { font-size: 11px; }
+.nav-link { font-size: var(--boo-text-meta); }
 .page-head { margin-bottom: 20px; }
-.guest-banner { position: relative; font-size: 12px; padding: 8px 16px; }
+.guest-banner { position: relative; font-size: var(--boo-text-meta); padding: 8px 16px; }
 .guest-banner a { padding-block: 5px; }
 .topbar { background: var(--boo-bg); }
 .home-heading { align-items: center; }
@@ -25,22 +25,22 @@ h2 { font-size: clamp(1.25rem, 3vw, 1.7rem); }
 .active-book-info { flex: 1; min-width: 0; }
 .active-book-info h2 { margin-bottom: 7px; }
 .active-book-info p { margin-bottom: 10px; }
-.active-book-info .book-switcher { font-size: 12px; min-height: 38px; margin-bottom: 9px; }
+.active-book-info .book-switcher { font-size: var(--boo-text-meta); min-height: 38px; margin-bottom: 9px; }
 .active-book-info .eyebrow { margin-bottom: 8px; }
 .active-book-card .surface-color-picker { top: 10px; right: 10px; }
 .active-book-actions .button--primary { grid-column: 1 / -1; grid-row: 1; }
 .active-book-actions .button--secondary { grid-column: 1 / -1; }
 .active-book-card > .text-link { justify-content: center; }
-.active-book-manual { padding: 0 6px; min-height: 36px; font-size: 13px; }
+.active-book-manual { padding: 0 6px; min-height: 36px; font-size: var(--boo-text-small); }
 .week-overview { display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-top: 20px; padding: 20px; }
 .week-overview h2 { margin-bottom: 5px; }
-.week-overview p { margin-bottom: 0; font-size: 14px; }
+.week-overview p { margin-bottom: 0; font-size: var(--boo-text-small); }
 .week-overview .day-rings { grid-column: 1 / -1; margin: 0; }
-.week-overview > a { align-self: center; font-size: 13px; }
+.week-overview > a { align-self: center; font-size: var(--boo-text-small); }
 .memory-disclosure { background: var(--boo-paper); border: 1px solid var(--boo-line); border-radius: 20px; }
 .memory-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; cursor: pointer; list-style: none; }
 .memory-disclosure > summary > span:first-child { display: grid; gap: 5px; }
-.memory-disclosure > summary strong { font: 600 22px/1.2 var(--boo-display); }
+.memory-disclosure > summary strong { font: 600 var(--boo-text-section)/1.2 var(--boo-display); }
 .memory-disclosure > div { padding: 0 20px 20px; }
 .memory-disclosure .section-block { margin-top: 16px; }
 .memory-disclosure[open] > summary { border-bottom: 1px solid var(--boo-line); }
@@ -53,23 +53,23 @@ h2 { font-size: clamp(1.25rem, 3vw, 1.7rem); }
 .dna-note p { flex: 1; margin: 0; }
 .library-heading { margin-bottom: 12px; }
 .tabs { margin-bottom: 20px; }
-.tab { min-height: 44px; font-size: 14px; }
+.tab { min-height: 44px; font-size: var(--boo-text-small); }
 .library-search-row { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 10px; }
 .library-search-row .search-field { width: 100%; }
-.search-field input { font-size: 15px; }
+.search-field input { font-size: var(--boo-text-body); }
 .filter-chips, .entry-modes { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
-.filter-chips button, .entry-modes button { min-height: 44px; border: 1px solid var(--boo-line); border-radius: 999px; padding: 8px 13px; background: var(--boo-paper); color: var(--boo-muted); cursor: pointer; font-size: 13px; }
+.filter-chips button, .entry-modes button { min-height: 44px; border: 1px solid var(--boo-line); border-radius: 999px; padding: 8px 13px; background: var(--boo-paper); color: var(--boo-muted); cursor: pointer; font-size: var(--boo-text-small); }
 .filter-chips button[aria-pressed="true"], .entry-modes button[aria-pressed="true"] { color: var(--boo-paper); background: var(--boo-ink); border-color: var(--boo-ink); }
 .library-tools { display: flex; align-items: start; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
 .library-tools p { margin: 10px 0; }
 .library-options { max-width: 78%; }
-.library-options > summary, .shelf-appearance > summary { min-height: 44px; padding: 10px 0; color: var(--boo-sage-dark); font-size: 13px; cursor: pointer; }
+.library-options > summary, .shelf-appearance > summary { min-height: 44px; padding: 10px 0; color: var(--boo-sage-dark); font-size: var(--boo-text-small); cursor: pointer; }
 .library-options > .form-grid { padding: 14px; border: 1px solid var(--boo-line); border-radius: 16px; background: var(--boo-paper); }
 .library-options .view-toggle { flex-wrap: wrap; background: none; border: 0; }
 .view-toggle [aria-pressed="true"] { background: var(--boo-ink); color: var(--boo-paper); }
 .book-card { box-shadow: none; gap: 9px; padding: 12px; }
 .book-card:hover, .book-card:active { transform: none; }
-.book-card strong { font-size: 17px; line-height: 1.25; }
+.book-card strong { font-size: var(--boo-text-body); line-height: 1.25; }
 .book-card small { white-space: normal; line-height: 1.4; }
 .book-grid--list { grid-template-columns: 1fr !important; }
 .book-grid--list .book-card { display: grid; grid-template-columns: 56px minmax(0,1fr); column-gap: 16px; }
@@ -80,7 +80,7 @@ h2 { font-size: clamp(1.25rem, 3vw, 1.7rem); }
 .entry-modes { margin: 0 0 20px; }
 .entry-modes button { flex: 1 1 90px; border-radius: 12px; }
 .optional-fields { padding: 0; border: 1px solid var(--boo-line); border-radius: 14px; background: var(--boo-paper); }
-.optional-fields > summary { min-height: 48px; padding: 14px; font-size: 14px; cursor: pointer; }
+.optional-fields > summary { min-height: 48px; padding: 14px; font-size: var(--boo-text-small); cursor: pointer; }
 .optional-fields > .form-grid { padding: 0 14px 14px; }
 .book-essential { gap: 16px; }
 .book-selection-preview { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: 16px; background: var(--boo-paper-2); }
@@ -90,9 +90,9 @@ h2 { font-size: clamp(1.25rem, 3vw, 1.7rem); }
 .position-number-row { display: flex; align-items: center; gap: 12px; }
 .position-number-row input { width: 120px; min-height: 58px; font: 500 28px/1.2 var(--boo-mono); text-align: center; }
 .session-page-slider > input[type="range"] { min-height: 44px; width: 100%; }
-.session-page-slider label { font-size: 15px; }
+.session-page-slider label { font-size: var(--boo-text-body); }
 .book-rating-field { border: 0; padding: 0; margin: 0; }
-.book-rating-field legend { margin-bottom: 10px; font-size: 14px; }
+.book-rating-field legend { margin-bottom: 10px; font-size: var(--boo-text-small); }
 .rating-button { min-width: 44px; min-height: 44px; }
 .is-reading .bottom-nav { display: none; }
 .is-reading .main-view { padding-bottom: 35px; }
@@ -103,12 +103,12 @@ h2 { font-size: clamp(1.25rem, 3vw, 1.7rem); }
 .capture-choices button { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid var(--boo-line); border-radius: 16px; color: var(--boo-ink); background: var(--boo-paper); cursor: pointer; text-align: left; }
 .capture-choices button > span:first-child { min-width: 30px; font: 600 24px var(--boo-display); color: var(--boo-sage-dark); }
 .capture-choices button > span:nth-child(2) { display: grid; gap: 5px; flex: 1; }
-.capture-choices small { color: var(--boo-muted); font-size: 14px; }
+.capture-choices small { color: var(--boo-muted); font-size: var(--boo-text-small); }
 .notebook-book-filter { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 12px; margin: 12px 0; }
-.notebook-text { font-size: 18px; overflow-wrap: anywhere; }
-.lexicon-card h3.notebook-text { font-size: 23px; }
+.notebook-text { font-size: var(--boo-text-body); overflow-wrap: anywhere; }
+.lexicon-card h3.notebook-text { font-size: var(--boo-text-section); }
 .lexicon-card p.notebook-text { white-space: pre-wrap; }
-.draft-status { margin: 0; font-size: 12px; color: var(--boo-sage-dark); }
+.draft-status { margin: 0; font-size: var(--boo-text-meta); color: var(--boo-sage-dark); }
 .profile-hero > .button, .profile-hero > .text-link { margin: 6px 8px 0 0; }
 .profile-hero::after { pointer-events: none; }
 .profile-hero > .button, .profile-hero > .text-link { position: relative; z-index: 1; }
@@ -116,11 +116,11 @@ h2 { font-size: clamp(1.25rem, 3vw, 1.7rem); }
 .trail-view-modes { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .trail-view-modes .filter-chips { margin: 0; }
 .trail-toolbar { margin-bottom: 10px; }
-.trail-legend { font-size: 12px; }
+.trail-legend { font-size: var(--boo-text-meta); }
 .trail-canvas-shell { height: 62vh; min-height: 360px; }
 .trail-chronology { list-style: none; padding: 0; }
 .trail-chronology > li { margin: 22px 0; }
-.trail-chronology time { display: block; margin: 0 0 9px 4px; color: var(--boo-muted); font-size: 13px; }
+.trail-chronology time { display: block; margin: 0 0 9px 4px; color: var(--boo-muted); font-size: var(--boo-text-small); }
 .trail-chronology a { display: flex; align-items: center; gap: 16px; text-decoration: none; padding: 16px; }
 .trail-chronology a > span:nth-child(2) { display: grid; gap: 7px; flex: 1; }
 .is-trail-immersive .library-heading, .is-trail-immersive .main-view > .tabs, .is-trail-immersive .bottom-nav, .is-trail-immersive .topbar { display: none; }
@@ -128,7 +128,7 @@ h2 { font-size: clamp(1.25rem, 3vw, 1.7rem); }
 .is-trail-immersive .trail-canvas-shell { height: calc(100dvh - 260px); min-height: 350px; }
 .is-trail-immersive .trail-view-modes { position: sticky; top: 0; z-index: 60; padding-block: 6px; background: var(--boo-bg); }
 .notification-button svg { width: 21px; height: 21px; }
-.sync-indicator { display: block; font-size: 12px; color: var(--boo-muted); margin: 3px 0 0; }
+.sync-indicator { display: block; font-size: var(--boo-text-meta); color: var(--boo-muted); margin: 3px 0 0; }
 body[data-theme="dark"] .guest-banner,
 body[data-theme="dark"] .text-link,
 body[data-theme="dark"] .button--ghost,
@@ -153,8 +153,8 @@ body[data-theme="dark"] .home-explore > a > span:first-child { color: #b4d3bf; }
 }
 @media (max-width: 420px) {
   .main-view { padding-inline: 16px; }
-  .home-heading .eyebrow { font-size: 11px; }
-  .home-heading h1 { font-size: 26px; }
+  .home-heading .eyebrow { font-size: var(--boo-text-meta); }
+  .home-heading h1 { font-size: var(--boo-text-title); }
   .active-book-card { padding: 18px 16px 12px; }
   .active-book-main > .book-cover { width: 72px; flex-basis: 72px; }
   .active-book-main { gap: 12px; }
@@ -165,6 +165,6 @@ body[data-theme="dark"] .home-explore > a > span:first-child { color: #b4d3bf; }
   .library-search-row .button { padding-inline: 12px; }
   .filter-chips { gap: 5px; }
   .filter-chips button { padding-inline: 11px; }
-  .guest-banner { font-size: 11px; gap: 8px; }
+  .guest-banner { font-size: var(--boo-text-meta); gap: 8px; }
   .trail-map-controls button { min-width: 44px; min-height: 44px; }
 }

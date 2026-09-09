@@ -492,6 +492,10 @@
     return `<div class="book-cover ${size ? `book-cover--${size}` : ''}" style="background:${attr(book.coverColor || '#315066')}">${image}<span>${esc(book.title)}</span></div>`;
   }
 
+  function addBookButton() {
+    return '<button class="icon-button add-book-scan" type="button" data-action="add-book" aria-label="Ajouter un livre" title="Ajouter un livre · code-barres ou saisie"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M7 3H3v4m14-4h4v4M3 17v4h4m14-4v4h-4M7 7v10m3-10v10m4-10v10m3-10v10"/></svg></button>';
+  }
+
   function bookProgress(book) {
     const audio = book.mediaType === 'audio';
     return {
@@ -514,7 +518,7 @@
     const memoryItems = getMemoryItems(), memory = getMemoryDeck(memoryItems);
     const weekPct = pct(goals.week.value, goals.week.target);
     return `
-      <section class="page-head home-heading"><div><p class="eyebrow">Bonjour ${esc(profile.name)}</p><h1>Un moment pour lire.</h1></div><button class="button button--secondary button--small" type="button" data-action="add-book">+ Livre</button></section>
+      <section class="page-head home-heading"><div><p class="eyebrow">Bonjour ${esc(profile.name)}</p><h1>Un moment pour lire.</h1></div>${addBookButton()}</section>
       <section class="section-block card active-book-card active-book-card--${sessionColor}" aria-labelledby="active-book-title">
         ${surfaceColorPicker('session-card-color', sessionColor, 'Personnaliser la couleur de la session', 'session-card-color-picker')}
         <div class="active-book-main">
@@ -935,7 +939,7 @@
       return String(a.authors[0] || '').localeCompare(String(b.authors[0] || ''), 'fr') || a.title.localeCompare(b.title, 'fr');
     });
     const view = ['shelf','list'].includes(settings.libraryView) ? settings.libraryView : 'grid';
-    return `<div class="library-search-row"><label class="search-field" for="library-search"><span aria-hidden="true">⌕</span><input id="library-search" data-input="library-search" type="search" value="${attr(ui.libraryQuery)}" placeholder="Titre, auteur ou rayon…"></label><button class="button button--primary" type="button" data-action="add-book">+ Ajouter</button></div>
+    return `<div class="library-search-row"><label class="search-field" for="library-search"><span aria-hidden="true">⌕</span><input id="library-search" data-input="library-search" type="search" value="${attr(ui.libraryQuery)}" placeholder="Titre, auteur ou rayon…"></label>${addBookButton()}</div>
       <div class="filter-chips" role="group" aria-label="Lectures à afficher">${[['tous','Tous'],['en-cours','En cours'],['a-lire','À lire'],['lu','Lus'],['wishlist','Envies']].map(([value,label]) => `<button type="button" data-action="library-filter" data-status="${value}" aria-pressed="${ui.libraryStatus === value}">${label}</button>`).join('')}</div>
       <div class="library-tools"><p class="small muted" role="status">${books.length} livre${books.length > 1 ? 's' : ''}</p><details class="library-options"><summary>Filtres et affichage</summary><div class="form-grid"><label class="field">Statut<select id="library-status" data-change="library-status"><option value="tous" ${ui.libraryStatus === 'tous' ? 'selected' : ''}>Tous mes livres</option><option value="wishlist" ${ui.libraryStatus === 'wishlist' ? 'selected' : ''}>Mes envies</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.libraryStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Trier<select id="library-sort" data-change="library-sort">${[['author','Par auteur'],['title','Par titre'],['recent','Ajouts récents'],['status','Par statut']].map(([value,label]) => `<option value="${value}" ${sort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><div class="view-toggle" role="group" aria-label="Affichage de la bibliothèque">${[['grid','Grille'],['list','Liste'],['shelf','Étagère']].map(([value,label]) => `<button class="button button--secondary button--small" type="button" data-action="library-view" data-view="${value}" aria-pressed="${view === value}">${label}</button>`).join('')}</div></div></details></div>
       ${books.length ? renderLibraryBooks(books, view) : `<div class="empty-state"><h3>${ui.libraryStatus === 'wishlist' ? 'Votre wishlist est prête à accueillir des envies' : 'Aucun livre ne correspond'}</h3><p>${ui.libraryStatus === 'wishlist' ? 'Ajoutez une suggestion ou un livre manuellement.' : 'Modifiez le filtre ou ajoutez un ouvrage manuellement.'}</p><button class="button button--primary" type="button" data-action="add-book">Ajouter un livre</button></div>`}
@@ -2473,20 +2477,40 @@
   }
 
   async function submitFinishSession(form, data) {
-    const session = store.getActiveSession(), book = store.getBookById(session.bookId);
+    const session = store.getActiveSession();
+    if (!session || form.dataset.saving) return;
+    const book = store.getBookById(session.bookId);
+    if (!book) return;
+    form.dataset.saving = 'true';
+    form.querySelector('[type="submit"]').disabled = true;
     const traceText = String(data.get('traceText') || '').trim(), share = data.get('share') === 'on';
+    const markRead = data.get('markRead') === 'on';
     const total = book.mediaType === 'audio' ? book.durationMinutes : book.totalPages;
-    store.finishActiveSession({ endPage: clamp(data.get('endPage'), 0, total || 99999), rating: data.get('rating'), traceText, markRead: data.get('markRead') === 'on', share });
+    const saved = store.finishActiveSession({ endPage: clamp(data.get('endPage'), 0, total || 99999), rating: data.get('rating'), traceText, markRead, share });
+    if (!saved) { delete form.dataset.saving; form.querySelector('[type="submit"]').disabled = false; return; }
+    closeDialog(); location.hash = '#home';
+    if (markRead) celebrateFinishedBook(book);
+    else showToast('Session enregistrée, bilan privé');
     if (share && traceText) {
       try {
         const post = isGuestMode()
           ? { type:'trace', bookTitle:book.title, text:traceText, visibility:'public' }
           : await window.BT.community.createPost({ type:'trace', bookTitle:book.title, text:traceText, visibility:'public' });
-        if (post) store.addPost(post);
+        if (post) { store.addPost(post); showToast('Session enregistrée et bilan partagé explicitement'); }
       }
       catch (error) { showToast(error.message || 'Session enregistrée, mais partage non envoyé'); }
     }
-    closeDialog(); showToast(share ? 'Session enregistrée et bilan partagé explicitement' : 'Session enregistrée, bilan privé'); location.hash = '#home';
+  }
+
+  function celebrateFinishedBook(book) {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'app-dialog completion-dialog';
+    dialog.setAttribute('aria-labelledby', 'completion-title');
+    dialog.setAttribute('aria-describedby', 'completion-message');
+    dialog.innerHTML = `<div class="completion-art" aria-hidden="true"><div class="completion-halo"></div><svg class="completion-book" viewBox="0 0 120 100" fill="none"><g class="completion-opening-pages"><path class="completion-page completion-page--left" d="M60 25C44 12 23 12 10 18v62c18-6 34-3 50 9Z"/><path class="completion-page completion-page--right" d="M60 25c16-13 37-13 50-7v62c-18-6-34-3-50 9Z"/><path d="M60 25v64M22 32c9-2 18 0 26 4m-26 8c9-2 18 0 26 4m-26 8c9-2 18 0 26 4m24-24c8-4 17-6 26-4m-26 16c8-4 17-6 26-4m-26 16c8-4 17-6 26-4" stroke="#d4a866" stroke-width="2" stroke-linecap="round"/></g><g class="completion-closed-cover"><rect x="29" y="9" width="64" height="82" rx="5" fill="#142438" stroke="#d4a866" stroke-width="2"/><path d="M38 10v80M44 81h42" stroke="#d4a866" stroke-width="2"/><path d="m65 30 4 11 11 4-11 4-4 11-4-11-11-4 11-4Z" fill="#d4a866"/></g></svg>${Array.from({length:12},(_,i)=>`<span class="completion-spark" style="--angle:${i*30}deg;--delay:${(i%3)*80}ms">✦</span>`).join('')}</div><p class="eyebrow">Une nouvelle page de votre parcours</p><h2 id="completion-title">Bravo, livre terminé !</h2><p class="completion-book-title">${esc(book.title)}</p><p id="completion-message">Vous avez pris le temps d’aller au bout de cette lecture. Une histoire de plus qui vous accompagne.</p><button class="button button--primary" type="button" autofocus>Savourer ce moment</button>`;
+    dialog.querySelector('button').onclick = () => dialog.close();
+    dialog.addEventListener('close', () => { dialog.remove(); document.querySelector('.home-heading [data-action="add-book"]')?.focus({preventScroll:true}); }, {once:true});
+    document.body.append(dialog); dialog.showModal();
   }
 
   async function submitComment(form, data) {

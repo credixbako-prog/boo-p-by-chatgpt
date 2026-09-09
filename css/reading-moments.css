@@ -1,0 +1,46 @@
+/* Shared hierarchy and the two reading milestones. */
+body h1 { font-size:var(--boo-text-title); line-height:1.25; }
+body h2, body h3 { font-size:var(--boo-text-section); line-height:1.35; }
+body .dialog-head h2, .reflection-dialog .dialog-head h2, .voice-dialog .dialog-head h2 { font-size:var(--boo-text-title); }
+.memory-flip-card__question, .memory-flip-card__answer--quote, .quiz-card h3, .reader-dna-card blockquote { font-size:var(--boo-text-section); }
+.memory-flip-card__answer:not(.memory-flip-card__answer--quote) { font-size:var(--boo-text-title); }
+body .button, body .button--small, body .text-link, body .tab,
+body .reflection-tabs button, body .reflection-mode button,
+body .filter-chips button, body .entry-modes button { font-size:var(--boo-text-small); }
+body input, body select, body textarea { font-size:var(--boo-text-body); }
+.add-book-scan { flex-shrink:0; border:1px solid var(--boo-line); border-radius:14px; background:var(--boo-paper); color:var(--boo-ink); }
+.add-book-scan svg { width:24px; height:24px; }
+.add-book-scan:hover { background:var(--boo-paper-2); }
+.session-view .reflection-entry--session { justify-content:center; align-items:center; margin:0 0 8px; }
+.session-view .reflection-invitation, .session-view .session-control-main { background:#142438; color:#fffdf8; border:1px solid #142438; }
+.reflection-invitation { gap:10px; padding:12px 24px; border-radius:999px; }
+.reflection-invitation__spark { display:inline-block; color:#e4c38c; font-size:20px; animation:reflection-welcome 2s ease-in-out 2; }
+@keyframes reflection-welcome { 0%,100% { transform:scale(1); opacity:.8; } 50% { transform:scale(1.22); opacity:1; } }
+
+.app-dialog.completion-dialog { width:min(440px,calc(100vw - 32px)); height:fit-content; max-height:calc(100dvh - 32px); margin:auto; padding:28px 24px; text-align:center; border:1px solid var(--boo-line); border-radius:28px; background:var(--boo-paper); color:var(--boo-ink); overflow:auto; }
+.app-dialog.completion-dialog[open] { display:block; }
+.completion-dialog::backdrop { background:rgba(7,14,24,.62); backdrop-filter:blur(5px); }
+.completion-dialog .eyebrow { font-size:var(--boo-text-meta); margin:8px 0 12px; letter-spacing:.06em; }
+.completion-dialog h2 { font-size:var(--boo-text-title); margin-bottom:12px; }
+.completion-book-title { font:600 var(--boo-text-section)/1.4 var(--boo-display); overflow-wrap:anywhere; margin-bottom:12px; }
+.completion-dialog #completion-message { color:var(--boo-muted); font-size:var(--boo-text-body); line-height:1.65; margin-bottom:24px; }
+.completion-dialog .button { width:100%; background:#142438; color:#fffdf8; }
+.completion-art { position:relative; display:grid; place-items:center; height:164px; isolation:isolate; }
+.completion-halo { position:absolute; width:140px; height:140px; border-radius:50%; background:radial-gradient(circle,#d4a86630,transparent 72%); animation:completion-arrive 1.4s ease-out both; }
+.completion-book { width:116px; height:100px; overflow:visible; animation:completion-arrive 900ms ease-out both; }
+.completion-page { fill:#142438; stroke:#d4a866; stroke-width:2; transform-box:fill-box; }
+.completion-page--left { transform-origin:right center; animation:completion-close 1.2s ease-in-out both; }
+.completion-page--right { transform-origin:left center; animation:completion-close 1.2s ease-in-out both; }
+.completion-opening-pages { animation:completion-pages-away 1.2s ease-in-out both; }
+.completion-closed-cover { transform-origin:center; animation:completion-cover 1.2s ease-in-out both; }
+.completion-spark { position:absolute; top:50%; left:50%; color:#b7853d; font-size:16px; opacity:0; pointer-events:none; animation:completion-spark 1.8s ease-out var(--delay) both; }
+@keyframes completion-arrive { from { opacity:0; transform:translateY(12px) scale(.9); } to { opacity:1; transform:translateY(0) scale(1); } }
+@keyframes completion-close { from { transform:scaleX(1); } to { transform:scaleX(.1); } }
+@keyframes completion-pages-away { 0%,45% { opacity:1; } 80%,100% { opacity:0; } }
+@keyframes completion-cover { 0%,40% { opacity:0; transform:scaleX(.2); } 100% { opacity:1; transform:scaleX(1); } }
+@keyframes completion-spark { 0% { opacity:0; transform:rotate(var(--angle)) translateY(-35px) scale(.3); } 25% { opacity:1; } 100% { opacity:0; transform:rotate(var(--angle)) translateY(-90px) scale(.8); } }
+@media(prefers-reduced-motion:reduce) {
+  .reflection-invitation__spark,.completion-book,.completion-page,.completion-halo,.completion-opening-pages,.completion-closed-cover { animation:none; }
+  .completion-opening-pages { display:none; }
+  .completion-spark { display:none; animation:none; }
+}

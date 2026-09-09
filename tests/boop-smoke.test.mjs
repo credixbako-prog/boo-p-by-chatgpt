@@ -843,7 +843,7 @@ test('mobile: aucun défilement horizontal, y compris dans les dialogues', async
   assert.match(css, /\.dialog-body \{[^}]*overflow-x: (?:hidden|clip)/);
   assert.match(css, /\.app-dialog \{[^}]*overflow-x: (?:hidden|clip)/);
   assert.match(css, /\.tabs \{ flex-wrap: wrap; overflow-x: clip/);
-  assert.match(css, /input, select, textarea \{ font-size: 16px; \}/);
+  assert.match(css, /input, select, textarea \{ font-size: var\(--boo-text-body\); \}/);
 });
 
 test('ajout: la caméra reste réservée au choix explicite Scanner', async () => {
@@ -893,7 +893,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v43/);
+  assert.match(worker, /boo-p-webapp-v44/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

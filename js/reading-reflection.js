@@ -40,7 +40,14 @@ BT.reflection = (() => {
     }
     if(!row)return;
     const entry=document.createElement('div');entry.dataset.reflectionEntry='';entry.className='button-row reflection-entry';
-    if(id)entry.append(button(label,()=>open(id,initial)));
+    if(id){
+      const invitation=button(label,()=>open(id,initial),row.matches('.session-book')?'button button--primary reflection-invitation':'button button--secondary');
+      if(row.matches('.session-book')){
+        entry.classList.add('reflection-entry--session');
+        const spark=document.createElement('span');spark.className='reflection-invitation__spark';spark.setAttribute('aria-hidden','true');spark.textContent='✦';invitation.prepend(spark);
+      }
+      entry.append(invitation);
+    }
     else {
       const label=document.createElement('label');label.textContent=fromNotebook?'Mon carnet pour ce livre':'Réfléchir à un livre ';const select=document.createElement('select');select.setAttribute('aria-label','Livre à explorer');
       BT.store.getBooks().filter(b=>b.libraryState==='library').forEach(b=>{const opt=document.createElement('option');opt.value=b.id;opt.textContent=b.title;select.append(opt);});label.append(select);entry.append(label,button(fromNotebook?'Ouvrir mon carnet':'Ouvrir la réflexion',()=>{if(select.value)open(select.value,initial);}));

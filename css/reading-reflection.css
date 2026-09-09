@@ -2,14 +2,14 @@
 .reflection-dialog [hidden]{display:none!important}
 .reflection-dialog .dialog-body{display:grid;gap:16px}
 .reflection-dialog textarea{width:100%;box-sizing:border-box;resize:vertical;font:inherit;line-height:1.6}
-.reflection-dialog [data-status]{margin:0;color:var(--boo-sage-dark);font-size:14px}
+.reflection-dialog [data-status]{margin:0;color:var(--boo-sage-dark);font-size:var(--boo-text-small)}
 .reflection-tabs [aria-pressed=true]{background:var(--boo-ink);color:var(--boo-paper)}
 .reflection-messages{list-style:none;padding:0;max-height:42dvh;overflow:auto;display:grid;gap:14px}
 .reflection-message{border:1px solid var(--boo-line);border-radius:14px;padding:14px 18px;overflow-wrap:anywhere}
 .reflection-message--user{margin-left:24px;background:var(--boo-bg)}
 .reflection-message--assistant{margin-right:24px}
 .reflection-message p,.reflection-versions p{white-space:pre-wrap;line-height:1.6}
-.reflection-message strong{font-size:12px;color:var(--boo-sage-dark)}
+.reflection-message strong{font-size:var(--boo-text-meta);color:var(--boo-sage-dark)}
 .reflection-entry{margin-top:12px;flex-wrap:wrap}
 .reflection-dialog section{min-width:0}.reflection-dialog button{min-height:44px}
 @media(max-width:520px){.reflection-dialog{width:calc(100vw - 12px);max-height:96dvh}.reflection-dialog .dialog-body{padding:16px}.reflection-dialog .button-row{flex-wrap:wrap}}
