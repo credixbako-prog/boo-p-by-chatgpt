@@ -79,6 +79,25 @@ BT.store = (() => {
     catch { return false; }
   }
 
+  // Unsubmitted notes stay on this device, separate from synchronized snapshots.
+  function getDraft(key) {
+    const drafts = readJSON(`${STATE_KEY}:drafts`, {});
+    const draft = drafts && Object.hasOwn(drafts, key) ? drafts[key] : null;
+    if (!draft) return null;
+    if (Date.now() - new Date(draft.updatedAt).getTime() > 30 * 86400000) { clearDraft(key); return null; }
+    return clone(draft.values);
+  }
+  function saveDraft(key, values) {
+    const previous = readJSON(`${STATE_KEY}:drafts`, {}) || {};
+    const entries = Object.entries(previous).filter(([name, draft]) => name !== key && Date.now() - new Date(draft.updatedAt).getTime() <= 30 * 86400000).slice(-9);
+    return writeJSON(`${STATE_KEY}:drafts`, Object.fromEntries([...entries, [key, { values:clone(values), updatedAt:nowISO() }]]));
+  }
+  function clearDraft(key) {
+    const drafts = readJSON(`${STATE_KEY}:drafts`, {}) || {};
+    delete drafts[key];
+    return writeJSON(`${STATE_KEY}:drafts`, drafts);
+  }
+
   function makeBook(data = {}) {
     const totalPages = Math.max(0, Number(data.totalPages) || 0);
     const currentPage = Math.min(totalPages || Number.MAX_SAFE_INTEGER, Math.max(0, Number(data.currentPage) || 0));
@@ -189,7 +208,7 @@ BT.store = (() => {
       community: demoCommunity(),
       notifications: [],
       badges: { unlocked: {} },
-      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, memoryCardColor: 'sage', sessionCardColor: 'sage', quizCardColor: 'terracotta', dismissedRecommendationIds: [], libraryView: 'shelf', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
+      settings: { theme: 'light', defaultPostVisibility: 'me', notifications: { friends: true, encouragements: true, traces: true, clubs: true, salons: true, goals: true, remote: false }, blockedUsers: [], recentSearches: [], memoryIndex: 0, memoryCardColor: 'sage', sessionCardColor: 'sage', quizCardColor: 'terracotta', dismissedRecommendationIds: [], libraryView: 'grid', librarySort: 'author', libraryFinish: 'terracotta', collapsedLibraryGenres: [] },
       outbox: [], timeline: [], meta: { initializedAt, updatedAt:initializedAt, simulated: true }
     };
   }
@@ -739,6 +758,7 @@ BT.store = (() => {
   function flushOutbox() { if (typeof navigator !== 'undefined' && navigator.onLine && state.outbox.length) { state.outbox = []; commit(); } }
   function clearAll() {
     localStorage.removeItem(STATE_KEY);
+    localStorage.removeItem(`${STATE_KEY}:drafts`);
     localStorage.removeItem(ONBOARDING_KEY);
     if (activeUserId) localStorage.removeItem(`boop_sync_recovery:${activeUserId}`);
     // This is an erasure, not a reset to the demo. Do not notify sync subscribers.
@@ -753,6 +773,7 @@ BT.store = (() => {
     getSessions, getSessionsForBook, saveSession, updateSession, deleteSession, getTodaySessions, getTodayReadingTime,
     getActiveSession, getActiveSessions, getActiveSessionForBook, focusActiveSession, startActiveSession, recoverActiveSession, heartbeatActiveSession, activeDuration, updateActiveSession, addActiveSessionCitation, pauseActiveSession, resumeActiveSession, finishActiveSession,
     getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, reviewLexiconWord, deleteLexiconWord,
+    getDraft, saveDraft, clearDraft,
     getGoal, saveGoal, getGoalProgress, updateGoal, markGoalCelebrated, isGoalCelebrated,
     getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, addGroup, getGroups, updateGroup, toggleClub, addGroupMember, removeGroupMember, addGroupPost, addGroupComment, toggleGroupPostEncouragement, addGroupBook, updateGroupBook, updateSalon, addSalon, addSalonMessage,
     getNotifications, replaceNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getReaderDNA, getStats, getBadges, exportData, flushOutbox, clearAll, loadDemoData,

@@ -178,15 +178,15 @@ test('lexique: dictionnaire, questions ciblées et répétition espacée', async
   assert.match(store, /reviewLexiconWord/);
 });
 
-test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
+test('bibliothèque: sentier arborescent et carnet filtrable', async () => {
   const [app, css] = await Promise.all([read('js/mvp-app.js'), read('css/mvp-v5.css')]);
-  assert.match(app, /label: 'Galerie'/);
+  assert.match(app, /label: 'Bibliothèque'/);
   assert.match(app, /class="gallery-nav-glyph"/);
   assert.match(css, /\.nav-link__icon \{ display: grid; width: 24px; height: 24px; place-items: center;/);
   assert.match(css, /\.gallery-nav-glyph \{[^}]*transform: translate\(-4px,-4px\)/);
-  assert.match(app, /\['library','Bibliothèque'\]/);
+  assert.match(app, /\['library','Mes livres'\]/);
   assert.match(app, /\['trail','Sentier'\]/);
-  assert.match(app, /\['lexicon','Lexiques'\]/);
+  assert.match(app, /\['lexicon','Carnet'\]/);
   assert.doesNotMatch(app, /const tabs = \[\['overview','Profil'\],\['goals','Objectifs'\]\]/);
   assert.match(app, /id="profile-goals"/);
   assert.match(app, /href="#profile\?section=goals"/);
@@ -206,12 +206,12 @@ test('galerie: sentier arborescent et filtre flottant du lexique', async () => {
   assert.match(app, /Commentaires/);
   assert.match(app, /Notes & Traces/);
   assert.match(app, /window\.BT\.trailMindmap/);
-  assert.match(app, /data-action="lexicon-filter"/);
+  assert.match(app, /data-action="notebook-filter"/);
   assert.match(css, /\.trail-map-controls/);
   assert.match(css, /\.trail-genre-node/);
   assert.match(css, /data:image\/svg\+xml/);
   assert.match(css, /\.lexicon-filter-fab/);
-  assert.match(app, /class="lexicon-toolbar__actions"/);
+  assert.match(app, /class="notebook-text"/);
   assert.match(css, /\.lexicon-filter-fab__menu \{ position: absolute; top:/);
 });
 
@@ -845,13 +845,13 @@ test('mobile: aucun défilement horizontal, y compris dans les dialogues', async
   assert.match(css, /input, select, textarea \{ font-size: 16px; \}/);
 });
 
-test('accueil: l’ajout rapide ouvre un scanner ISBN cadré sur téléphone', async () => {
+test('ajout: la caméra reste réservée au choix explicite Scanner', async () => {
   const [app, css] = await Promise.all([read('js/mvp-app.js'), read('css/mvp-v5.css')]);
-  assert.match(app, /home-add-book-fab/);
-  assert.match(app, /Scanner un ISBN ou ajouter un livre/);
-  assert.match(app, /barcode-add-icon/);
-  assert.match(app, /openBookDialog\(null, \{ openScanner:true \}\)/);
-  assert.match(app, /cameraInput\?\.showPicker/);
+  assert.match(app, /class="page-head home-heading"/);
+  assert.match(app, /Scanner un ISBN/);
+  assert.match(app, /data-form="catalog-search"/);
+  assert.match(app, /case 'add-book': openBookDialog\(\)/);
+  assert.match(app, /mode === 'scan' && userAction/);
   assert.match(app, /function cropISBNAnalysisBlob/);
   assert.match(app, /const ratio = 1\.8/);
   assert.match(css, /\.barcode-add-icon/);
@@ -892,7 +892,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v39/);
+  assert.match(worker, /boo-p-webapp-v40/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

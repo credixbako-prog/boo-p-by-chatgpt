@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'boo-p-webapp-v39';
+const CACHE_VERSION = 'boo-p-webapp-v40';
 const APP_SHELL = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const APP_SHELL = [
   './css/components.css',
   './css/landing.css',
   './css/mvp-v5.css',
+  './css/reading-ux.css',
   './css/screens.css',
   './css/tokens.css',
   './js/auth.js',

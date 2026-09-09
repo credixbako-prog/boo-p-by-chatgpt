@@ -84,6 +84,7 @@
     const timeout = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
       const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+      if (response.status === 429) throw new Error('Le catalogue reçoit beaucoup de demandes. Réessayez plus tard ou saisissez le livre manuellement.');
       if (!response.ok) throw new Error(`Catalogue indisponible (${response.status})`);
       return await response.json();
     } catch (error) {

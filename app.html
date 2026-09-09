@@ -10,6 +10,7 @@
   <meta name="apple-mobile-web-app-title" content="BOO-P">
   <meta name="description" content="BOO-P, compagnon personnel et communautaire de lecture — prototype web MVP v5 avec authentification et Traces sécurisées.">
   <title>BOO-P — Compagnon de lecture</title>
+  <link rel="icon" type="image/png" href="assets/icons/boo-p-icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/icons/boo-p-apple-touch-icon.png">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
@@ -22,6 +23,7 @@
   <link rel="stylesheet" href="css/base.css?v=20260824-4">
   <link rel="stylesheet" href="css/animations.css?v=20260820-2">
   <link rel="stylesheet" href="css/mvp-v5.css?v=20260908-4">
+  <link rel="stylesheet" href="css/reading-ux.css?v=20260909-1">
 </head>
 <body>
   <a class="skip-link" href="#main-view">Aller au contenu</a>
@@ -55,7 +57,7 @@
         </div>
         <div class="topbar__actions">
           <button class="icon-button" type="button" data-action="open-search" aria-label="Ouvrir la recherche globale" title="Rechercher"><span aria-hidden="true">⌕</span></button>
-          <button class="icon-button notification-button" type="button" data-action="open-notifications" aria-label="Ouvrir les notifications" title="Notifications"><span aria-hidden="true">♢</span><span class="notification-badge" id="notification-badge" hidden></span></button>
+          <button class="icon-button notification-button" type="button" data-action="open-notifications" aria-label="Ouvrir les notifications" title="Notifications"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg><span class="notification-badge" id="notification-badge" hidden></span></button>
           <a class="avatar-button" href="#profile" aria-label="Ouvrir le profil" id="profile-shortcut">D</a>
         </div>
       </header>
@@ -98,16 +100,16 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="sr-only" id="live-region" role="status" aria-live="polite"></div>
 
-  <script src="js/store.js?v=20260908-4"></script>
+  <script src="js/store.js?v=20260909-1"></script>
   <script src="js/user-data-sync-api.js?v=20260826-2"></script>
   <script src="js/community-api.js?v=20260908-4"></script>
   <script src="js/notifications-api.js?v=20260821-4"></script>
   <script src="js/speech.js?v=20260820-2"></script>
-  <script src="js/book-lookup.js?v=20260824-5"></script>
+  <script src="js/book-lookup.js?v=20260909-1"></script>
   <script src="js/dictionary.js?v=20260826-2"></script>
   <script src="js/monthly-report.js?v=20260907-3"></script>
   <script src="js/components/trail-mindmap.js?v=20260908-1"></script>
-  <script src="js/mvp-app.js?v=20260908-4"></script>
+  <script src="js/mvp-app.js?v=20260909-1"></script>
   <script src="js/pwa.js?v=20260820-1"></script>
 </body>
 </html>

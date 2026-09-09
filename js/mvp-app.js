@@ -14,21 +14,21 @@
     catalogRecommendations: [], recommendationsBusy: false, currentRecommendations: [],
     monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
     selectedLibraryBookId: null, memoryDeckKeys: [], memoryDeckSignature: '', memorySessionTotal: 0, memorySessionComplete: false,
-    memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all',
-    quizSignature: '', quizQuestionIds: [], quizIndex: 0, quizScore: 0, quizAnswered: false, quizSelected: '', quizStarted: false, quizFinished: false, quizSeed: 0,
+    memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all', notebookBook: '', trailMode: 'map', trailImmersive: false, catalogRequest: 0,
+    quizSignature: '', quizQuestionIds: [], quizIndex: 0, quizScore: 0, quizAnswered: false, quizSelected: '', quizStarted: false, memoryExpanded: false, quizFinished: false, quizSeed: 0,
     expandedTrailBooks: new Set(), trailYear: 'all', trailStatus: 'all', trailScale: .72, trailViewCenter: null, trailPinch: null, clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map(),
     syncReady: false, syncBusy: false, syncPending: false, syncTimer: null, syncUnsubscribe: null, syncBootstrapping: false, syncErrorShown: false
   };
 
   const NAV = [
     { id: 'home', label: 'Accueil', icon: '⌂', href: '#home' },
+    { id: 'path', label: 'Bibliothèque', icon: '<span class="gallery-nav-glyph"></span>', href: '#path?tab=library' },
     { id: 'community', label: 'Communauté', icon: '◎', href: '#community?tab=public' },
-    { id: 'path', label: 'Galerie', icon: '<span class="gallery-nav-glyph"></span>', href: '#path?tab=library' },
     { id: 'profile', label: 'Profil', icon: '◉', href: '#profile?tab=overview' }
   ];
   const TITLES = {
     home: ['Votre espace', 'Accueil'], community: ['Échanges choisis', 'Communauté'],
-    path: ['Votre cheminement', 'Galerie'], profile: ['Identité du lecteur', 'Profil'],
+    path: ['Livres et souvenirs', 'Bibliothèque'], profile: ['Identité du lecteur', 'Profil'],
     session: ['Mode immersif', 'Session de lecture'], book: ['Dans votre bibliothèque', 'Fiche du livre'],
     club: ['Communauté à taille humaine', 'Club de lecture']
   };
@@ -149,7 +149,7 @@
       store.replaceNotifications([]);
       refreshNotifications({ quiet:true }).then(startNotificationSubscription);
     }
-    ui.timer = window.setInterval(tickSessionClock, 1000);
+    ui.timer = window.setInterval(() => { tickSessionClock(); updateSyncIndicator(); }, 1000);
     ui.heartbeat = window.setInterval(() => store.heartbeatActiveSession(), 10000);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); refreshNotifications({ quiet:true }); bootstrapUserDataSync({ quiet:true, refresh:true }).finally(() => render()); } });
     window.addEventListener('pagehide', () => { ui.notificationUnsubscribe?.(); ui.syncUnsubscribe?.(); clearTimeout(ui.syncTimer); }, { once:true });
@@ -242,7 +242,10 @@
   function bindGlobalEvents() {
     document.addEventListener('click', handleClick);
     document.addEventListener('change', handleChange);
+    document.addEventListener('input', saveNotebookDraft);
+    document.addEventListener('change', saveNotebookDraft);
     document.addEventListener('toggle', handleLibraryShelfToggle, true);
+    document.addEventListener('toggle', event => { if (event.target.isConnected && event.target.matches('details.memory-disclosure')) ui.memoryExpanded = event.target.open; }, true);
     document.addEventListener('scroll', handleMemoryCarouselScroll, true);
     document.addEventListener('input', handleInput);
     document.addEventListener('submit', handleSubmit);
@@ -266,6 +269,13 @@
     document.getElementById('mobile-nav').innerHTML = links;
   }
 
+  function updateSyncIndicator() {
+    const label = document.getElementById('sync-indicator'); if (!label) return;
+    const status = store.getDataSyncStatus();
+    const message = isGuestMode() ? 'Enregistré sur cet appareil' : !navigator.onLine ? 'Hors connexion · copie locale' : ui.syncBusy || ui.syncBootstrapping ? 'Synchronisation en cours…' : ui.syncReady && !status.dirty && status.lastSyncedAt ? 'Synchronisé' : status.dirty && ui.syncReady ? 'Modifications à synchroniser' : 'Synchronisation à reprendre';
+    if (label.textContent !== message) label.textContent = message;
+  }
+
   function updateNavigation() {
     const active = ui.route === 'book' || ui.route === 'session' || ui.route === 'club'
       ? (ui.route === 'book' ? 'path' : ui.route === 'club' ? 'community' : 'home')
@@ -280,7 +290,7 @@
   }
 
   function render(shouldFocus = false) {
-    const previousRoute = ui.renderedRoute;
+    const previousRoute = ui.renderedRoute, previousHash = ui.renderedHash;
     parseRoute();
     if (ui.route !== 'path' || ui.pathTab !== 'library') ui.selectedLibraryBookId = null;
     if (ui.route === 'session' && !store.getActiveSession()) { location.hash = '#home'; return; }
@@ -288,20 +298,26 @@
     const renderers = { home: renderHome, community: renderCommunity, path: renderPath, profile: renderProfile, session: renderSession, book: renderBookDetail, club: renderClubSpace };
     const paint = () => {
       updateNavigation(); updateHeader();
+      document.body.classList.toggle('is-reading', ui.route === 'session');
+      document.body.classList.toggle('is-trail-immersive', ui.route === 'path' && ui.pathTab === 'trail' && ui.trailImmersive);
       try { view.innerHTML = renderers[ui.route](); }
       catch (error) {
         console.error('BOO-P render error', error);
         view.innerHTML = `<section class="empty-state" role="alert"><h1>Un passage s’est refermé trop vite</h1><p>Vos données locales sont intactes. Vous pouvez revenir à l’Accueil et réessayer.</p><a class="button button--primary" href="#home">Revenir à l’Accueil</a></section>`;
       }
-      ui.renderedRoute = ui.route;
+      ui.renderedRoute = ui.route; ui.renderedHash = location.hash;
       checkCelebrations();
-      tickSessionClock();
+      tickSessionClock(); updateSyncIndicator();
       requestAnimationFrame(() => {
+        if (previousHash && previousHash !== location.hash) window.scrollTo({ top:0, behavior:'instant' });
         const carousel = document.querySelector('[data-memory-carousel]');
         if (carousel) carousel.scrollLeft = Math.min(ui.memoryCursor, carousel.children.length - 1) * carousel.clientWidth;
         if (ui.route === 'club') loadClubSpace(ui.params.get('id'));
         if (ui.route === 'path' && ui.pathTab === 'trail') restoreTrailViewport();
-        if (ui.route === 'profile' && (ui.params.get('section') === 'goals' || ui.params.get('tab') === 'goals')) document.getElementById('profile-goals')?.scrollIntoView({ behavior:'smooth', block:'start' });
+        if (ui.route === 'profile' && ['goals', 'settings'].includes(ui.params.get('section'))) {
+          const section = document.getElementById('profile-' + ui.params.get('section'));
+          section?.scrollIntoView({ behavior:'auto', block:'start' }); section?.focus({ preventScroll:true });
+        }
       });
     };
     const routeChanged = Boolean(previousRoute && previousRoute !== ui.route);
@@ -497,25 +513,7 @@
     const memoryItems = getMemoryItems(), memory = getMemoryDeck(memoryItems);
     const weekPct = pct(goals.week.value, goals.week.target);
     return `
-      <section class="page-head"><div><p class="eyebrow">Bonjour ${esc(profile.name)}</p><h1>Où en est votre lecture&nbsp;?</h1><p>Un regard calme sur votre régularité, vos livres et ce que vous souhaitez garder.</p></div><span class="privacy-badge">Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</span></section>
-
-      ${dnaBooksRemaining ? `<section class="dna-onboarding-nudge" aria-labelledby="dna-nudge-title"><span class="dna-onboarding-nudge__mark" aria-hidden="true">✦</span><div><p class="eyebrow">Votre portrait se précise</p><h2 id="dna-nudge-title">Ajoutez encore ${dnaBooksRemaining} livre${dnaBooksRemaining > 1 ? 's' : ''} pour affiner votre ADN</h2><p>BOO-P affine ce portrait à partir des livres réellement présents dans votre bibliothèque. L’ajout rapide permet aussi de scanner leur ISBN.</p><div class="dna-onboarding-nudge__progress" role="progressbar" aria-label="${libraryBookCount} livres sur ${dnaBookTarget}" aria-valuemin="0" aria-valuemax="${dnaBookTarget}" aria-valuenow="${Math.min(libraryBookCount,dnaBookTarget)}"><span style="--dna-progress:${Math.min(100,libraryBookCount * 10)}%"></span></div><small>${libraryBookCount}/${dnaBookTarget} livres ajoutés</small></div><button class="button button--sage button--small" type="button" data-action="add-book">Ajouter un livre</button></section>` : ''}
-
-      <section class="card streak-card" aria-labelledby="regularity-title">
-        <div class="section-heading"><div><p class="eyebrow">Semaine du lundi au dimanche</p><h2 id="regularity-title">Régularité quotidienne</h2></div><button class="text-link" type="button" data-action="show-week-detail">Voir le détail</button></div>
-        <div class="day-rings">${goals.week.days.map(day => `<button class="day-ring ${day.today ? 'is-today' : ''} ${day.reached ? 'is-reached' : ''}" type="button" data-action="show-day" data-day="${day.key}" style="--progress:${Math.min(360, pct(day.minutes, day.target) * 3.6)}deg" aria-label="${day.label}, ${day.minutes} minutes sur ${day.target}${day.today ? ', aujourd’hui' : ''}"><span>${day.label}</span></button>`).join('')}</div>
-        <div class="streak-summary"><strong>${goals.week.value}/${goals.week.target} jours atteints</strong><span>Aujourd’hui&nbsp;: ${goals.week.todayMinutes}/${goals.week.dailyTarget} min</span></div>
-      </section>
-
-      <section class="section-block" aria-labelledby="home-goals-title">
-        <div class="section-heading"><h2 id="home-goals-title">Objectifs</h2><a class="text-link" href="#profile?section=goals">Ajuster dans Profil</a></div>
-        <div class="goal-grid">
-          ${goalMini('Semaine', `${goals.week.value}/${goals.week.target} jours`, weekPct)}
-          ${goalMini('Mois', goalStatusText(goals.month), goals.month)}
-          ${goalMini('Année', goalStatusText(goals.year), goals.year)}
-        </div>
-      </section>
-
+      <section class="page-head home-heading"><div><p class="eyebrow">Bonjour ${esc(profile.name)}</p><h1>Un moment pour lire.</h1></div><button class="button button--secondary button--small" type="button" data-action="add-book">+ Livre</button></section>
       <section class="section-block card active-book-card active-book-card--${sessionColor}" aria-labelledby="active-book-title">
         ${surfaceColorPicker('session-card-color', sessionColor, 'Personnaliser la couleur de la session', 'session-card-color-picker')}
         <div class="active-book-main">
@@ -529,20 +527,27 @@
             ${session ? `<p class="session-state">${session.status === 'paused' ? 'Session en pause' : 'Session en cours'} · <span data-session-clock>${formatDuration(store.activeDuration(session))}</span>${session.autoPaused ? ' · pause automatique après 30 min' : ''}</p>` : ''}
           </div>
         </div>
-        ${active ? `<div class="active-book-actions"><button class="button button--secondary" type="button" data-action="quick-trace" data-book-id="${attr(active.id)}">Laisser une Trace</button><button class="button button--primary" type="button" data-action="${session ? 'resume-session' : 'start-session'}" data-id="${attr(session?.id || '')}">${session ? 'Reprendre la session' : 'Démarrer une session'}</button></div>` : `<a class="button button--primary" href="#path?tab=library">Choisir un livre</a>`}
+        ${active ? `<div class="active-book-actions"><button class="button button--secondary" type="button" data-action="capture-memory" data-book-id="${attr(active.id)}">Garder une Trace</button><button class="button button--primary" type="button" data-action="${session ? 'resume-session' : 'start-session'}" data-id="${attr(session?.id || '')}">${session ? 'Reprendre la session' : 'Commencer à lire'}</button></div>` : `<a class="button button--primary" href="#path?tab=library">Choisir un livre</a>`}
+        ${active ? `<button class="text-link" type="button" data-action="quick-progress" data-id="${attr(active.id)}">Mettre à jour ma ${active.mediaType === 'audio' ? 'minute' : 'page'}</button>` : ''}
         <button class="button button--ghost active-book-manual" type="button" data-action="manual-session">Ajouter une session passée</button>
         ${openSessions.length > 1 ? `<div class="open-session-list" aria-label="Sessions ouvertes">${openSessions.map(item => { const itemBook = store.getBookById(item.bookId); return `<button class="open-session-chip" type="button" data-action="focus-session" data-id="${attr(item.id)}"><span>${item.status === 'running' ? '▶' : 'Ⅱ'}</span><strong>${esc(itemBook?.title || 'Livre')}</strong><small>${formatDuration(store.activeDuration(item))}</small></button>`; }).join('')}</div>` : ''}
       </section>
 
+
+      <section class="card week-overview" aria-labelledby="week-overview-title"><div><p class="eyebrow">À votre rythme</p><h2 id="week-overview-title">Votre semaine</h2><p>${goals.week.value} jour${goals.week.value > 1 ? 's' : ''} de lecture sur ${goals.week.target} souhaité${goals.week.target > 1 ? 's' : ''}</p></div><a class="text-link" href="#profile?section=goals">Voir mes objectifs →</a><div class="day-rings">${goals.week.days.map(day => `<button class="day-ring ${day.today ? 'is-today' : ''} ${day.reached ? 'is-reached' : ''}" type="button" data-action="show-day" data-day="${day.key}" style="--progress:${Math.min(360, pct(day.minutes, day.target) * 3.6)}deg" aria-label="${day.label}, ${day.minutes} minutes sur ${day.target}${day.today ? ', aujourd’hui' : ''}"><span>${day.label}</span></button>`).join('')}</div></section>
+      <details class="memory-disclosure section-block" ${ui.memoryExpanded || ui.quizStarted ? 'open' : ''}><summary><span><span class="eyebrow">Ce qui reste des livres</span><strong>Retrouver mes souvenirs</strong><span class="small muted">Mots, citations et jeux de mémoire</span></span><span aria-hidden="true">＋</span></summary><div>
       <section class="section-block memory-section" aria-labelledby="memory-title">
-        <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} disponible${memory.length > 1 ? 's' : ''}</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez la réponse, touchez une carte pour la retourner ou balayez pour en choisir une autre.</p></div><div class="section-heading__actions"><a class="text-link" href="#path?tab=lexicon">Lexiques</a>${surfaceColorPicker('memory-card-color', memoryColor, 'Personnaliser la couleur des cartes devinettes', 'memory-color-picker')}</div></div>
+        <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} disponible${memory.length > 1 ? 's' : ''}</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez la réponse, touchez une carte pour la retourner ou balayez pour en choisir une autre.</p></div><div class="section-heading__actions"><a class="text-link" href="#path?tab=lexicon">Mon carnet</a>${surfaceColorPicker('memory-card-color', memoryColor, 'Personnaliser la couleur des cartes devinettes', 'memory-color-picker')}</div></div>
         <div class="memory-list memory-list--${memoryColor}" aria-label="Cartes de la mémoire active">${memory.length ? `<div class="memory-carousel" data-memory-carousel tabindex="0" aria-label="Balayez horizontalement entre les cartes">${memory.map((item, index) => renderMemoryQuiz(item, index + 1, memory.length)).join('')}</div><div class="memory-carousel-dots" aria-hidden="true">${memory.map((_, index) => `<span class="${index === Math.min(ui.memoryCursor, memory.length - 1) ? 'is-current' : ''}"></span>`).join('')}</div>` : renderMemoryComplete()}</div>
         <p class="memory-reminder small muted">Les cartes sont réservées aux mots nouveaux · une nouvelle entrée arrive automatiquement après « Retrouvé ».</p>
       </section>
 
       ${renderLexiconQuiz()}
 
-      <button class="button button--sage home-add-book-fab" type="button" data-action="add-book" aria-label="Scanner un ISBN ou ajouter un livre"><span class="barcode-add-icon" aria-hidden="true"></span><span>Ajouter un livre</span></button>`;
+
+      </div></details>
+      <div class="home-explore section-block"><a class="card" href="#path?tab=trail"><span aria-hidden="true">✦</span><div><strong>Explorer mon Sentier</strong><p class="small muted">Les liens entre vos lectures.</p></div><span aria-hidden="true">→</span></a><a class="card" href="#community?tab=clubs"><span aria-hidden="true">◎</span><div><strong>Retrouver mes clubs</strong><p class="small muted">Un livre, une conversation.</p></div><span aria-hidden="true">→</span></a></div>
+      ${dnaBooksRemaining && !settings.dnaNudgeDismissed ? `<aside class="dna-note"><p class="small muted">Votre portrait se précise au fil des livres ajoutés. <a class="text-link" href="#profile">Voir mon portrait</a></p><button class="icon-button" type="button" data-action="dismiss-dna-nudge" aria-label="Masquer cette invitation">×</button></aside>` : ''}`;
   }
 
   function goalMini(label, value, progress) {
@@ -722,13 +727,11 @@
   }
 
   function renderSessionPositionSlider(book, value, { id = 'session-page-slider', name = '', dataChange = '' } = {}) {
-    const audio = book.mediaType === 'audio';
-    const knownMaximum = Number(audio ? book.durationMinutes : book.totalPages) || 0;
-    const maximum = knownMaximum || Math.max(audio ? 600 : 500, Number(value) || 0);
-    const position = clamp(value, 0, maximum);
-    const unit = audio ? 'minute' : 'page';
-    const controlAttribute = name ? `name="${attr(name)}"` : `data-change="${attr(dataChange)}"`;
-    return `<label class="field session-page-slider" for="${attr(id)}"><span>${audio ? 'Minute atteinte' : 'Page atteinte'}</span><span class="session-page-slider__value"><output for="${attr(id)}" data-session-page-output>${position}</output><small>sur ${maximum} ${unit}${maximum > 1 ? 's' : ''}</small></span><input id="${attr(id)}" type="range" min="0" max="${maximum}" step="1" value="${position}" ${controlAttribute}><span class="field-help">Faites glisser le curseur pour choisir la ${unit} atteinte.${knownMaximum ? '' : ' La limite est provisoire tant que la longueur du livre n’est pas renseignée.'}</span></label>`;
+    const audio = book.mediaType === 'audio', knownMaximum = Number(audio ? book.durationMinutes : book.totalPages);
+    const maximum = knownMaximum || 99999, position = Math.round(clamp(value, 0, maximum));
+    const rangeMaximum = knownMaximum || Math.max(1000, position);
+    const label = audio ? 'Minute atteinte' : 'Page atteinte';
+    return `<div class="field session-page-slider"><label for="${attr(id)}-number">${label}</label><div class="position-number-row"><input id="${attr(id)}-number" type="number" inputmode="numeric" min="0" max="${maximum}" step="1" required value="${position}" ${name ? `name="${attr(name)}"` : ''} ${dataChange ? `data-change="${attr(dataChange)}"` : ''} data-position-number><span class="small muted">${knownMaximum ? `sur ${knownMaximum} ${audio ? 'minutes' : 'pages'}` : 'Longueur non renseignée'}</span></div><label class="sr-only" for="${attr(id)}">Ajuster la ${audio ? 'minute' : 'page'} avec le curseur</label><input id="${attr(id)}" type="range" min="0" max="${rangeMaximum}" step="1" value="${position}" ${dataChange ? `data-change="${attr(dataChange)}"` : ''} data-position-range><output class="sr-only" data-session-page-output for="${attr(id)} ${attr(id)}-number">${position}</output></div>`;
   }
 
   function renderSession() {
@@ -911,10 +914,9 @@
   }
 
   function renderPath() {
-    const tabs = [['library','Bibliothèque'],['trail','Sentier'],['lexicon','Lexiques']];
+    const tabs = [['library','Mes livres'],['lexicon','Carnet'],['trail','Sentier']];
     const bodies = { library: renderLibrary, trail: renderTrail, lexicon: renderLexicon };
-    return `<section class="page-head"><div><p class="eyebrow">Livres et mémoire</p><h1>Galerie</h1><p>Votre cheminement reste modifiable : corrigez une page, un statut ou une ancienne lecture à tout moment.</p></div></section>
-      <nav class="tabs" aria-label="Sections de la Galerie">${tabs.map(([id,label]) => `<a class="tab" href="#path?tab=${id}" aria-current="${ui.pathTab === id ? 'page' : 'false'}">${label}</a>`).join('')}</nav>${bodies[ui.pathTab]()}`;
+    return `<section class="page-head library-heading"><div><p class="eyebrow">Livres et souvenirs</p><h1>${ui.pathTab === 'lexicon' ? 'Mon carnet' : ui.pathTab === 'trail' ? 'Mon Sentier' : 'Ma bibliothèque'}</h1></div></section><nav class="tabs" aria-label="Sections de la bibliothèque">${tabs.map(([id,label]) => `<a class="tab" href="#path?tab=${id}" aria-current="${ui.pathTab === id ? 'page' : 'false'}">${label}</a>`).join('')}</nav>${bodies[ui.pathTab]()}`;
   }
 
   function renderLibrary() {
@@ -931,8 +933,10 @@
       if (sort === 'status') return String(a.status).localeCompare(String(b.status), 'fr') || a.title.localeCompare(b.title, 'fr');
       return String(a.authors[0] || '').localeCompare(String(b.authors[0] || ''), 'fr') || a.title.localeCompare(b.title, 'fr');
     });
-    const view = settings.libraryView === 'grid' ? 'grid' : 'shelf';
-    return `<div class="toolbar"><label class="search-field" for="library-search"><span aria-hidden="true">⌕</span><input id="library-search" data-input="library-search" type="search" value="${attr(ui.libraryQuery)}" placeholder="Titre, auteur ou rayon…"></label><label class="sr-only" for="library-status">Filtrer la bibliothèque</label><select id="library-status" data-change="library-status"><option value="tous" ${ui.libraryStatus === 'tous' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${ui.libraryStatus === 'wishlist' ? 'selected' : ''}>Ma wishlist</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.libraryStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select><label class="sr-only" for="library-sort">Trier les livres</label><select id="library-sort" data-change="library-sort"><option value="author" ${sort === 'author' ? 'selected' : ''}>Par auteur</option><option value="title" ${sort === 'title' ? 'selected' : ''}>Par titre</option><option value="recent" ${sort === 'recent' ? 'selected' : ''}>Ajouts récents</option><option value="status" ${sort === 'status' ? 'selected' : ''}>Par statut</option></select><div class="view-toggle" role="group" aria-label="Affichage de la bibliothèque"><button class="icon-button" type="button" data-action="library-view" data-view="shelf" aria-pressed="${view === 'shelf'}" title="Meuble bibliothèque">▥</button><button class="icon-button" type="button" data-action="library-view" data-view="grid" aria-pressed="${view === 'grid'}" title="Grille de couvertures">▦</button></div><button class="button button--primary" type="button" data-action="add-book">Ajouter un livre</button></div>
+    const view = ['shelf','list'].includes(settings.libraryView) ? settings.libraryView : 'grid';
+    return `<div class="library-search-row"><label class="search-field" for="library-search"><span aria-hidden="true">⌕</span><input id="library-search" data-input="library-search" type="search" value="${attr(ui.libraryQuery)}" placeholder="Titre, auteur ou rayon…"></label><button class="button button--primary" type="button" data-action="add-book">+ Ajouter</button></div>
+      <div class="filter-chips" role="group" aria-label="Lectures à afficher">${[['tous','Tous'],['en-cours','En cours'],['a-lire','À lire'],['lu','Lus'],['wishlist','Envies']].map(([value,label]) => `<button type="button" data-action="library-filter" data-status="${value}" aria-pressed="${ui.libraryStatus === value}">${label}</button>`).join('')}</div>
+      <div class="library-tools"><p class="small muted" role="status">${books.length} livre${books.length > 1 ? 's' : ''}</p><details class="library-options"><summary>Filtres et affichage</summary><div class="form-grid"><label class="field">Statut<select id="library-status" data-change="library-status"><option value="tous" ${ui.libraryStatus === 'tous' ? 'selected' : ''}>Tous mes livres</option><option value="wishlist" ${ui.libraryStatus === 'wishlist' ? 'selected' : ''}>Mes envies</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.libraryStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Trier<select id="library-sort" data-change="library-sort">${[['author','Par auteur'],['title','Par titre'],['recent','Ajouts récents'],['status','Par statut']].map(([value,label]) => `<option value="${value}" ${sort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><div class="view-toggle" role="group" aria-label="Affichage de la bibliothèque">${[['grid','Grille'],['list','Liste'],['shelf','Étagère']].map(([value,label]) => `<button class="button button--secondary button--small" type="button" data-action="library-view" data-view="${value}" aria-pressed="${view === value}">${label}</button>`).join('')}</div></div></details></div>
       ${books.length ? renderLibraryBooks(books, view) : `<div class="empty-state"><h3>${ui.libraryStatus === 'wishlist' ? 'Votre wishlist est prête à accueillir des envies' : 'Aucun livre ne correspond'}</h3><p>${ui.libraryStatus === 'wishlist' ? 'Ajoutez une suggestion ou un livre manuellement.' : 'Modifiez le filtre ou ajoutez un ouvrage manuellement.'}</p><button class="button button--primary" type="button" data-action="add-book">Ajouter un livre</button></div>`}
       ${renderRecommendations()}`;
   }
@@ -943,7 +947,7 @@
       const meta = book.libraryState === 'wishlist' ? '<span class="status-chip">Wishlist</span>' : `<span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${STATUS_LABELS[book.status]}</span><span class="micro muted">${SITUATION_LABELS[book.situation]}</span>`;
       return `<button class="book-card ${view === 'shelf' ? 'book-card--shelf' : ''}" type="button" data-action="open-book" data-id="${attr(book.id)}" aria-label="Ouvrir ${attr(book.title)}, ${MEDIA_LABELS[book.mediaType] || 'livre'}">${cover(book)}<strong>${esc(book.title)}</strong><small>${esc(book.authors.join(', '))}</small>${book.libraryState === 'library' ? `<div class="progress-track" aria-label="${attr(progress.label)}"><span style="--width:${pct(progress.value,progress.total)}%"></span></div>` : ''}<div class="book-meta-row"><span class="media-chip">${book.mediaType === 'audio' ? '🎧' : book.mediaType === 'ebook' ? '▤' : '▥'}</span>${meta}</div></button>`;
     };
-    if (view !== 'shelf') return `<div class="book-grid">${books.map(renderCard).join('')}</div>`;
+    if (view !== 'shelf') return `<div class="book-grid ${view === 'list' ? 'book-grid--list' : ''}">${books.map(renderCard).join('')}</div>`;
     const settings = store.getSettings(), collapsed = new Set(settings.collapsedLibraryGenres || []), groups = new Map();
     const finish = ['terracotta','blue','sage','red','black','white'].includes(settings.libraryFinish) ? settings.libraryFinish : 'terracotta';
     books.forEach(book => { const genre = String(book.genre || '').trim() || 'À classer'; if (!groups.has(genre)) groups.set(genre, []); groups.get(genre).push(book); });
@@ -953,7 +957,7 @@
       const isOpen = ui.libraryQuery || !collapsed.has(genreKey);
       return `<details class="genre-shelf" data-library-genre="${attr(genreKey)}" ${isOpen ? 'open' : ''}><summary><span>${esc(genre)}</span><small>${items.length} livre${items.length > 1 ? 's' : ''} · glissez horizontalement</small></summary><div class="physical-shelf" role="group" tabindex="0" aria-label="Rayon ${attr(genre)}, défilement horizontal">${items.map((book,index) => renderBookSpine(book,index)).join('')}</div></details>`;
     }).join('');
-    return `<div class="bookcase-finish-picker" role="group" aria-label="Couleur du meuble">${SURFACE_COLORS.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="library-finish" data-finish="${key}" aria-label="${label}" title="${label}" aria-pressed="${finish === key}"><span aria-hidden="true"></span></button>`).join('')}</div><div class="bookcase bookcase--${finish}" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↔</span> Glissez un rayon pour parcourir les livres. Touchez une première fois pour sélectionner, puis une seconde fois pour ouvrir.</p>${shelves}</div>`;
+    return `<details class="shelf-appearance"><summary>Apparence de l’étagère</summary><div class="bookcase-finish-picker" role="group" aria-label="Couleur du meuble">${SURFACE_COLORS.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="library-finish" data-finish="${key}" aria-label="${label}" title="${label}" aria-pressed="${finish === key}"><span aria-hidden="true"></span></button>`).join('')}</div></details><div class="bookcase bookcase--${finish}" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↔</span> Glissez un rayon pour parcourir les livres. Touchez une première fois pour sélectionner, puis une seconde fois pour ouvrir.</p>${shelves}</div>`;
   }
 
   function renderBookSpine(book, index) {
@@ -1104,16 +1108,18 @@
       return `<div class="trail-canvas-book-wrap trail-canvas-book-wrap--${node.side} ${expanded ? 'is-expanded' : ''}" style="--x:${node.x}px;--y:${node.y}px;--trail-branch-color:${attr(node.color)}"><button class="trail-canvas-book trail-canvas-book--${attr(book.status)}" type="button" data-action="toggle-trail-book" data-id="${attr(book.id)}" aria-expanded="${expanded}" aria-label="${expanded ? 'Replier' : 'Déployer'} les détails de ${attr(book.title)}"><span class="trail-canvas-book__status">${esc(STATUS_LABELS[book.status])}</span><strong>${esc(book.title)}</strong><small>${esc(book.authors.join(', '))}</small><time datetime="${attr(date)}">${dateLabel} · ${formatDate(date)}</time><span class="trail-canvas-book__toggle" aria-hidden="true">${expanded ? '−' : '+'}</span></button>${expanded ? `<a class="trail-canvas-book__open" href="#book?id=${encodeURIComponent(book.id)}">Ouvrir la fiche →</a>` : ''}</div>${satellites}`;
     }).join('');
     const filters = `<div class="trail-toolbar"><div><label for="trail-year">Année</label><select id="trail-year" data-change="trail-year"><option value="all" ${ui.trailYear === 'all' ? 'selected' : ''}>Toutes</option>${years.map(year => `<option value="${year}" ${String(year) === ui.trailYear ? 'selected' : ''}>${year}</option>`).join('')}</select></div><div><label for="trail-status">Statut</label><select id="trail-status" data-change="trail-status"><option value="all" ${ui.trailStatus === 'all' ? 'selected' : ''}>Tous les livres</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.trailStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div><span>${books.length} livre${books.length > 1 ? 's' : ''} affiché${books.length > 1 ? 's' : ''}</span></div>`;
+    const modes = `<div class="trail-view-modes"><div class="filter-chips" role="group" aria-label="Présentation du Sentier"><button type="button" data-action="trail-mode" data-mode="map" aria-pressed="${ui.trailMode === 'map'}">Carte</button><button type="button" data-action="trail-mode" data-mode="timeline" aria-pressed="${ui.trailMode === 'timeline'}">Chronologie</button></div><button class="button button--secondary button--small" type="button" data-action="trail-immersive" aria-pressed="${ui.trailImmersive}">${ui.trailImmersive ? 'Réduire le Sentier' : 'Agrandir le Sentier'}</button></div>`;
+    if (ui.trailMode === 'timeline') return `${modes}${filters}<ol class="trail-chronology">${books.map(book => `<li><time datetime="${attr(activityDate(book))}">${formatDate(activityDate(book))}</time><a class="card" href="#book?id=${encodeURIComponent(book.id)}">${cover(book,'small')}<span><strong>${esc(book.title)}</strong><span class="small muted">${esc(book.authors.join(', '))}</span><span class="status-chip">${STATUS_LABELS[book.status]}</span></span><span aria-hidden="true">→</span></a></li>`).join('') || '<li>Aucun livre pour ces filtres.</li>'}</ol>`;
     const profile = store.getProfile(), scaledWidth = Math.round(layout.width * ui.trailScale), scaledHeight = Math.round(layout.height * ui.trailScale);
-    return `<div class="section-heading"><div><h2>Sentier</h2><p class="small muted">Votre univers part de vous, se ramifie par genres littéraires, puis par livres. Les fragments de votre ADN se glissent dans les espaces libres de la carte.</p></div></div>${filters}<div class="trail-legend" aria-label="Légende des statuts">${Object.entries(STATUS_LABELS).map(([value,label]) => `<span class="trail-legend__${value}"><i></i>${label}</span>`).join('')}</div>${books.length ? `<div class="trail-map-frame"><div class="trail-map-controls" role="group" aria-label="Zoom de la carte"><button type="button" data-action="trail-zoom-out" aria-label="Dézoomer" title="Dézoomer">−</button><output data-trail-zoom-value>${Math.round(ui.trailScale * 100)} %</output><button type="button" data-action="trail-zoom-in" aria-label="Zoomer" title="Zoomer">+</button><button class="trail-map-controls__fit" type="button" data-action="trail-zoom-fit" aria-label="Afficher toute l’étendue de la carte" title="Afficher toute la carte"><span aria-hidden="true">⛶</span> Étendue</button></div><p class="trail-pan-hint"><span aria-hidden="true">↔</span> Glissez pour explorer · pincez à deux doigts pour zoomer</p><div class="trail-canvas-shell" data-trail-shell data-root-x="${layout.root.x}" data-root-y="${layout.root.y}" tabindex="0" aria-label="Carte mentale interactive. Pincez à deux doigts, utilisez les boutons de zoom ou faites glisser la carte."><div class="trail-zoom-stage" data-trail-stage style="width:${scaledWidth}px;height:${scaledHeight}px"><div class="trail-canvas" data-trail-canvas data-width="${layout.width}" data-height="${layout.height}" data-scale="${ui.trailScale}" style="width:${layout.width}px;height:${layout.height}px;transform:scale(${ui.trailScale})"><svg viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true" focusable="false">${paths}</svg><div class="trail-root" style="--x:${layout.root.x}px;--y:${layout.root.y}px"><span class="trail-root__avatar" aria-hidden="true">${esc(initials(profile.name))}</span><strong>${esc(profile.name)}</strong><small>${genreGroups.length} genre${genreGroups.length > 1 ? 's' : ''} · ${allBooks.length} livre${allBooks.length > 1 ? 's' : ''}</small></div>${dnaFragments}${genreNodes}${bookNodes}</div></div></div></div>` : `<div class="empty-state"><h3>Aucun livre dans ce filtre</h3><p>Affichez toutes les années et tous les statuts, ou ajoutez un livre à votre bibliothèque.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
+    return `${modes}${filters}<div class="trail-legend" aria-label="Légende des statuts">${Object.entries(STATUS_LABELS).map(([value,label]) => `<span class="trail-legend__${value}"><i></i>${label}</span>`).join('')}</div>${books.length ? `<div class="trail-map-frame"><div class="trail-map-controls" role="group" aria-label="Zoom de la carte"><button type="button" data-action="trail-zoom-out" aria-label="Dézoomer" title="Dézoomer">−</button><output data-trail-zoom-value>${Math.round(ui.trailScale * 100)} %</output><button type="button" data-action="trail-zoom-in" aria-label="Zoomer" title="Zoomer">+</button><button class="trail-map-controls__fit" type="button" data-action="trail-zoom-fit" aria-label="Afficher toute l’étendue de la carte" title="Afficher toute la carte"><span aria-hidden="true">⛶</span> Étendue</button></div><p class="trail-pan-hint"><span aria-hidden="true">↔</span> Glissez pour explorer · pincez à deux doigts pour zoomer</p><div class="trail-canvas-shell" data-trail-shell data-root-x="${layout.root.x}" data-root-y="${layout.root.y}" tabindex="0" aria-label="Carte mentale interactive. Pincez à deux doigts, utilisez les boutons de zoom ou faites glisser la carte."><div class="trail-zoom-stage" data-trail-stage style="width:${scaledWidth}px;height:${scaledHeight}px"><div class="trail-canvas" data-trail-canvas data-width="${layout.width}" data-height="${layout.height}" data-scale="${ui.trailScale}" style="width:${layout.width}px;height:${layout.height}px;transform:scale(${ui.trailScale})"><svg viewBox="0 0 ${layout.width} ${layout.height}" aria-hidden="true" focusable="false">${paths}</svg><div class="trail-root" style="--x:${layout.root.x}px;--y:${layout.root.y}px"><span class="trail-root__avatar" aria-hidden="true">${esc(initials(profile.name))}</span><strong>${esc(profile.name)}</strong><small>${genreGroups.length} genre${genreGroups.length > 1 ? 's' : ''} · ${allBooks.length} livre${allBooks.length > 1 ? 's' : ''}</small></div>${dnaFragments}${genreNodes}${bookNodes}</div></div></div></div>` : `<div class="empty-state"><h3>Aucun livre dans ce filtre</h3><p>Affichez toutes les années et tous les statuts, ou ajoutez un livre à votre bibliothèque.</p><a class="button button--primary" href="#path?tab=library">Bibliothèque</a></div>`}`;
   }
 
   function renderLexicon() {
-    const labels = { all:'Tout', word:'Mots', expression:'Expressions', citation:'Citations' };
-    const entries = store.getLexicon().filter(item => (ui.lexiconKind === 'all' || item.kind === ui.lexiconKind) && normalize(`${item.word} ${item.definition} ${item.bookTitle}`).includes(normalize(ui.lexiconQuery)));
-    return `<section class="lexicon-view"><div class="toolbar lexicon-toolbar"><label class="search-field" for="lexicon-search"><span aria-hidden="true">⌕</span><input id="lexicon-search" data-input="lexicon-search" type="search" value="${attr(ui.lexiconQuery)}" placeholder="Mot, définition ou livre…"></label><div class="lexicon-toolbar__actions"><button class="button button--primary" type="button" data-action="add-lexicon">Ajouter une entrée</button><details class="lexicon-filter-fab"><summary aria-label="Filtrer le lexique"><span aria-hidden="true">≡</span><span>Filtrer</span></summary><div class="lexicon-filter-fab__menu" role="group" aria-label="Type d’entrée">${Object.entries(labels).map(([kind,label]) => `<button type="button" data-action="lexicon-filter" data-kind="${kind}" aria-pressed="${ui.lexiconKind === kind}">${label}</button>`).join('')}</div></details></div></div>
-      <p class="micro muted">Filtre actif : ${labels[ui.lexiconKind]} · ${entries.length} résultat${entries.length > 1 ? 's' : ''}</p>
-      ${entries.length ? `<div class="lexicon-grid">${entries.map(item => `<article class="card lexicon-card"><span class="lexicon-kind">${labels[item.kind]}</span><h3>${esc(item.word)}</h3><p>${esc(item.definition)}</p><footer>${item.bookTitle ? `${esc(item.bookTitle)}${item.page ? ` · p. ${item.page}` : ''}` : 'Sans livre associé'} · révisé ${formatDate(item.updatedAt)}</footer><div class="card-actions"><button class="text-link small" type="button" data-action="edit-lexicon" data-id="${attr(item.id)}">Modifier</button><button class="text-link small" type="button" data-action="delete-lexicon" data-id="${attr(item.id)}">Supprimer</button></div></article>`).join('')}</div>` : `<div class="empty-state"><h3>Aucune entrée pour ce filtre</h3><p>Changez de catégorie ou ajoutez une nouvelle entrée.</p><button class="button button--primary" type="button" data-action="add-lexicon">Ajouter une entrée</button></div>`}</section>`;
+    const labels = { all:'Tout', thought:'Pensées', citation:'Citations', word:'Mots', expression:'Expressions' };
+    const selectedBook = ui.params.get('book') || ui.notebookBook;
+    const thoughts = store.getTraces().map(trace => ({...trace, kind:'thought', word:trace.text, definition:'', bookTitle:store.getBookById(trace.bookId)?.title || '', updatedAt:trace.updatedAt || trace.createdAt }));
+    const entries = [...thoughts,...store.getLexicon()].filter(item => (!selectedBook || item.bookId === selectedBook) && (ui.lexiconKind === 'all' || item.kind === ui.lexiconKind) && normalize(`${item.word} ${item.definition} ${item.bookTitle}`).includes(normalize(ui.lexiconQuery))).sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    return `<section class="lexicon-view"><div class="library-search-row"><label class="search-field" for="lexicon-search"><span aria-hidden="true">⌕</span><input id="lexicon-search" data-input="lexicon-search" type="search" value="${attr(ui.lexiconQuery)}" placeholder="Souvenir, mot ou livre…"></label><button class="button button--primary" type="button" data-action="capture-memory" data-book-id="${attr(selectedBook)}">+ Garder</button></div><div class="filter-chips" role="group" aria-label="Type de souvenir">${Object.entries(labels).map(([kind,label]) => `<button type="button" data-action="notebook-filter" data-kind="${kind}" aria-pressed="${ui.lexiconKind === kind}">${label}</button>`).join('')}</div><label class="field notebook-book-filter">Livre<select data-change="notebook-book"><option value="">Tous mes livres</option>${store.getBooks().map(book => `<option value="${attr(book.id)}" ${selectedBook === book.id ? 'selected' : ''}>${esc(book.title)}</option>`).join('')}</select></label><p class="small muted" role="status">${entries.length} souvenir${entries.length > 1 ? 's' : ''} · vos pensées restent privées sauf partage explicite.</p>${entries.length ? `<div class="lexicon-grid">${entries.map(item => `<article class="card lexicon-card"><span class="lexicon-kind">${labels[item.kind]}</span><${item.kind === 'thought' ? 'p' : 'h3'} class="notebook-text">${esc(item.word)}</${item.kind === 'thought' ? 'p' : 'h3'}>${item.definition && item.definition !== item.word ? `<p>${esc(item.definition)}</p>` : ''}${item.note ? `<p class="small muted">${esc(item.note)}</p>` : ''}<footer>${item.bookId && store.getBookById(item.bookId) ? `<a class="text-link" href="#book?id=${encodeURIComponent(item.bookId)}">${esc(item.bookTitle || store.getBookById(item.bookId).title)}</a>` : 'Sans livre associé'}${item.page ? ` · ${store.getBookById(item.bookId)?.mediaType === 'audio' ? 'min.' : 'p.'} ${item.page}` : ''} · ${formatDate(item.updatedAt)}${item.kind === 'thought' ? ` · ${VISIBILITY_LABELS[item.privacy] || 'Privé'}` : ''}</footer>${item.kind !== 'thought' ? `<div class="card-actions"><button class="text-link" type="button" data-action="edit-lexicon" data-id="${attr(item.id)}">Modifier</button><button class="text-link" type="button" data-action="delete-lexicon" data-id="${attr(item.id)}">Supprimer</button></div>` : ''}</article>`).join('')}</div>` : '<div class="empty-state"><h2>Votre carnet attend un souvenir.</h2><p>Gardez une pensée, une citation ou un mot, ou changez les filtres.</p></div>'}</section>`;
   }
 
   function renderGoals() {
@@ -1175,7 +1181,7 @@
     const id = ui.params.get('id'), book = store.getBookById(id);
     if (!book) return `<div class="empty-state"><h1>Livre introuvable</h1><p>Il a peut-être été retiré de cette bibliothèque locale.</p><a class="button button--primary" href="#path?tab=library">Retour à la bibliothèque</a></div>`;
     const sessions = store.getSessionsForBook(id), traces = store.getTraces(id), lexicon = store.getLexicon().filter(item => item.bookId === id), openSession = store.getActiveSessionForBook(id), progress = bookProgress(book), wishlist = book.libraryState === 'wishlist', audio = book.mediaType === 'audio';
-    return `<a class="text-link" href="#path?tab=${wishlist ? 'library' : 'library'}">← Ma bibliothèque</a><section class="book-detail-head section-block">${cover(book,'large')}<div class="book-detail-copy"><div class="button-row"><span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</span>${!wishlist ? `<span class="privacy-badge">${SITUATION_LABELS[book.situation]}</span>` : ''}<span class="media-chip">${MEDIA_LABELS[book.mediaType] || 'Livre'}</span>${book.historicalBeforeJoin ? '<span class="status-chip">Lu avant mon inscription</span>' : ''}</div><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p><p>${esc(book.description || 'Aucun résumé pour cette édition.')}</p>${!wishlist ? `<div class="progress-track" aria-label="Progression ${pct(progress.value,progress.total)} %"><span style="--width:${pct(progress.value,progress.total)}%"></span></div><p class="small muted">${progress.label}${book.rating ? ` · ${ratingStars(book.rating)}` : ''}</p>` : '<p class="small muted">Envie de lecture conservée dans votre wishlist.</p>'}<div class="button-row">${wishlist ? `<button class="button button--primary" type="button" data-action="move-to-library" data-id="${attr(id)}">Ajouter à ma bibliothèque</button>` : `<button class="button button--primary" type="button" data-action="book-session" data-id="${attr(id)}">${openSession ? 'Reprendre la session' : 'Démarrer une session'}</button>`}<button class="button button--ghost" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div></div></section>
+    return `<a class="text-link" href="#path?tab=${wishlist ? 'library' : 'library'}">← Ma bibliothèque</a><section class="book-detail-head section-block">${cover(book,'large')}<div class="book-detail-copy"><div class="button-row"><span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</span>${!wishlist ? `<span class="privacy-badge">${SITUATION_LABELS[book.situation]}</span>` : ''}<span class="media-chip">${MEDIA_LABELS[book.mediaType] || 'Livre'}</span>${book.historicalBeforeJoin ? '<span class="status-chip">Lu avant mon inscription</span>' : ''}</div><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p><p>${esc(book.description || 'Aucun résumé pour cette édition.')}</p>${!wishlist ? `<div class="progress-track" aria-label="Progression ${pct(progress.value,progress.total)} %"><span style="--width:${pct(progress.value,progress.total)}%"></span></div><p class="small muted">${progress.label}${book.rating ? ` · ${ratingStars(book.rating)}` : ''}</p>` : '<p class="small muted">Envie de lecture conservée dans votre wishlist.</p>'}<div class="button-row">${wishlist ? `<button class="button button--primary" type="button" data-action="move-to-library" data-id="${attr(id)}">Ajouter à ma bibliothèque</button>` : `<button class="button button--primary" type="button" data-action="book-session" data-id="${attr(id)}">${openSession ? 'Reprendre la session' : 'Démarrer une session'}</button>`}<button class="button button--ghost" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button><a class="button button--secondary" href="#path?tab=lexicon&book=${encodeURIComponent(id)}">Ouvrir le carnet</a><button class="text-link" type="button" data-action="capture-memory" data-book-id="${attr(id)}">Garder quelque chose</button></div></div></section>
       <div class="grid-2">
         <section class="card card-pad"><div class="section-heading"><h2>Édition et progression</h2><button class="text-link" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div><dl class="metadata-list"><div><dt>Rayon</dt><dd>${esc(book.genre || 'À classer')}</dd></div><div><dt>Éditeur</dt><dd>${esc(book.publisher || 'Non renseigné')}</dd></div><div><dt>Édition</dt><dd>${esc(book.edition || 'Non renseignée')}</dd></div>${audio ? `<div><dt>Support</dt><dd>Livre audio</dd></div><div><dt>Durée</dt><dd>${book.durationMinutes || 'Non renseignée'} min</dd></div><div><dt>Narration</dt><dd>${esc(book.narrator || 'Non renseignée')}</dd></div><div><dt>Plateforme</dt><dd>${esc(book.audioPlatform || 'Non renseignée')}</dd></div>` : `<div><dt>Format</dt><dd>${esc(book.format || (book.mediaType === 'ebook' ? 'Livre numérique' : 'Non renseigné'))}</dd></div><div><dt>Pages</dt><dd>${book.totalPages || 'Non renseigné'}</dd></div>`}<div><dt>Statut</dt><dd>${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</dd></div>${!wishlist ? `<div><dt>Début de lecture</dt><dd>${book.startedAt ? formatDate(book.startedAt) : 'Non renseigné'}</dd></div><div><dt>Fin de lecture</dt><dd>${book.completedAt ? formatDate(book.completedAt) : 'Non renseignée'}</dd></div><div><dt>Situation</dt><dd>${SITUATION_LABELS[book.situation]}</dd></div>` : ''}</dl></section>
         <section class="card card-pad"><div class="section-heading"><h2>Sessions</h2><button class="text-link" type="button" data-action="manual-session" data-book-id="${attr(id)}">Ajouter une session passée</button></div>${sessions.length ? `<div class="history-list">${sessions.map(session => `<div class="history-item"><span class="history-item__icon">◷</span><div class="history-item__content"><strong>${Math.round(session.durationSeconds/60)} min · ${audio ? 'min.' : 'p.'} ${session.startPage} à ${session.endPage}</strong><span class="small muted">${formatDate(session.startedAt)}${session.manual ? ' · ajoutée manuellement' : ''}</span></div><button class="text-link small" type="button" data-action="edit-session" data-id="${attr(session.id)}">Modifier</button></div>`).join('')}</div>` : `<p class="small muted">Aucune session enregistrée.</p>`}</section>
@@ -1188,13 +1194,13 @@
     const profile = store.getProfile(), settings = store.getSettings(), stats = store.getStats();
     const dna = store.getReaderDNA();
     const badges = store.getBadges();
-    return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main">${avatarBubble(profile,'profile-avatar')}<div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button></section>
+    return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main">${avatarBubble(profile,'profile-avatar')}<div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button><a class="button button--secondary button--small" href="#profile?section=settings">Réglages</a><a class="text-link" href="#profile?section=goals">Mes objectifs</a></section>
       <section class="section-block" aria-labelledby="reader-dna-title"><div class="section-heading"><div><p class="eyebrow">Portrait vivant</p><h2 id="reader-dna-title">ADN du lecteur</h2></div><button class="text-link" type="button" data-action="open-dna-history">Voir mon évolution</button></div><article class="reader-dna-card"><span class="reader-dna-card__mark" aria-hidden="true">✦</span><div><p class="eyebrow">Aujourd’hui</p><blockquote>${esc(dna.phrase)}</blockquote>${dna.topGenres.length ? `<div class="reader-dna-traits" aria-label="Territoires littéraires dominants">${dna.topGenres.map(genre => `<span>${esc(genre)}</span>`).join('')}</div>` : ''}<details class="reader-dna-evidence"><summary>Ce qui façonne cet ADN</summary><ul><li>${dna.metrics.completedCount} livre${dna.metrics.completedCount > 1 ? 's' : ''} terminé${dna.metrics.completedCount > 1 ? 's' : ''}</li><li>${store.getLexicon().length} élément${store.getLexicon().length > 1 ? 's' : ''} conservé${store.getLexicon().length > 1 ? 's' : ''} dans le lexique</li><li>${store.getTraces().length} Trace${store.getTraces().length > 1 ? 's' : ''} personnelle${store.getTraces().length > 1 ? 's' : ''}</li></ul></details></div></article></section>
       <section class="section-block"><h2>Statistiques</h2><div class="stats-grid"><div class="card stat-card"><strong>${stats.booksRead}</strong><span>livres lus</span></div><div class="card stat-card"><strong>${Math.floor(stats.totalMinutes/60)} h ${stats.totalMinutes%60}</strong><span>temps de lecture</span></div><div class="card stat-card"><strong>${stats.streak}</strong><span>jours de série</span></div><div class="card stat-card"><strong>${stats.totalTraces}</strong><span>Traces et lexique</span></div><div class="card stat-card"><strong>${stats.booksTransmitted}</strong><span>prêtés ou donnés</span></div></div></section>
-      <section class="section-block profile-goals" id="profile-goals"><div class="section-heading"><div><p class="eyebrow">Progression personnelle</p><h2>Objectifs</h2><p class="small muted">Ouvrez seulement la période que vous souhaitez consulter ou modifier.</p></div></div>${renderGoals()}</section>
+      <section class="section-block profile-goals" id="profile-goals" tabindex="-1"><div class="section-heading"><div><p class="eyebrow">Progression personnelle</p><h2>Objectifs</h2><p class="small muted">Ouvrez seulement la période que vous souhaitez consulter ou modifier.</p></div></div>${renderGoals()}</section>
       ${renderLatestBadge(badges)}
-      <section class="section-block"><h2>Compte et préférences</h2><div class="settings-list">
-        <details class="setting-card"><summary>Informations du compte</summary><div class="setting-card__body"><p><strong>${esc(profile.email)}</strong></p><p class="small muted">Compte sécurisé et session persistante gérés par Supabase.</p><button class="button button--secondary button--small" type="button" data-action="simulated-password">Changer le mot de passe</button></div></details>
+      <section class="section-block" id="profile-settings" tabindex="-1"><h2>Compte et préférences</h2><p class="sync-indicator" id="sync-indicator" role="status"></p><div class="settings-list">
+        <details class="setting-card"><summary>Informations du compte</summary><div class="setting-card__body"><p><strong>${esc(profile.email)}</strong></p><p class="small muted">Gérez votre mot de passe et les informations de votre compte.</p><button class="button button--secondary button--small" type="button" data-action="simulated-password">Changer le mot de passe</button></div></details>
         <details class="setting-card"><summary>Confidentialité et visibilité</summary><div class="setting-card__body"><form class="form-grid" data-form="privacy"><fieldset><legend>Visibilité du profil</legend><label class="checkbox-row"><input type="radio" name="profileVisibility" value="private" ${profile.visibility === 'private' ? 'checked' : ''}><span><strong>Privé</strong><br><span class="muted">Vos détails sont visibles uniquement par vos amis. Recommandé et sélectionné par défaut.</span></span></label><label class="checkbox-row"><input type="radio" name="profileVisibility" value="public" ${profile.visibility === 'public' ? 'checked' : ''}><span><strong>Public</strong><br><span class="muted">Toute la communauté peut consulter le profil.</span></span></label></fieldset><label class="field">Visibilité par défaut des publications<select name="defaultVisibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
         <details class="setting-card"><summary>Préférences de notifications</summary><div class="setting-card__body"><form class="form-grid" data-form="notification-settings">${Object.entries({ friends:'Amitiés', encouragements:'Encouragements', traces:'Traces et réponses', clubs:'Clubs', salons:'Salons', goals:'Objectifs' }).map(([key,label]) => `<label class="checkbox-row"><input type="checkbox" name="${key}" ${settings.notifications[key] ? 'checked' : ''}> ${label}</label>`).join('')}<label class="checkbox-row"><input type="checkbox" name="remote" ${settings.notifications.remote ? 'checked' : ''} disabled> Notifications système du téléphone <span class="simulated-badge">prochaine étape</span></label><p class="small muted">Les notifications dans BOO-P sont synchronisées en temps réel. Les alertes sur l’écran verrouillé seront activées séparément.</p><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
         <details class="setting-card"><summary>Utilisateurs bloqués</summary><div class="setting-card__body">${settings.blockedUsers.length ? settings.blockedUsers.map(id => { const user = store.getCommunity().users.find(item => item.id === id); return `<div class="history-item"><div class="history-item__content"><strong>${esc(user?.name || 'Utilisateur')}</strong></div><button class="text-link small" type="button" data-action="unblock-user" data-id="${attr(id)}">Débloquer</button></div>`; }).join('') : '<p class="small muted">Aucun utilisateur bloqué.</p>'}</div></details>
@@ -1282,7 +1288,8 @@
   function openTraceDialog(bookId = null) {
     const book = store.getBookById(bookId) || store.getCurrentBook();
     const audio = book?.mediaType === 'audio';
-    openDialog({ title: 'Laisser une Trace', eyebrow: 'Privée par défaut', body: `<form class="form-grid" data-form="trace"><input type="hidden" name="bookId" value="${attr(book?.id || '')}"><label class="field">Livre<select name="bookIdSelect">${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${item.id === book?.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><label class="field">${audio ? 'Minute' : 'Page'} facultative<input type="number" min="0" max="${audio ? (book?.durationMinutes || 99999) : (book?.totalPages || 99999)}" name="page" value="${audio ? (book?.currentMinute || '') : (book?.currentPage || '')}"></label><label class="field">Votre Trace<textarea id="trace-dialog-text" name="text" required maxlength="1200" placeholder="Une idée, une émotion, une citation…"></textarea></label><div class="button-row"><button class="button button--secondary" type="button" data-action="dictate-dialog-trace">Dicter</button><button class="button button--primary" type="submit">Enregistrer en privé</button></div><p class="small muted">Le partage reste un choix séparé et explicite.</p></form>` });
+    openDialog({ title: 'Garder une pensée', eyebrow: 'Privée par défaut', body: `<form class="form-grid" data-form="trace"><input type="hidden" name="bookId" value="${attr(book?.id || '')}"><label class="field">Livre<select name="bookIdSelect">${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${item.id === book?.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><label class="field">${audio ? 'Minute' : 'Page'} facultative<input type="number" min="0" max="${audio ? (book?.durationMinutes || 99999) : (book?.totalPages || 99999)}" name="page" value="${audio ? (book?.currentMinute || '') : (book?.currentPage || '')}"></label><label class="field">Votre Trace<textarea id="trace-dialog-text" name="text" required maxlength="1200" placeholder="Une idée, une émotion, ce qui vous a marqué…"></textarea></label><div class="button-row"><button class="button button--secondary" type="button" data-action="dictate-dialog-trace">Dicter</button><button class="button button--primary" type="submit">Enregistrer en privé</button></div><p class="small muted">Le partage reste un choix séparé et explicite.</p></form>` });
+    enableNotebookDraft(document.querySelector('form[data-form="trace"]'), `trace:${book?.id || 'none'}`);
   }
 
   function openManualSessionDialog(bookId = null, sessionId = null) {
@@ -1294,6 +1301,7 @@
 
   function openBookDialog(book = null, { openScanner = false } = {}) {
     const editing = Boolean(book);
+    ui.catalogRequest++;
     const knownGenres = store.getBooks().flatMap(item => [item.genre, ...(item.genres || [])]).map(value => String(value || '').trim()).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
     const genreKeys = new Set();
     const genreOptions = knownGenres.concat(DEFAULT_GENRES).filter(value => { const key = normalize(value); if (!key || genreKeys.has(key)) return false; genreKeys.add(key); return true; });
@@ -1319,12 +1327,136 @@
     if (bookForm && formHint) {
       formHint.insertAdjacentHTML('beforebegin', `<div class="field-row reading-date-fields"><label class="field">Date de début de lecture<input type="date" name="startedAt" value="${attr(dateInputValue(book?.startedAt))}"></label><label class="field">Date de fin de lecture<input type="date" name="completedAt" value="${attr(dateInputValue(book?.completedAt))}"><span class="field-help">Cette date classe le livre dans le Sentier et le fait compter dans les objectifs du mois et de l’année correspondants.</span></label></div><p class="small muted">Pour une lecture antérieure à votre inscription, indiquez la date de fin si vous la connaissez. Sans date, le livre reste dans votre bibliothèque mais ne compte dans aucun objectif daté.</p><fieldset class="book-rating-field"><legend>Note du livre</legend>${ratingPicker(book?.rating, 'book-rating')}<input type="hidden" name="rating" id="book-rating" value="${book?.rating || ''}"><p class="small muted" id="book-rating-description">${book?.rating ? `${book.rating} étoile${book.rating > 1 ? 's' : ''} sur 5.` : 'Notation facultative de 1 à 5 étoiles.'}</p></fieldset>`);
     }
-    const cameraFirst = openScanner && !editing && window.matchMedia?.('(pointer: coarse)')?.matches && window.matchMedia?.('(max-width: 820px)')?.matches;
-    if (cameraFirst) {
-      const cameraInput = document.getElementById('isbn-photo-file');
-      try { cameraInput?.showPicker ? cameraInput.showPicker() : cameraInput?.click(); }
-      catch { /* Le cadre et le bouton restent disponibles si le navigateur bloque l'ouverture automatique. */ }
+    prepareBookDialog(editing);
+    setBookEntryMode(editing ? 'manual' : 'search');
+  }
+
+
+  function prepareBookDialog(editing) {
+    const body = document.getElementById('dialog-body'), form = body.querySelector('form[data-form="book"]');
+    const scan = body.querySelector('.book-import-panel'), isbn = body.querySelector('.isbn-lookup-card');
+    scan.dataset.bookEntry = 'scan'; isbn.dataset.bookEntry = 'scan';
+    body.querySelector('hr')?.remove();
+    body.querySelector(':scope > p.eyebrow')?.remove();
+    document.getElementById('dialog-eyebrow').textContent = editing ? 'Votre édition' : 'Un livre, plusieurs façons de le trouver';
+    const search = document.createElement('section');
+    search.dataset.bookEntry = 'search';
+    search.innerHTML = `<form class="form-grid" data-form="catalog-search"><label class="field" for="catalog-query">Titre, auteur ou ISBN<input id="catalog-query" name="query" type="search" required minlength="2" maxlength="240" placeholder="Ex. L’Étranger, Albert Camus…" autocomplete="off"></label><button class="button button--primary" type="submit">Rechercher un livre</button><p class="small muted">Recherche dans Google Books et Open Library.</p></form>`;
+    body.prepend(search);
+    const modes = document.createElement('div'); modes.className = 'entry-modes'; modes.setAttribute('role','group'); modes.setAttribute('aria-label','Méthode d’ajout');
+    modes.innerHTML = [['search','Rechercher'],['scan','Scanner un ISBN'],['manual','Saisie manuelle']].map(([value,label]) => `<button type="button" data-action="book-entry-mode" data-mode="${value}" aria-pressed="false">${label}</button>`).join('');
+    if (!editing) body.prepend(modes);
+    const essential = document.createElement('div'); essential.className = 'form-grid book-essential';
+    const advanced = document.createElement('details'); advanced.className = 'optional-fields'; advanced.open = editing;
+    advanced.innerHTML = '<summary>Plus de détails sur cette édition</summary><div class="form-grid"></div>';
+    const extra = advanced.querySelector('div');
+    const submit = form.querySelector('button[type="submit"]');
+    const fieldFor = name => form.querySelector(`[name="${name}"]`)?.closest('label.field');
+    for (const name of ['title','authors','mediaType','status']) { const field = fieldFor(name); if (field) essential.append(field); }
+    const pageFields = form.querySelector('[data-page-fields]');
+    const pageCount = pageFields?.querySelector('[name="totalPages"]')?.closest('label');
+    if (pageCount) { pageCount.dataset.pageFields = ''; pageCount.hidden = pageFields.hidden; essential.append(pageCount); }
+    const audioFields = form.querySelector('[data-audio-fields]'); if (audioFields) essential.append(audioFields);
+    const remaining = [...form.children];
+    for (const child of remaining) {
+      if (child === submit || child.matches('input[type="hidden"]')) continue;
+      if (child.matches('.field-row') && !child.children.length) { child.remove(); continue; }
+      extra.append(child);
     }
+    const preview = document.createElement('div'); preview.id = 'book-selection-preview'; preview.hidden = true;
+    form.prepend(preview,essential,advanced);
+    form.dataset.bookEntry = 'manual';
+    if (submit) submit.textContent = editing ? 'Enregistrer les modifications' : 'Ajouter ce livre';
+  }
+
+  function setBookEntryMode(mode, userAction = false) {
+    const body = document.getElementById('dialog-body');
+    body.querySelectorAll('[data-book-entry]').forEach(panel => { panel.hidden = panel.dataset.bookEntry !== mode; });
+    body.querySelectorAll('[data-action="book-entry-mode"]').forEach(button => button.setAttribute('aria-pressed',String(button.dataset.mode === mode)));
+    const results = document.getElementById('book-lookup-results'); if (results) results.hidden = mode === 'manual';
+    if (mode === 'manual') {
+      const title = document.getElementById('book-title-field');
+      if (title && !title.value) title.value = document.getElementById('catalog-query')?.value || '';
+      if (userAction) title?.focus();
+    } else if (mode === 'search' && userAction) document.getElementById('catalog-query')?.focus();
+    if (mode === 'scan' && userAction) document.getElementById('isbn-photo-file')?.click();
+  }
+
+  async function submitCatalogSearch(form, data) {
+    const query = String(data.get('query') || '').trim();
+    if (query.length < 2) return;
+    const request = ++ui.catalogRequest, button = form.querySelector('button[type="submit"]');
+    const results = document.getElementById('book-lookup-results');
+    button.disabled = true; button.setAttribute('aria-busy','true');
+    results.hidden = false; results.innerHTML = '<p class="small muted" role="status">Recherche des livres…</p>';
+    try {
+      const books = await window.BT.bookLookup.searchBooks(query);
+      if (!form.isConnected || request !== ui.catalogRequest) return;
+      renderBookLookupResults(books, 'Aucun livre trouvé. Essayez un autre titre ou passez à la saisie manuelle.');
+    } catch (error) {
+      if (!form.isConnected || request !== ui.catalogRequest) return;
+      renderBookLookupResults([], error.message || 'Le catalogue est indisponible. Vous pouvez saisir le livre manuellement.');
+    } finally {
+      if (button.isConnected) { button.disabled = false; button.removeAttribute('aria-busy'); }
+    }
+  }
+
+  function openQuickProgress(bookId) {
+    const book = store.getBookById(bookId); if (!book) return;
+    const active = store.getActiveSessionForBook(bookId), progress = bookProgress(book);
+    openDialog({ title:'Mettre à jour ma progression', eyebrow:book.title, body:`<form class="form-grid" data-form="quick-progress"><input type="hidden" name="bookId" value="${attr(book.id)}">${renderSessionPositionSlider(book, active?.endPage ?? progress.value, { id:'quick-position', name:'position' })}<p class="small muted">Vous pouvez avancer ou corriger votre position, même sans chronomètre.</p><button class="button button--primary" type="submit">Enregistrer ma progression</button></form>` });
+  }
+
+  function submitQuickProgress(form, data) {
+    const book = store.getBookById(data.get('bookId')); if (!book) return;
+    const audio = book.mediaType === 'audio', total = audio ? book.durationMinutes : book.totalPages;
+    const position = Math.round(clamp(data.get('position'), 0, total || 99999));
+    store.updateBook(book.id, { [audio ? 'currentMinute' : 'currentPage']:position });
+    const active = store.getActiveSessionForBook(book.id);
+    if (active) store.updateActiveSession({ endPage:position }, active.id);
+    closeDialog(); showToast('Progression enregistrée'); render();
+  }
+
+  function enableNotebookDraft(form, key) {
+    if (!form) return;
+    form.dataset.draftKey = key;
+    const draft = store.getDraft(key);
+    if (draft) Object.entries(draft).forEach(([name,value]) => {
+      const field = form.elements.namedItem(name);
+      if (field && name !== 'id') field.value = value;
+    });
+    const status = document.createElement('p'); status.className = 'draft-status'; status.dataset.draftStatus = ''; status.setAttribute('role','status');
+    status.textContent = draft ? 'Brouillon retrouvé sur cet appareil.' : 'Votre brouillon sera conservé sur cet appareil pendant 30 jours.';
+    form.append(status);
+  }
+
+  function saveNotebookDraft(event) {
+    const form = event.target.closest('form[data-draft-key]'); if (!form) return;
+    const values = Object.fromEntries(new FormData(form).entries());
+    const saved = store.saveDraft(form.dataset.draftKey, values);
+    const status = form.querySelector('[data-draft-status]');
+    if (status) status.textContent = saved ? 'Brouillon enregistré sur cet appareil.' : 'Brouillon non sauvegardé : le stockage de cet appareil est plein.';
+  }
+
+  function openMemoryCapture(bookId = null) {
+    const book = store.getBookById(bookId) || store.getCurrentBook();
+    openDialog({ title:'Garder quelque chose', eyebrow:book?.title || 'Mon carnet', body:`<p class="muted">Un souvenir pour vous, à retrouver au fil de vos lectures.</p><div class="capture-choices">${[['thought','Une pensée','Une idée, une émotion : votre Trace personnelle.','✦'],['citation','Une citation','Une phrase du livre à conserver.','“'],['word','Un mot','Un mot ou une expression à comprendre.','Aa']].map(([kind,label,description,icon]) => `<button type="button" data-action="capture-kind" data-kind="${kind}" data-book-id="${attr(book?.id || '')}"><span aria-hidden="true">${icon}</span><span><strong>${label}</strong><small>${description}</small></span><span aria-hidden="true">→</span></button>`).join('')}</div>` });
+  }
+
+  function openMemoryKind(kind, bookId) {
+    if (kind === 'thought') { openTraceDialog(bookId); return; }
+    openLexiconDialog(null, bookId, { initialKind:kind === 'citation' ? 'citation' : 'word' });
+  }
+
+  function updateNotebookComposer(form) {
+    if (!form) return;
+    const citation = form.elements.kind.value === 'citation';
+    form.querySelector('[data-action="dictionary-lookup"]')?.toggleAttribute('hidden',citation);
+    document.getElementById('dictionary-result')?.toggleAttribute('hidden',citation);
+    form.elements.definition.required = !citation;
+    const label = form.elements.definition.closest('label');
+    if (label?.firstChild) label.firstChild.textContent = citation ? 'Ce que cette phrase évoque · facultatif' : 'Définition ou explication';
+    form.querySelector('button[type="submit"]').textContent = 'Enregistrer dans mon carnet';
   }
 
   function revealBookLookupResults(container) {
@@ -1342,7 +1474,7 @@
     const container = document.getElementById('book-lookup-results'); if (!container) return;
     ui.bookSuggestions = Array.isArray(suggestions) ? suggestions : [];
     if (!ui.bookSuggestions.length) {
-      container.innerHTML = `<div class="book-lookup-empty section-block"><strong>Aucune édition trouvée après plusieurs tentatives automatiques</strong><p class="small muted">${esc(message || 'Vérifiez le numéro ou saisissez les informations manuellement ci-dessous.')}</p></div>`;
+      container.innerHTML = `<div class="book-lookup-empty section-block"><strong>Aucun livre trouvé</strong><p class="small muted">${esc(message || 'Vérifiez le numéro ou saisissez le livre manuellement.')}</p><button class="button button--secondary" type="button" data-action="book-entry-mode" data-mode="manual">Saisir le livre manuellement</button></div>`;
       revealBookLookupResults(container);
       return;
     }
@@ -1350,11 +1482,14 @@
     revealBookLookupResults(container);
   }
 
-  function openLexiconDialog(entry = null, bookId = null, { includeCitation = true } = {}) {
+  function openLexiconDialog(entry = null, bookId = null, { includeCitation = true, initialKind = 'word' } = {}) {
     const book = store.getBookById(bookId || entry?.bookId);
-    const citationOption = includeCitation || entry?.kind === 'citation' ? `<option value="citation" ${entry?.kind === 'citation' ? 'selected' : ''}>Citation</option>` : '';
+    const initialType = entry?.kind || initialKind;
+    const citationOption = includeCitation || initialType === 'citation' ? `<option value="citation" ${initialType === 'citation' ? 'selected' : ''}>Citation</option>` : '';
     const entryLabel = includeCitation ? 'Mot, expression ou citation' : 'Mot ou expression';
-    openDialog({ title: entry ? 'Modifier l’entrée' : 'Ajouter au lexique', eyebrow: 'Comprendre puis mémoriser', body: `<form class="form-grid" data-form="lexicon"><input type="hidden" name="id" value="${attr(entry?.id || '')}"><input type="hidden" name="sourceLabel" value="${attr(entry?.sourceLabel || '')}"><input type="hidden" name="sourceUrl" value="${attr(entry?.sourceUrl || '')}"><div class="field-row"><label class="field">Type<select name="kind"><option value="word" ${entry?.kind !== 'expression' && entry?.kind !== 'citation' ? 'selected' : ''}>Mot</option><option value="expression" ${entry?.kind === 'expression' ? 'selected' : ''}>Expression</option>${citationOption}</select></label><label class="field">${entryLabel}<input name="word" required value="${attr(entry?.word || '')}"></label></div>${includeCitation ? '' : '<p class="small muted">Les citations se saisissent directement dans la session de lecture.</p>'}<button class="button button--sage" type="button" data-action="dictionary-lookup">Chercher une explication</button><div class="dictionary-result small" id="dictionary-result" role="status" aria-live="polite">${entry?.sourceLabel ? `Source actuelle : ${esc(entry.sourceLabel)}. Vous pouvez toujours corriger le texte.` : 'BOO-P propose plusieurs sens issus d’une source ouverte, puis prépare les liens exacts vers Le Robert et Larousse.'}</div><label class="field">Définition ou explication modifiable<textarea name="definition" required>${esc(entry?.definition || '')}</textarea></label><label class="field">Livre facultatif<select name="bookId"><option value="">Sans livre</option>${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${(entry?.bookId || book?.id) === item.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><div class="field-row"><label class="field">Auteur<input name="author" value="${attr(entry?.author || book?.authors.join(', ') || '')}"></label><label class="field">${book?.mediaType === 'audio' ? 'Minute' : 'Page'}<input type="number" min="0" name="page" value="${entry?.page || ''}"></label></div><label class="field">Contexte ou note personnelle<textarea name="note">${esc(entry?.note || '')}</textarea></label><p class="small muted">Après l’enregistrement, cette entrée rejoint la Mémoire active avec des rappels adaptés à J+1, J+3, J+7, J+14 et J+30.</p><button class="button button--primary" type="submit">Enregistrer et apprendre</button></form>` });
+    openDialog({ title: entry ? 'Modifier l’entrée' : 'Ajouter au lexique', eyebrow: 'Comprendre puis mémoriser', body: `<form class="form-grid" data-form="lexicon"><input type="hidden" name="id" value="${attr(entry?.id || '')}"><input type="hidden" name="sourceLabel" value="${attr(entry?.sourceLabel || '')}"><input type="hidden" name="sourceUrl" value="${attr(entry?.sourceUrl || '')}"><div class="field-row"><label class="field">Type<select name="kind" data-change="notebook-kind"><option value="word" ${initialType !== 'expression' && initialType !== 'citation' ? 'selected' : ''}>Mot</option><option value="expression" ${initialType === 'expression' ? 'selected' : ''}>Expression</option>${citationOption}</select></label><label class="field">${entryLabel}<input name="word" required value="${attr(entry?.word || '')}"></label></div>${includeCitation ? '' : '<p class="small muted">Les citations se saisissent directement dans la session de lecture.</p>'}<button class="button button--sage" type="button" data-action="dictionary-lookup">Chercher une explication</button><div class="dictionary-result small" id="dictionary-result" role="status" aria-live="polite">${entry?.sourceLabel ? `Source actuelle : ${esc(entry.sourceLabel)}. Vous pouvez toujours corriger le texte.` : 'BOO-P propose plusieurs sens issus d’une source ouverte, puis prépare les liens exacts vers Le Robert et Larousse.'}</div><label class="field">Définition ou explication modifiable<textarea name="definition" required>${esc(entry?.definition || '')}</textarea></label><label class="field">Livre facultatif<select name="bookId"><option value="">Sans livre</option>${store.getBooks().filter(item => item.libraryState === 'library').map(item => `<option value="${attr(item.id)}" ${(entry?.bookId || book?.id) === item.id ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></label><div class="field-row"><label class="field">Auteur<input name="author" value="${attr(entry?.author || book?.authors.join(', ') || '')}"></label><label class="field">${book?.mediaType === 'audio' ? 'Minute' : 'Page'}<input type="number" min="0" name="page" value="${entry?.page || ''}"></label></div><label class="field">Contexte ou note personnelle<textarea name="note">${esc(entry?.note || '')}</textarea></label><p class="small muted">Après l’enregistrement, cette entrée rejoint la Mémoire active avec des rappels adaptés à J+1, J+3, J+7, J+14 et J+30.</p><button class="button button--primary" type="submit">Enregistrer et apprendre</button></form>` });
+    if (!entry) enableNotebookDraft(document.querySelector('form[data-form="lexicon"]'), `lexicon:${initialKind}:${book?.id || 'none'}`);
+    updateNotebookComposer(document.querySelector('form[data-form="lexicon"]'));
   }
 
   async function lookupDictionary(button) {
@@ -1453,11 +1588,16 @@
   }
 
   function openFinishSessionDialog() {
-    const session = store.getActiveSession(), book = store.getBookById(session.bookId);
-    const audio = book.mediaType === 'audio', total = audio ? book.durationMinutes : book.totalPages;
+    let session = store.getActiveSession();
+    if (!session) return;
+    store.pauseActiveSession(session.id);
+    const pendingCitation = String(session.citationDraft || '').trim();
+    if (pendingCitation) store.addActiveSessionCitation(pendingCitation);
+    session = store.getActiveSession();
+    const book = store.getBookById(session.bookId), audio = book.mediaType === 'audio', total = audio ? book.durationMinutes : book.totalPages;
     const citations = Array.isArray(session.citations) ? session.citations : [];
-    const citationSummary = citations.length ? `<section class="session-citation-summary" aria-labelledby="finish-citations-title"><strong id="finish-citations-title">${citations.length} citation${citations.length > 1 ? 's' : ''} conservée${citations.length > 1 ? 's' : ''}</strong><ul>${citations.map(citation => `<li><q>${esc(citation.text)}</q></li>`).join('')}</ul></section>` : '<p class="small muted">Aucune citation ajoutée pendant cette session.</p>';
-    openDialog({ title: 'Bilan de la session', eyebrow: 'Confirmer avant de clôturer', body: `<form class="form-grid" data-form="finish-session">${renderSessionPositionSlider(book, session.endPage, { id:'finish-session-page', name:'endPage' })}${citationSummary}<fieldset class="book-rating-field"><legend>Note du livre · facultative</legend>${ratingPicker(book.rating, 'finish-rating')}<input type="hidden" name="rating" id="finish-rating" value="${book.rating || ''}"><p class="small muted" id="finish-rating-description">${book.rating ? `${book.rating} étoile${book.rating > 1 ? 's' : ''} sur 5.` : 'Choisissez une note de 1 à 5 étoiles.'}</p></fieldset><label class="field">Trace ou bilan facultatif<textarea name="traceText">${esc(session.traceDraft || '')}</textarea></label><label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(total) && total ? 'checked' : ''}> Marquer le livre comme Lu</label><label class="checkbox-row"><input type="checkbox" name="share"> Partager explicitement ce bilan dans le fil public</label><p class="small muted">Sans partage, le bilan reste privé.</p><button class="button button--primary" type="submit">Clôturer et enregistrer</button></form>` });
+    render();
+    openDialog({ title: 'Terminer ma lecture', eyebrow: 'Chronomètre en pause', body: `<form class="form-grid" data-form="finish-session"><p class="muted">Où vous êtes-vous arrêté dans <strong>${esc(book.title)}</strong> ?</p>${renderSessionPositionSlider(book, session.endPage, { id:'finish-session-page', name:'endPage' })}<label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(total) && total ? 'checked' : ''}> J’ai terminé ce livre</label><details class="optional-fields" ${session.traceDraft ? 'open' : ''}><summary>Garder une pensée ou noter le livre · facultatif</summary><div class="form-grid"><label class="field">Une pensée pour mon carnet<textarea name="traceText" maxlength="1200">${esc(session.traceDraft || '')}</textarea></label><fieldset class="book-rating-field"><legend>Note du livre · facultative</legend>${ratingPicker(book.rating, 'finish-rating')}<input type="hidden" name="rating" id="finish-rating" value="${book.rating || ''}"><p class="small muted" id="finish-rating-description">${book.rating ? `${book.rating} étoiles sur 5.` : 'Choisissez une note de 1 à 5 étoiles.'}</p></fieldset><label class="checkbox-row"><input type="checkbox" name="share"> Partager cette pensée dans le fil public</label><p class="small muted">Sans partage, votre pensée reste privée.</p></div></details>${citations.length ? `<p class="small muted">${citations.length} citation${citations.length > 1 ? 's' : ''} conservée${citations.length > 1 ? 's' : ''} dans votre carnet.</p>` : ''}<button class="button button--primary" type="submit">Enregistrer ma lecture</button><button class="text-link" type="button" data-action="resume-from-finish">Revenir à ma lecture</button></form>` });
   }
 
   async function handleClick(event) {
@@ -1484,11 +1624,7 @@
       case 'leave-session': location.hash = '#home'; showToast('Session conservée en arrière-plan'); break;
       case 'toggle-session': { const session = store.getActiveSession(); session?.status === 'running' ? store.pauseActiveSession() : store.resumeActiveSession(); render(); break; }
       case 'save-session-citation': saveSessionCitation(); break;
-      case 'finish-session': {
-        const pendingCitation = String(store.getActiveSession()?.citationDraft || '').trim();
-        if (pendingCitation) { showToast('Ajoutez ou effacez la citation en cours avant de terminer'); document.getElementById('session-citation-draft')?.focus(); break; }
-        openFinishSessionDialog(); break;
-      }
+      case 'finish-session': openFinishSessionDialog(); break;
       case 'quick-trace': openTraceDialog(trigger.dataset.bookId || store.getActiveSession()?.bookId); break;
       case 'session-lexicon': openLexiconDialog(null, store.getActiveSession()?.bookId, { includeCitation:false }); break;
       case 'dictate-trace': startDictation(document.getElementById('session-trace-draft'), text => store.updateActiveSession({ traceDraft: text })); break;
@@ -1531,8 +1667,18 @@
       case 'edit-salon': openSalonCreateDialog(store.getCommunity().salons.find(item => item.id === id)); break;
       case 'create-salon': openSalonCreateDialog(null, trigger.dataset.clubId || null); break;
       case 'select-book': selectLibraryBook(trigger, id); break;
-      case 'open-book': location.hash = `#book?id=${encodeURIComponent(id)}`; break;
-      case 'add-book': openBookDialog(null, { openScanner:true }); break;
+      case 'open-book': closeDialog(); location.hash = `#book?id=${encodeURIComponent(id)}`; break;
+      case 'add-book': openBookDialog(); break;
+      case 'book-entry-mode': setBookEntryMode(trigger.dataset.mode, true); break;
+      case 'library-filter': ui.libraryStatus = trigger.dataset.status; ui.selectedLibraryBookId = null; render(); break;
+      case 'dismiss-dna-nudge': store.saveSettings({ dnaNudgeDismissed:true }); render(); break;
+      case 'quick-progress': openQuickProgress(id); break;
+      case 'resume-from-finish': closeDialog(); store.resumeActiveSession(); render(); break;
+      case 'capture-memory': openMemoryCapture(trigger.dataset.bookId || null); break;
+      case 'capture-kind': openMemoryKind(trigger.dataset.kind, trigger.dataset.bookId || null); break;
+      case 'notebook-filter': ui.lexiconKind = trigger.dataset.kind; render(); break;
+      case 'trail-mode': rememberTrailViewport(); ui.trailMode = trigger.dataset.mode; render(); break;
+      case 'trail-immersive': rememberTrailViewport(); ui.trailImmersive = !ui.trailImmersive; render(); requestAnimationFrame(() => document.querySelector('[data-action="trail-immersive"]')?.focus()); break;
       case 'library-view': ui.selectedLibraryBookId = null; store.saveSettings({ libraryView: trigger.dataset.view }); render(); break;
       case 'library-finish': store.saveSettings({ libraryFinish:trigger.dataset.finish }); render(); break;
       case 'toggle-trail-book': rememberTrailViewport(); ui.expandedTrailBooks.has(id) ? ui.expandedTrailBooks.delete(id) : ui.expandedTrailBooks.add(id); render(); break;
@@ -1578,7 +1724,13 @@
   }
 
   function updateSessionPageOutput(control, value) {
-    const output = control.closest('.session-page-slider')?.querySelector('[data-session-page-output]');
+    const group = control.closest('.session-page-slider');
+    group?.querySelectorAll('input').forEach(input => {
+      if (input === control) return;
+      if (input.type === 'range' && value > Number(input.max)) input.max = value;
+      input.value = value;
+    });
+    const output = group?.querySelector('[data-session-page-output]');
     if (output) output.textContent = String(value);
   }
 
@@ -1588,6 +1740,8 @@
       case 'active-book': if (control.value) { store.setActiveBook(control.value); showToast('Lecture affichée modifiée'); } render(); break;
       case 'focus-session': store.focusActiveSession(control.value); render(); break;
       case 'library-status': ui.selectedLibraryBookId = null; ui.libraryStatus = control.value; render(); break;
+      case 'notebook-kind': updateNotebookComposer(control.closest('form')); break;
+      case 'notebook-book': ui.notebookBook = control.value; if (ui.params.has('book')) location.hash = '#path?tab=lexicon'; else render(); break;
       case 'library-sort': ui.selectedLibraryBookId = null; store.saveSettings({ librarySort:control.value }); render(); break;
       case 'trail-year': ui.trailYear = control.value; ui.expandedTrailBooks.clear(); ui.trailViewCenter = null; render(); break;
       case 'trail-status': ui.trailStatus = control.value; ui.expandedTrailBooks.clear(); ui.trailViewCenter = null; render(); break;
@@ -1614,7 +1768,14 @@
 
   function handleInput(event) {
     const control = event.target;
-    if (control.matches('.session-page-slider input[type="range"]')) { const value = clamp(control.value, 0, control.max || 99999); updateSessionPageOutput(control, value); return; }
+    if (control.matches('.session-page-slider input')) {
+      if (control.value === '') return;
+      const value = Math.round(clamp(control.value, 0, control.max || 99999));
+      updateSessionPageOutput(control, value);
+      if (control.dataset.change === 'session-page' || control.closest('form[data-form="finish-session"]')) store.updateActiveSession({ endPage:value });
+      return;
+    }
+    if (control.closest('form[data-form="finish-session"]') && control.name === 'traceText') store.updateActiveSession({ traceDraft:control.value });
     if (control.id === 'global-search') { ui.searchQuery = control.value; renderSearchResults(control.value); return; }
     const type = control.dataset.input; if (!type) return;
     if (type === 'session-citation') { store.updateActiveSession({ citationDraft: control.value }); return; }
@@ -1637,7 +1798,7 @@
     event.preventDefault(); if (!form.checkValidity()) { form.reportValidity(); return; }
     const data = new FormData(form), kind = form.dataset.form;
     const handlers = {
-      trace: submitTrace, 'manual-session': submitManualSession, 'isbn-lookup': submitISBNLookup, book: submitBook, lexicon: submitLexicon,
+      'quick-progress': submitQuickProgress, 'catalog-search': submitCatalogSearch, trace: submitTrace, 'manual-session': submitManualSession, 'isbn-lookup': submitISBNLookup, book: submitBook, lexicon: submitLexicon,
       goal: submitGoal, 'monthly-report':submitMonthlyReport, profile: submitProfile, 'finish-session': submitFinishSession,
       comment: submitComment, privacy: submitPrivacy, 'notification-settings': submitNotificationSettings,
       post: submitPost, club: submitClub, 'club-edit': submitClubEdit, 'club-member': submitClubMember,
@@ -2104,15 +2265,18 @@
   async function submitISBNLookup(form, data) {
     const button = form.querySelector('button[type="submit"]');
     const isbn = window.BT.bookLookup.normalizeISBN(data.get('isbn'));
+    const request = ++ui.catalogRequest;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
     setBookAnalysisStatus(`Recherche de l’ISBN ${isbn}…`, 0.45);
     try {
       const results = await window.BT.bookLookup.lookupISBN(isbn);
+      if (!form.isConnected || request !== ui.catalogRequest) return;
       renderBookLookupResults(results, '', isbn);
       const sources = [...new Set(results.map(item => item.source).filter(Boolean))].join(' et ');
       setBookAnalysisStatus(results.length ? `ISBN trouvé${sources ? ` via ${sources}` : ''} — choisissez la bonne édition.` : 'Aucune édition trouvée après plusieurs tentatives automatiques. Vérifiez l’ISBN ou complétez les informations ci-dessous.', results.length ? 1 : null, !results.length);
     } catch (error) {
+      if (!form.isConnected || request !== ui.catalogRequest) return;
       renderBookLookupResults([], error.message, isbn);
       setBookAnalysisStatus(error.message || 'Recherche ISBN impossible.', null, true);
     } finally {
@@ -2146,6 +2310,9 @@
       if (coverField) coverField.value = item.coverUrl;
       if (sourceField) sourceField.value = 'catalogue';
     }
+    setBookEntryMode('manual');
+    const preview = document.getElementById('book-selection-preview');
+    if (preview) { preview.hidden = false; preview.className = 'book-selection-preview'; preview.innerHTML = `${cover({ ...item, coverColor:gradientFor(item.title) },'small')}<div><strong>${esc(item.title)}</strong><p class="small muted">${esc(item.publisher || '')}${item.publishedDate ? ` · ${esc(item.publishedDate)}` : ''}${item.isbn ? `<br>ISBN ${esc(item.isbn)}` : ''}</p></div>`; }
     showToast('Édition sélectionnée — vérifiez ou corrigez les informations');
     document.getElementById('book-title-field')?.focus();
   }
@@ -2166,7 +2333,8 @@
   function submitTrace(form, data) {
     const bookId = data.get('bookIdSelect') || data.get('bookId');
     store.saveTrace({ bookId, page: Number(data.get('page')) || 0, text: data.get('text'), privacy: 'private' });
-    closeDialog(); showToast('Trace enregistrée en privé'); render();
+    if (form.dataset.draftKey) store.clearDraft(form.dataset.draftKey);
+    closeDialog(); showToast('Pensée enregistrée dans votre carnet privé'); render();
   }
 
   function submitManualSession(form, data) {
@@ -2199,6 +2367,17 @@
       document.getElementById('book-isbn-field')?.focus();
       return;
     }
+    const duplicate = !id && store.getBooks().find(book => book.mediaType === data.get('mediaType') && (
+      (isbn && window.BT.bookLookup.isbnVariants(isbn).includes(window.BT.bookLookup.normalizeISBN(book.isbn))) ||
+      (normalize(book.title) === normalize(data.get('title')) && normalize(book.authors.join(', ')) === normalize(data.get('authors')))
+    ));
+    if (duplicate && !(data.get('allowDuplicate') === 'on' && form.dataset.duplicateId === duplicate.id)) {
+      form.querySelector('.duplicate-notice')?.remove();
+      const notice = document.createElement('div'); notice.className = 'duplicate-notice'; notice.setAttribute('role','alert');
+      notice.innerHTML = `<strong>Ce livre est déjà dans votre collection.</strong><button class="text-link" type="button" data-action="open-book" data-id="${attr(duplicate.id)}">Ouvrir ${esc(duplicate.title)}</button><label class="checkbox-row"><input type="checkbox" name="allowDuplicate"> Ajouter tout de même cet exemplaire ou cette édition</label>`;
+      form.dataset.duplicateId = duplicate.id;
+      form.querySelector('button[type="submit"]').before(notice); notice.scrollIntoView({block:'center'}); return;
+    }
     const mediaType = data.get('mediaType');
     const genre = String(data.get('genre') || '').trim();
     const status = data.get('status'), historicalBeforeJoin = data.get('historicalBeforeJoin') === 'on';
@@ -2224,8 +2403,9 @@
 
   function submitLexicon(form, data) {
     const id = data.get('id');
-    store.addLexiconWord({ id: id || undefined, kind:data.get('kind'), word: data.get('word'), definition: data.get('definition'), sourceLabel:data.get('sourceLabel'), sourceUrl:data.get('sourceUrl'), bookId: data.get('bookId') || null, author: data.get('author'), page: data.get('page'), note: data.get('note') });
-    closeDialog(); showToast(id ? 'Entrée mise à jour' : 'Entrée ajoutée au lexique'); render();
+    store.addLexiconWord({ id: id || undefined, kind:data.get('kind'), word: data.get('word'), definition: data.get('definition') || (data.get('kind') === 'citation' ? data.get('word') : ''), sourceLabel:data.get('sourceLabel'), sourceUrl:data.get('sourceUrl'), bookId: data.get('bookId') || null, author: data.get('author'), page: data.get('page'), note: data.get('note') });
+    if (form.dataset.draftKey) store.clearDraft(form.dataset.draftKey);
+    closeDialog(); showToast(id ? 'Souvenir mis à jour' : 'Souvenir ajouté à votre carnet'); render();
   }
 
   function submitGoal(form, data) {
@@ -2738,9 +2918,9 @@
       if (query.has('guest')) window.BT.auth?.enterGuestMode?.();
       const guest = isGuestMode();
       let user = null;
-      try { user = await window.BT.auth.ready(); }
-      catch (error) { if (!guest) throw error; console.warn('BOO-P guest authentication unavailable', error); }
-      if (guest) user = null;
+      // Guest data belongs to a separate local store and needs no remote session.
+      if (guest) void window.BT.auth.ready().catch(() => {});
+      else user = await window.BT.auth.ready();
       const localPreview = ['localhost','127.0.0.1'].includes(location.hostname) && query.has('preview');
       if (!user && !localPreview && !guest) { location.replace('index.html?auth=login&reason=protected'); return; }
       const localOwner = guest ? 'guest' : (user?.id || 'local-preview');

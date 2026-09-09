@@ -24,6 +24,14 @@ jobs:
       - name: Récupérer le projet
         uses: actions/checkout@v4
 
+      - name: Préparer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Vérifier les données et les parcours
+        run: node --test tests/*.test.mjs
+
       - name: Préparer uniquement les fichiers publics
         shell: bash
         run: |
