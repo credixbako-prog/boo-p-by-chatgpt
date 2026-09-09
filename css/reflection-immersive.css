@@ -73,4 +73,34 @@ body.reflection-open{overflow:hidden}
 .voice-dialog [data-voice-mute]:disabled,.voice-dialog [data-voice-stop]:disabled{display:none}
 .voice-transcript-panel{flex:0 0 auto;font-size:13px}.voice-dialog [data-voice-keep]{flex-shrink:0;align-self:center;margin-bottom:12px}
 .voice-dialog .reflection-about{border:0;padding:0}.voice-dialog .reflection-about summary{min-height:44px}
+.reflection-dialog .reflection-color-picker>summary,.voice-dialog .reflection-color-picker>summary{min-height:34px;color:var(--r-accent);background:var(--r-surface);border-color:var(--r-line)}
+.reflection-color-picker .surface-color-picker__menu{background:var(--r-surface);border-color:var(--r-line)}
+.reflection-dialog .reflection-color-picker button,.voice-dialog .reflection-color-picker button{min-height:34px;width:34px;height:34px;padding:5px;background:transparent;border-color:transparent}
+.reflection-color-picker .bookcase-finish-swatch>span{display:block;width:22px;height:22px;border-radius:50%;border:1px solid var(--r-muted)}
+.reflection-color-picker .bookcase-finish-swatch[aria-pressed=true]{outline:2px solid var(--r-accent);outline-offset:-2px;border-radius:50%}
+.reflection-dialog[data-panel=notebook] .dialog-head{padding-top:24px}
+.reflection-dialog[data-panel=notebook] .reflection-tabs [data-tab-notebook]{order:-1}
+.reflection-dialog[data-panel=notebook] .dialog-body{max-width:760px}
+.reflection-dialog[data-panel=notebook] [data-status]:not(:empty){padding:10px 12px;background:var(--r-surface);border-radius:10px;color:var(--r-text)}
+.notebook-book-heading{display:flex;align-items:center;gap:22px;margin:12px 0 24px;padding-bottom:24px;border-bottom:1px solid var(--r-line)}
+.notebook-book-heading>img{width:90px;height:132px;object-fit:cover;flex-shrink:0;box-shadow:0 8px 16px #0002;border-radius:2px}
+.notebook-book-heading h2{font:500 24px/1.25 var(--boo-display);margin:0 0 8px;color:var(--r-text)}
+.notebook-book-heading p{font:16px/1.5 Georgia,serif;color:var(--r-muted);margin:0 0 14px}
+.notebook-badge{font-size:12px;color:var(--r-muted)}
+.notebook-reading-section{padding:8px 0 22px}
+.notebook-section-heading{display:flex;gap:12px;justify-content:space-between;align-items:center}
+.notebook-section-heading h3{font:500 21px/1.35 var(--boo-display);margin:0;color:var(--r-text)}
+.notebook-section-heading h3::before{content:'✦';font:16px sans-serif;color:var(--r-accent);margin-right:10px}
+.notebook-section-heading button{font-size:12px;flex-shrink:0;color:var(--r-muted)}
+.notebook-reading-section>p{font:17px/1.75 Georgia,serif;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--r-text);margin:8px 0 0}
+.notebook-reading-section>p.muted{color:var(--r-muted);font-style:italic}
+.notebook-footer{display:grid;gap:10px;margin:12px 0 20px}.notebook-footer>.button{width:100%;justify-content:center}
+.notebook-footer>.reflection-notebook-tools{border:1px solid var(--r-line);border-radius:24px;padding:0 16px;text-align:center}
+.notebook-footer>.reflection-notebook-tools>summary{display:grid;place-items:center;list-style:none}
+.notebook-editor-intro{font-size:13px;color:var(--r-muted)}
+.notebook-save-bar{position:sticky;bottom:0;background:var(--r-bg);padding:12px 0;display:flex;gap:14px;align-items:center;flex-wrap:wrap;z-index:2}
+.reflection-dialog [data-editor] textarea{margin-top:8px;margin-bottom:20px;min-height:110px;font-family:Georgia,serif}
+.reflection-dialog [data-editor] [data-notebook-text]{min-height:280px}
+.notebook-history{font-size:12px;color:var(--r-muted);margin-bottom:16px}
+.reflection-dialog[data-panel=notebook] .reflection-toolbar{border-bottom:1px solid var(--r-line);padding-bottom:6px}
 @media(max-width:600px){.reflection-dialog .dialog-head,.voice-dialog .dialog-head{padding:16px 18px 8px}.reflection-dialog .dialog-body,.voice-dialog .dialog-body{padding:0 18px max(10px,env(safe-area-inset-bottom))}.reflection-toolbar{gap:10px}.reflection-tabs{gap:12px}.reflection-tabs button{font-size:13px}.reflection-message p{font-size:16px}.reflection-composer{padding:10px 14px}.reflection-messages{padding:12px 0}.reflection-about>div{right:-75px}.reflection-entry .button{font-size:13px}.tabs[aria-label="Sections de la bibliothèque"]{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.tabs[aria-label="Sections de la bibliothèque"] .tab{padding:10px 5px;font-size:13px;text-align:center}}

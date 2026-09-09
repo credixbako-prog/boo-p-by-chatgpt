@@ -428,6 +428,17 @@ BT.store = (() => {
     if (updates.situation && updates.situation !== previous.situation) addTimelineEvent(`situation-${updates.situation}`, id, `« ${next.title} » : ${situationLabel(updates.situation)}`);
     state.books[index] = next; commit({ queue: 'book.update' }); return clone(next);
   }
+  function saveBookReflection(id, reflection) {
+    const index=state.books.findIndex(item=>item.id===id);
+    if(index<0)return false;
+    const next=clone(state);
+    next.books[index].reflection=clone(reflection);
+    // Only acknowledge persistence after the complete snapshot was written.
+    if(new TextEncoder().encode(JSON.stringify(next.books[index])).length>250000)return false;
+    next.meta.updatedAt=nowISO();
+    if(!writeJSON(STATE_KEY,next))return false;
+    state=next;emit();return true;
+  }
   function deleteBook(id) { state.books = state.books.filter(book => book.id !== id); state.sessions = state.sessions.filter(session => session.bookId !== id); state.activeSessions = state.activeSessions.filter(session => session.bookId !== id); state.traces = state.traces.filter(trace => trace.bookId !== id); state.lexicon = state.lexicon.map(item => item.bookId === id ? { ...item, bookId: null } : item); if (state.activeBookId === id) state.activeBookId = state.books.find(book => book.status === 'en-cours' && book.libraryState === 'library')?.id || null; if (!state.activeSessions.some(session => session.id === state.focusedSessionId)) state.focusedSessionId = state.activeSessions[0]?.id || null; commit({ queue: 'book.delete' }); }
   function getCurrentBook() { const session = getActiveSession(); const sessionBook = session && state.books.find(book => book.id === session.bookId && book.status === 'en-cours' && book.libraryState === 'library'); if (sessionBook) return clone(sessionBook); const active = state.books.filter(book => book.status === 'en-cours' && book.libraryState === 'library').sort((a, b) => new Date(b.lastUsedAt || b.startedAt || b.addedAt) - new Date(a.lastUsedAt || a.startedAt || a.addedAt))[0]; return active ? clone(active) : null; }
   function setActiveBook(id) { const book = state.books.find(item => item.id === id && item.libraryState === 'library'); if (!book) return null; state.activeBookId = id; book.lastUsedAt = nowISO(); if (book.status !== 'en-cours') { book.status = 'en-cours'; book.startedAt = nowISO(); } commit(); return clone(book); }
@@ -770,7 +781,7 @@ BT.store = (() => {
 
   return {
     getState, getSyncedData, getSyncBaseline, replaceSyncedData, getDataSyncStatus, markDataSynced, subscribe, useUser, getOnboarding, saveOnboarding, isOnboardingComplete, getProfile, saveProfile, getSettings, saveSettings,
-    getBooks, getBookById, addBook, updateBook, deleteBook, getCurrentBook, setActiveBook, setCurrentBook, clearActiveBook, completeBook,
+    getBooks, getBookById, addBook, updateBook, saveBookReflection, deleteBook, getCurrentBook, setActiveBook, setCurrentBook, clearActiveBook, completeBook,
     getSessions, getSessionsForBook, saveSession, updateSession, deleteSession, getTodaySessions, getTodayReadingTime,
     getActiveSession, getActiveSessions, getActiveSessionForBook, focusActiveSession, startActiveSession, recoverActiveSession, heartbeatActiveSession, activeDuration, updateActiveSession, addActiveSessionCitation, pauseActiveSession, resumeActiveSession, finishActiveSession,
     getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, reviewLexiconWord, deleteLexiconWord,
