@@ -305,6 +305,8 @@
         console.error('BOO-P render error', error);
         view.innerHTML = `<section class="empty-state" role="alert"><h1>Un passage s’est refermé trop vite</h1><p>Vos données locales sont intactes. Vous pouvez revenir à l’Accueil et réessayer.</p><a class="button button--primary" href="#home">Revenir à l’Accueil</a></section>`;
       }
+      BT.voice?.decorate(view);
+      BT.reflection?.decorate(view);
       ui.renderedRoute = ui.route; ui.renderedHash = location.hash;
       checkCelebrations();
       tickSessionClock(); updateSyncIndicator();

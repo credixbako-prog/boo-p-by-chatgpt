@@ -1,0 +1,7 @@
+.voice-dialog { width:min(680px,calc(100vw - 24px)); }
+.voice-dialog pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; }
+.voice-dialog details { padding-block:12px; border-top:1px solid var(--boo-line); }
+.voice-dialog summary { min-height:44px; cursor:pointer; }
+.voice-transcript { padding-left:24px; max-height:260px; overflow:auto; }
+.voice-transcript li { margin:12px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.voice-dialog [data-voice-status] { padding:14px; background:var(--boo-bg); border-radius:12px; }

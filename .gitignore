@@ -8,3 +8,7 @@ stitch_booktrail_app_design_system.zip
 # Fichiers locaux courants.
 .DS_Store
 Thumbs.db
+.env
+.env.*
+!.env.example
+.tmp/

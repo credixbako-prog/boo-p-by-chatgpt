@@ -126,7 +126,8 @@ BT.store = (() => {
       historicalBeforeJoin: Boolean(data.historicalBeforeJoin || (data.isADN && !data.completedAt)),
       rating: numericRating >= 1 && numericRating <= 5 ? numericRating : null, isADN: Boolean(data.isADN),
       adnOrder: Number.isFinite(Number(data.adnOrder)) ? Number(data.adnOrder) : null,
-      lastUsedAt: data.lastUsedAt || null, customCover: Boolean(data.customCover)
+      lastUsedAt: data.lastUsedAt || null, customCover: Boolean(data.customCover),
+      reflection: data.reflection && typeof data.reflection === 'object' ? clone(data.reflection) : null
     };
   }
 

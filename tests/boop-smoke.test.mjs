@@ -892,7 +892,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v40/);
+  assert.match(worker, /boo-p-webapp-v41/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);
