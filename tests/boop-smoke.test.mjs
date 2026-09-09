@@ -184,9 +184,10 @@ test('bibliothèque: sentier arborescent et carnet filtrable', async () => {
   assert.match(app, /class="gallery-nav-glyph"/);
   assert.match(css, /\.nav-link__icon \{ display: grid; width: 24px; height: 24px; place-items: center;/);
   assert.match(css, /\.gallery-nav-glyph \{[^}]*transform: translate\(-4px,-4px\)/);
-  assert.match(app, /\['library','Mes livres'\]/);
+  assert.match(app, /\['library','Livres'\]/);
   assert.match(app, /\['trail','Sentier'\]/);
-  assert.match(app, /\['lexicon','Carnet'\]/);
+  assert.match(app, /\['notebook','Carnet'\]/);
+  assert.match(app, /\['lexicon','Lexique'\]/);
   assert.doesNotMatch(app, /const tabs = \[\['overview','Profil'\],\['goals','Objectifs'\]\]/);
   assert.match(app, /id="profile-goals"/);
   assert.match(app, /href="#profile\?section=goals"/);
@@ -892,7 +893,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v41/);
+  assert.match(worker, /boo-p-webapp-v42/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

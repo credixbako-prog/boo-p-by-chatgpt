@@ -6,6 +6,8 @@ L’accès nécessite une session Supabase non anonyme, une autorisation adminis
 
 ## Parcours
 
+L’interface immersive ouvre le texte par défaut depuis « Ouvrir la réflexion ». Le choix Texte / Voix se fait à l’intérieur. « Ambiance » mémorise le fond bleu nuit, forêt, prune ou papier ; les informations et mesures restent accessibles dans « À propos ». La bibliothèque sépare désormais Livres, Carnet, Lexique et Sentier. Le Carnet regroupe les réflexions IA, pensées et citations ; le Lexique affiche les mots et expressions. Les filtres sont repliés par défaut. Les contrôles de saisie de la conversation utilisent une taille minimale de 16 px pour éviter le zoom automatique mobile, tout en conservant le zoom manuel.
+
 Depuis un livre, cliquer sur Discuter du livre ou Mon carnet de réflexion. La session de lecture et le carnet général donnent aussi accès à l’espace associé au livre. Envoyer un message écrit ou dicter puis corriger avant envoi. Composer mon carnet utilise la conversation pour proposer une synthèse. Le brouillon reste séparé du carnet validé ; son ajout demande une action du lecteur. Les versions précédentes sont conservées, avec une limite de 20 versions.
 
 Le mode Realtime est accessible depuis la fiche du livre ou la conversation texte. Il démarre une conversation vocale distincte, avec les informations du livre, sans importer automatiquement l’historique texte. Terminer coupe le microphone. Conserver cet échange pour mon carnet sauvegarde explicitement la transcription et ouvre le mode texte pour composer la synthèse. Sans cette action, la transcription reste en mémoire et disparaît à la fermeture. Les mesures vocales restent téléchargeables séparément.

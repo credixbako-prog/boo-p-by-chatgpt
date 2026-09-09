@@ -29,12 +29,14 @@ BT.voice = (() => {
     const id=bookId || new URLSearchParams(location.hash.split('?')[1]).get('id'); book=BT.store.getBookById(id);if(!book)return;
     owner=BT.auth.getCurrentUser?.()?.id;
     dialog?.remove(); dialog=document.createElement('dialog');dialog.className='app-dialog voice-dialog';dialog.setAttribute('aria-labelledby','voice-title');
-    dialog.innerHTML=`<div class="dialog-head"><div><p class="eyebrow">Exploration vocale · test privé</p><h2 id="voice-title">Parlons de votre lecture</h2></div><button class="icon-button" type="button" data-voice-close aria-label="Fermer">×</button></div><div class="dialog-body"><p data-voice-book></p><p class="small muted">Vous échangez avec une voix générée par une IA OpenAI. Elle peut se tromper. Le titre, l’auteur, votre progression et votre voix sont transmis à OpenAI pendant la conversation. BOO-P ne sauvegarde ni l’audio ni la transcription de ce test ; vous pouvez télécharger le texte avant de fermer.</p><label class="checkbox-row"><input type="checkbox" data-voice-consent> Je suis majeur et je souhaite démarrer ce test vocal avec OpenAI.</label><p class="small muted">Le test s’arrête après 30 minutes dans cette interface. L’utilisation de l’API est facturée au projet BOO-P.</p><p role="status" data-voice-status>Vérification de l’accès…</p><div class="button-row"><button type="button" class="button button--primary" data-voice-start disabled>Commencer à parler</button><button type="button" class="button button--secondary" data-voice-mute disabled>Couper le micro</button><button type="button" class="button button--secondary" data-voice-stop disabled>Terminer</button></div><p data-voice-clock></p><details><summary>Transcription de cet échange</summary><ol class="voice-transcript" data-voice-transcript></ol></details><details><summary>Mesurer ce test</summary><p class="small muted">Tokens audio et texte signalés par OpenAI. Une coupure peut empêcher la réception du dernier compteur. L’estimation des réponses exclut le coût séparé de transcription et les taxes.</p><pre data-voice-metrics>Aucune réponse reçue.</pre></details><div class="button-row"><button type="button" class="text-link" data-voice-export disabled>Télécharger la transcription</button><button type="button" class="text-link" data-voice-usage disabled>Télécharger les mesures</button></div></div>`;
+    dialog.innerHTML=`<div class="dialog-head"><div><p class="eyebrow">Un moment pour réfléchir</p><h2 id="voice-title" data-voice-book></h2></div><button class="icon-button" type="button" data-voice-close aria-label="Fermer">×</button></div><div class="dialog-body"><div class="reflection-toolbar"><div class="reflection-mode"><button type="button" data-voice-text>Texte</button><span aria-current="true">Voix</span></div><details class="reflection-about"><summary>À propos</summary><div><p>Conversation avec une voix IA OpenAI. Le contexte du livre et votre audio sont transmis à OpenAI. L’IA peut se tromper. BOO-P ne conserve pas l’audio. La transcription reste temporaire jusqu’à votre choix de la conserver.</p><p>La voix Realtime est plus coûteuse que le texte. Ce test s’arrête après 30 minutes dans l’interface ; ce n’est pas un plafond financier garanti.</p><details><summary>Mesures et export</summary><pre data-voice-metrics>Aucune réponse reçue.</pre><p>Estimation hors transcription et taxes. La facturation OpenAI fait référence.</p><button type="button" class="text-link" data-voice-export disabled>Télécharger la transcription</button><button type="button" class="text-link" data-voice-usage disabled>Télécharger les mesures</button></details></div></details></div><div class="voice-focus"><div class="voice-orb" aria-hidden="true"></div><p role="status" data-voice-status>Connexion…</p><p data-voice-clock class="voice-clock"></p><label class="checkbox-row voice-consent"><input type="checkbox" data-voice-consent> Je suis majeur et j’accepte le test vocal avec OpenAI.</label><p class="voice-cost">Voix Realtime · facturation audio</p><div class="button-row voice-controls"><button type="button" class="button button--primary" data-voice-start disabled>Commencer à parler</button><button type="button" class="button button--secondary" data-voice-mute disabled>Couper le micro</button><button type="button" class="button button--secondary" data-voice-stop disabled>Terminer</button></div></div><details class="voice-transcript-panel"><summary>Le fil de notre échange</summary><ol class="voice-transcript" data-voice-transcript></ol></details></div>`;
     document.body.append(dialog); $('[data-voice-book]').textContent=book.title+' — '+book.authors.join(', ');
     const keep=document.createElement('button');keep.type='button';keep.className='button button--sage';keep.textContent='Conserver cet échange pour mon carnet';keep.dataset.voiceKeep='';keep.disabled=true;
     keep.onclick=async()=>{const id=book.id,copy=transcript.map(t=>({...t})),user=owner;await close();if(BT.auth.getCurrentUser?.()?.id===user)BT.reflection?.importVoice(id,copy);};
     $('.dialog-body').append(keep);
-    const note=document.createElement('p');note.className='small muted';note.textContent='Ce bouton sauvegarde la transcription dans votre bibliothèque privée. Vous pourrez ensuite composer un carnet avec l’IA.';$('.dialog-body').append(note);
+    keep.hidden=true;
+    BT.reflection?.ambiance(dialog);
+    $('[data-voice-text]').onclick=async()=>{const id=book.id;await close();BT.reflection?.open(id);};
     $('[data-voice-close]').onclick=()=>close();
     dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
     $('[data-voice-start]').onclick=start; $('[data-voice-stop]').onclick=()=>stop();
@@ -42,13 +44,13 @@ BT.voice = (() => {
     $('[data-voice-export]').onclick=()=>download('boop-conversation.txt',book.title+'\n\n'+transcript.map(t=>`${t.role==='user'?'Vous':'IA'} : ${t.text}`).join('\n\n'),'text/plain;charset=utf-8');
     $('[data-voice-usage]').onclick=()=>download('boop-mesures-vocales.json',JSON.stringify({startedAt:startTime,elapsedSeconds:startTime?Math.round(((endTime || Date.now())-startTime)/1000):0,...meter.snapshot()},null,2),'application/json');
     transcript=[];transcriptIds=new Set();startTime=null;endTime=null;meter=null;callId=null;
-    dialog.showModal(); const current=++generation;
+    dialog.showModal();document.body.classList.add('reflection-open'); const current=++generation;
     try {
       if(BT.auth.isGuest() || !BT.auth.isAuthenticated()) throw new Error('Connectez-vous à un compte adulte autorisé pour ce test.');
       const access=await api({action:'status'});
       if(current!==generation || !dialog.open)return;
       if(!access.ready) throw new Error('Le test est préparé. La clé OpenAI doit encore être activée côté serveur.');
-      status('Prêt. Le micro ne sera activé qu’après votre confirmation.');
+      status('Prenez le temps. Puis commencez à parler.');
       $('[data-voice-consent]').onchange=()=>{$('[data-voice-start]').disabled=!$('[data-voice-consent]').checked;};
     } catch(error) {if(current===generation)status(error.message);}
   }
@@ -56,7 +58,7 @@ BT.voice = (() => {
     if(running || stopping || !$('[data-voice-consent]').checked)return;
     const current=++generation;running=true;controller=new AbortController();
     $('[data-voice-start]').disabled=true; $('[data-voice-consent]').disabled=true;$('[data-voice-stop]').disabled=false;
-    status('Connexion au microphone…');
+    $('.voice-consent').hidden=true;$('[data-voice-start]').hidden=true;status('Connexion au microphone…');
     try {
       const metrics=await import('./voice-metrics.mjs');
       if(current!==generation)return;
@@ -97,9 +99,9 @@ BT.voice = (() => {
     $('[data-voice-mute]').disabled=true;$('[data-voice-stop]').disabled=true;status(message);
     const id=callId;callId=null;
     try{if(id)await api({action:'stop',id});}catch(error){status(message+' '+error.message);}
-    finally{stopping=false;$('[data-voice-keep]').disabled=!transcript.length;}
+    finally{stopping=false;$('[data-voice-keep]').disabled=!transcript.length;$('[data-voice-keep]').hidden=!transcript.length;}
   }
-  async function close(){await stop();dialog.close();transcript=[];meter=null;}
+  async function close(){await stop();dialog.close();document.body.classList.remove('reflection-open');transcript=[];meter=null;}
   window.addEventListener('pagehide',()=>{controller?.abort();stream?.getTracks().forEach(t=>t.stop());pc?.close();});
   BT.store?.subscribe(()=>{if(dialog?.open && (BT.auth.getCurrentUser?.()?.id!==owner || !BT.store.getBookById(book.id)))void close();});
   return {decorate,open};

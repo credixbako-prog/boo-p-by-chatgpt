@@ -1,6 +1,20 @@
 window.BT = window.BT || {};
 BT.reflection = (() => {
   let dialog, book, state, owner, busy=false, aborter, recognition;
+  const consented = new Set();
+  function ambiance(target) {
+    const themes={night:'Bleu nuit',forest:'Forêt',plum:'Prune',paper:'Papier'};
+    const current=BT.store.getSettings().reflectionTheme;
+    target.dataset.ambiance=Object.hasOwn(themes,current)?current:'night';
+    const picker=document.createElement('details');picker.className='reflection-ambiance';
+    const summary=document.createElement('summary');summary.textContent='Ambiance';picker.append(summary);
+    const choices=document.createElement('div');choices.setAttribute('role','group');choices.setAttribute('aria-label','Couleur de fond');
+    for(const [value,label] of Object.entries(themes)){
+      const choice=button(label,()=>{target.dataset.ambiance=value;BT.store.saveSettings({reflectionTheme:value});choices.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.theme===value)));});
+      choice.dataset.theme=value;choice.setAttribute('aria-pressed',String(value===target.dataset.ambiance));choices.append(choice);
+    }
+    picker.append(choices);(target.querySelector('.reflection-toolbar') || target.querySelector('.dialog-head')).append(picker);
+  }
   const $=s=>dialog.querySelector(s);
   const identity=()=>BT.auth?.getCurrentUser?.()?.id;
   const empty=()=>({messages:[],draft:'',notebook:'',versions:[],usage:[]});
@@ -16,17 +30,18 @@ BT.reflection = (() => {
     let id=null,row=view.querySelector('.book-detail-copy > .button-row:last-child');
     if(row)id=params.get('id');
     if(!row && view.querySelector('.session-view')){row=view.querySelector('.session-book');id=BT.store.getActiveSession()?.bookId;}
-    if(!row && params.get('tab')==='lexicon'){
-      row=view.querySelector('.section-block') || view;id=params.get('book');
+    if(!row && ['notebook','lexicon'].includes(params.get('tab'))){
+      row=view.querySelector('[data-reflection-host]') || view.querySelector('.lexicon-view');id=params.get('book');
     }
     if(!row)return;
     const entry=document.createElement('div');entry.dataset.reflectionEntry='';entry.className='button-row reflection-entry';
-    if(id)entry.append(button('Discuter du livre',()=>open(id)),button('Mon carnet de réflexion',()=>open(id,'notebook')));
+    if(id)entry.append(button('Ouvrir la réflexion',()=>open(id)));
     else {
       const label=document.createElement('label');label.textContent='Réfléchir à un livre ';const select=document.createElement('select');select.setAttribute('aria-label','Livre à explorer');
       BT.store.getBooks().filter(b=>b.libraryState==='library').forEach(b=>{const opt=document.createElement('option');opt.value=b.id;opt.textContent=b.title;select.append(opt);});label.append(select);entry.append(label,button('Ouvrir la réflexion',()=>{if(select.value)open(select.value);}));
     }
-    row.append(entry);
+    if(row.matches('.session-book'))row.after(entry);else if(row.matches('.lexicon-view'))row.prepend(entry);else row.append(entry);
+    view.querySelectorAll('[data-open-reflection]').forEach(b=>{b.onclick=()=>open(b.dataset.openReflection,b.dataset.reflectionTab || 'chat');});
   }
   async function api(body) {
     const {data,error}=await BT.auth.getClient().auth.getSession();
@@ -36,6 +51,7 @@ BT.reflection = (() => {
     const result=await res.json();if(!res.ok)throw new Error(result.error || 'Service indisponible.');return result;
   }
   function tab(name) {
+    dialog.dataset.panel=name;
     $('[data-chat]').hidden=name!=='chat';$('[data-notebook]').hidden=name!=='notebook';
     $('[data-tab-chat]').setAttribute('aria-pressed',String(name==='chat'));$('[data-tab-notebook]').setAttribute('aria-pressed',String(name==='notebook'));
   }
@@ -43,19 +59,22 @@ BT.reflection = (() => {
     const list=$('[data-messages]');list.replaceChildren();
     state.messages.forEach(m=>{const li=document.createElement('li');li.className=`reflection-message reflection-message--${m.role}`;const label=document.createElement('strong');label.textContent=m.role==='user'?'Vous':'IA · OpenAI';const p=document.createElement('p');p.textContent=m.content;li.append(label,p);list.append(li);});
     if(!state.messages.length){const p=document.createElement('p');p.className='muted';p.textContent='Qu’est-ce qui vous a marqué dans cette lecture ? Une impression, un désaccord ou une question suffit pour commencer.';list.append(p);}
+    list.scrollTop=list.scrollHeight;
+    $('[data-proposal]').open=Boolean(state.draft);
     $('[data-draft]').value=state.draft || '';$('[data-notebook-text]').value=state.notebook || '';
     const history=$('[data-versions]');history.replaceChildren();
     state.versions.forEach(v=>{const d=document.createElement('details'),s=document.createElement('summary'),p=document.createElement('p');s.textContent=new Date(v.at).toLocaleString('fr-FR');p.textContent=v.text;d.append(s,p);history.append(d);});
     const totals=state.usage.reduce((a,u)=>({input:a.input+(u?.input_tokens || 0),output:a.output+(u?.output_tokens || 0)}),{input:0,output:0});
     $('[data-usage]').textContent=state.usage.length?`Mesures texte reçues : ${totals.input} tokens en entrée · ${totals.output} en sortie. Audio Realtime compté séparément.`:'Aucune mesure texte reçue.';
   }
-  function close() {aborter?.abort();recognition?.abort();recognition=null;busy=false;dialog?.close();}
+  function viewport() {if(dialog?.open){dialog.style.setProperty('--reflection-height',`${window.visualViewport?.height || innerHeight}px`);dialog.style.setProperty('--reflection-top',`${window.visualViewport?.offsetTop || 0}px`);}}
+  function close() {aborter?.abort();recognition?.abort();recognition=null;busy=false;dialog?.close();document.body.classList.remove('reflection-open');}
   async function open(id,initial='chat') {
     close();book=BT.store.getBookById(id);if(!book)return;
     owner=identity();state={...empty(),...(book.reflection || {})};aborter=new AbortController();const current=aborter;
     dialog?.remove();dialog=document.createElement('dialog');dialog.className='app-dialog reflection-dialog';dialog.setAttribute('aria-labelledby','reflection-title');
-    dialog.innerHTML=`<div class="dialog-head"><div><p class="eyebrow">BOO-P · Réflexion · test privé</p><h2 id="reflection-title"></h2></div><button type="button" class="icon-button" data-close aria-label="Fermer">×</button></div><div class="dialog-body"><p class="small muted">Vos échanges et votre carnet restent privés dans votre bibliothèque BOO-P et suivent sa synchronisation. À chaque envoi, la conversation de ce carnet, le titre, l’auteur et votre progression sont transmis à OpenAI. L’IA peut se tromper. Ne partagez que ce que vous souhaitez lui confier.</p><label class="checkbox-row"><input type="checkbox" data-consent> Je suis majeur et je souhaite tester les échanges avec OpenAI.</label><div class="button-row reflection-tabs"><button type="button" class="button button--secondary" data-tab-chat>Conversation</button><button type="button" class="button button--secondary" data-tab-notebook>Mon carnet</button></div><p role="status" data-status>Vérification du test…</p><section data-chat><ol data-messages class="reflection-messages" aria-label="Conversation"></ol><label class="field">Votre message<textarea data-input maxlength="6000" rows="3" placeholder="Ce passage me fait réfléchir à…"></textarea></label><div class="button-row"><button type="button" class="button button--primary" data-send disabled>Envoyer</button><button type="button" class="button button--secondary" data-dictate>Dicter</button><button type="button" class="text-link" data-voice>Conversation vocale Realtime</button></div><p class="small muted">La dictée prépare un texte que vous pouvez corriger avant l’envoi. Selon votre navigateur, la reconnaissance vocale peut utiliser un service distant.</p><button type="button" class="button button--sage" data-compose disabled>Composer mon carnet</button></section><section data-notebook hidden><p class="muted">Votre conversation alimente ce carnet. Les nouvelles propositions restent séparées du texte déjà validé.</p><label class="field">Proposition de l’IA · à relire<textarea data-draft rows="9"></textarea></label><button type="button" class="button button--secondary" data-accept>Ajouter au carnet validé</button><label class="field">Mon carnet modifiable<textarea data-notebook-text rows="10"></textarea></label><div class="button-row"><button type="button" class="button button--primary" data-save>Enregistrer mes modifications</button><button type="button" class="button button--secondary" data-continue>Continuer ma réflexion</button><button type="button" class="text-link" data-deepen>Approfondir le passage sélectionné</button></div><div class="button-row"><button type="button" class="text-link" data-export>Exporter le texte</button><button type="button" class="text-link" data-print>Imprimer / PDF</button></div><details><summary>Versions précédentes</summary><div data-versions class="reflection-versions"></div></details></section><details><summary>Consommation du test</summary><p data-usage></p><p class="small muted">50 demandes texte par jour et par compte. La composition du carnet compte comme une demande. La facturation OpenAI fait référence.</p></details></div>`;
-    document.body.append(dialog);$('#reflection-title').textContent=book.title;dialog.showModal();paint();tab(initial);
+    dialog.innerHTML=`<div class="dialog-head"><div><p class="eyebrow">Un moment pour réfléchir</p><h2 id="reflection-title"></h2></div><button type="button" class="icon-button" data-close aria-label="Fermer">×</button></div><div class="dialog-body"><div class="reflection-toolbar"><div class="reflection-tabs"><button type="button" data-tab-chat>Conversation</button><button type="button" data-tab-notebook>Mon carnet</button></div><details class="reflection-about" data-about><summary>À propos</summary><div><p>Vous échangez avec une IA OpenAI, qui peut se tromper. Vos messages, le titre du livre et votre progression lui sont transmis. Le carnet suit la synchronisation privée de votre bibliothèque.</p><p>La dictée prépare un texte à corriger avant envoi ; elle peut utiliser un service distant du navigateur.</p><details><summary>Consommation du test</summary><p data-usage></p><p>50 demandes texte par jour. La synthèse compte comme une demande. La voix Realtime est facturée séparément.</p></details></div></details></div><div class="reflection-consent" data-consent-box><label class="checkbox-row"><input type="checkbox" data-consent> Je suis majeur et j’accepte ce test avec OpenAI.</label></div><p role="status" data-status>Connexion…</p><section data-chat><div class="reflection-mode" aria-label="Mode de conversation"><span aria-current="true">Texte</span><button type="button" data-voice>Voix</button></div><ol data-messages class="reflection-messages" aria-label="Conversation"></ol><div class="reflection-composer"><label class="sr-only" for="reflection-input">Votre message</label><textarea id="reflection-input" data-input maxlength="6000" rows="2" placeholder="Laissez venir votre pensée…"></textarea><div class="reflection-composer-actions"><button type="button" class="text-link" data-dictate>Dicter</button><button type="button" class="button button--primary" data-send disabled>Envoyer ↑</button></div></div><button type="button" class="text-link reflection-compose" data-compose disabled>Garder une trace de cet échange</button></section><section data-notebook hidden><details class="reflection-proposal" data-proposal><summary>Proposition de l’IA · à relire</summary><label class="sr-only" for="reflection-draft">Proposition de l’IA</label><textarea id="reflection-draft" data-draft rows="8"></textarea><button type="button" class="button button--secondary" data-accept>Ajouter au carnet</button></details><label class="field">Mon carnet<textarea data-notebook-text rows="10" placeholder="Vos échanges prendront forme ici…"></textarea></label><div class="button-row"><button type="button" class="button button--primary" data-save>Enregistrer</button><button type="button" class="text-link" data-continue>Continuer ma réflexion</button></div><details class="reflection-notebook-tools"><summary>Approfondir, exporter et retrouver mes versions</summary><button type="button" class="text-link" data-deepen>Approfondir le passage sélectionné</button><div class="button-row"><button type="button" class="text-link" data-export>Exporter le texte</button><button type="button" class="text-link" data-print>Imprimer / PDF</button></div><details><summary>Versions précédentes</summary><div data-versions class="reflection-versions"></div></details></details></section></div>`;
+    document.body.append(dialog);$('#reflection-title').textContent=book.title;ambiance(dialog);dialog.showModal();document.body.classList.add('reflection-open');viewport();paint();tab(initial);$('[data-consent]').checked=consented.has(owner);$('[data-consent-box]').hidden=consented.has(owner);$('[data-about]').open=false;
     $('[data-close]').onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
     $('[data-tab-chat]').onclick=()=>tab('chat');$('[data-tab-notebook]').onclick=()=>tab('notebook');
     $('[data-send]').onclick=()=>generate('chat');$('[data-compose]').onclick=()=>generate('compose');
@@ -77,8 +96,8 @@ BT.reflection = (() => {
       if(BT.auth.isGuest() || !BT.auth.isAuthenticated())throw new Error('Connectez-vous au compte adulte autorisé pour tester l’IA.');
       const access=await api({action:'status'});if(current!==aborter || current.signal.aborted)return;
       if(!access.ready)throw new Error('La clé OPENAI_API_KEY manque dans les secrets Supabase.');
-      const toggle=()=>{const disabled=!$('[data-consent]').checked || busy;$('[data-send]').disabled=disabled;$('[data-compose]').disabled=disabled;};$('[data-consent]').onchange=toggle;
-      status('Test disponible. Confirmez votre participation avant le premier envoi.');
+      const toggle=()=>{if($('[data-consent]').checked){consented.add(owner);$('[data-consent-box]').hidden=true;$('[data-about]').open=false;status('');}const disabled=!$('[data-consent]').checked || busy;$('[data-send]').disabled=disabled;$('[data-compose]').disabled=disabled;};$('[data-consent]').onchange=toggle;
+      toggle();status(consented.has(owner)?'':'Confirmez le test pour commencer.');
     } catch(e){if(!current.signal.aborted)status(e.message);}
   }
   async function generate(action) {
@@ -92,9 +111,9 @@ BT.reflection = (() => {
       const result=await api({action,adultConsent:true,messages,book:{title:book.title,authors:book.authors.join(', '),position:book.mediaType==='audio'?`minute ${book.currentMinute}`:`page ${book.currentPage}`,finished:book.status==='lu'}});
       if(current!==aborter || current.signal.aborted || identity()!==owner)return;
       if(result.usage)state.usage.push(result.usage);
-      if(action==='chat'){state.messages=[...messages,{role:'assistant',content:result.text}];state.input='';$('[data-input]').value='';}else{state.draft=result.text;tab('notebook');}
+      if(action==='chat'){state.messages=[...messages,{role:'assistant',content:result.text}];state.input='';$('[data-input]').value='';}else{state.draft=result.text;tab('notebook');$('[data-proposal]').open=true;}
       save();paint();if(state.edit!==undefined)$('[data-notebook-text]').value=state.edit;
-      status(result.incomplete?'Réponse partielle reçue : la limite de sortie a été atteinte.':'Échange enregistré dans votre bibliothèque privée.');
+      status(result.incomplete?'Réponse partielle reçue : la limite de sortie a été atteinte.':'');
     }catch(e){if(!current.signal.aborted)status(e.message);}
     finally{if(current===aborter && !current.signal.aborted){busy=false;$('[data-input]').disabled=false;$('[data-dictate]').disabled=!(window.SpeechRecognition || window.webkitSpeechRecognition);$('[data-send]').disabled=!$('[data-consent]').checked;$('[data-compose]').disabled=!$('[data-consent]').checked;}}
   }
@@ -116,6 +135,8 @@ BT.reflection = (() => {
     const reflection={...empty(),...(target.reflection || {})};reflection.messages.push(...messages.map(m=>({role:m.role,content:m.text})));BT.store.updateBook(id,{reflection});open(id);
   }
   window.addEventListener('pagehide',close);
+  window.visualViewport?.addEventListener('resize',viewport);
+  window.visualViewport?.addEventListener('scroll',viewport);
   BT.store?.subscribe(()=>{if(dialog?.open && (identity()!==owner || !BT.store.getBookById(book.id)))close();});
-  return {decorate,open,importVoice};
+  return {decorate,open,importVoice,ambiance};
 })();

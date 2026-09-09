@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'boo-p-webapp-v41';
+const CACHE_VERSION = 'boo-p-webapp-v42';
 const APP_SHELL = [
   './',
   './index.html',
@@ -16,6 +16,7 @@ const APP_SHELL = [
   './js/voice-metrics.mjs',
   './js/reading-reflection.js',
   './css/reading-reflection.css',
+  './css/reflection-immersive.css',
   './css/screens.css',
   './css/tokens.css',
   './js/auth.js',
