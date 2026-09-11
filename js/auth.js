@@ -13,6 +13,10 @@ BT.auth = (function () {
   const PERSISTENCE_KEY = 'boop_auth_persistence_v1';
   const LEGACY_SESSION_KEY = 'boop_auth_session_v1';
   const GUEST_KEY = 'boop_guest_mode_v1';
+  const RECOVERY_KEY = 'boop_password_recovery_v1';
+  const recoveryURL = new URLSearchParams(window.location.hash.slice(1));
+  const recoveryRequested = new URLSearchParams(window.location.search).get('auth') === 'recovery' || recoveryURL.get('type') === 'recovery';
+  const recoveryLinkError = recoveryURL.has('error') || recoveryURL.has('error_code');
   const AVATAR_BUCKET = 'profile-avatars';
   const MAX_AVATAR_INPUT_BYTES = 15 * 1024 * 1024;
   const AVATAR_EDGE = 512;
@@ -263,6 +267,7 @@ BT.auth = (function () {
       if (!window.supabase?.createClient) throw new Error('Le module sécurisé de connexion n’a pas pu être chargé.');
 
       localStorage.removeItem(LEGACY_SESSION_KEY);
+      if(recoveryLinkError)sessionStorage.removeItem(RECOVERY_KEY);
       sessionStorage.removeItem(LEGACY_SESSION_KEY);
       if (!localStorage.getItem(PERSISTENCE_KEY) && !sessionStorage.getItem(PERSISTENCE_KEY)) setPersistence(true);
 
@@ -276,16 +281,23 @@ BT.auth = (function () {
         }
       });
 
+      // Subscribe before getSession: recovery can be emitted during URL initialization.
+      client.auth.onAuthStateChange((event, session) => {
+        currentSession = session;
+        if (event === 'PASSWORD_RECOVERY' && session?.user) {
+          sessionStorage.setItem(RECOVERY_KEY, JSON.stringify({ userId:session.user.id, expires:Date.now()+3600000 }));
+          leaveGuestMode();
+          window.dispatchEvent(new Event('boop:password-recovery'));
+        }
+        if (event === 'SIGNED_OUT' || event === 'SIGNED_IN') sessionStorage.removeItem(RECOVERY_KEY);
+        if (!session) currentProfile = null;
+        if (session && !recoveryRequested && event !== 'PASSWORD_RECOVERY') window.setTimeout(() => ensureProfile(session).catch(console.error), 0);
+      });
+
       const { data, error } = await client.auth.getSession();
       if (error) throw error;
       currentSession = data.session;
-      if (currentSession) await ensureProfile(currentSession);
-
-      client.auth.onAuthStateChange((_event, session) => {
-        currentSession = session;
-        if (!session) currentProfile = null;
-        if (session) window.setTimeout(() => ensureProfile(session).catch(console.error), 0);
-      });
+      if (currentSession && !recoveryRequested && !isPasswordRecovery()) await ensureProfile(currentSession);
 
       return userFromSession();
     } catch (error) {
@@ -423,6 +435,29 @@ BT.auth = (function () {
     if (error) throw friendlyError(error, 'Le mot de passe ne peut pas être modifié.');
   }
 
+  function isPasswordRecovery() {
+    if (recoveryLinkError) return false;
+    try { const marker=JSON.parse(sessionStorage.getItem(RECOVERY_KEY)); return Boolean(currentSession?.user && marker?.userId===currentSession.user.id && marker.expires>Date.now()); }
+    catch { return false; }
+  }
+
+  async function requestPasswordReset(email) {
+    await readyPromise;
+    const cleanEmail=validateEmail(email);
+    if (!['https:','http:'].includes(window.location.protocol)) throw new Error('Ouvrez BOO-P depuis son adresse en ligne pour recevoir un lien de récupération.');
+    const redirectTo=new URL('index.html?auth=recovery',window.location.href).href;
+    const {error}=await client.auth.resetPasswordForEmail(cleanEmail,{redirectTo});
+    if(error?.code==='user_not_found')return;
+    if (error) throw friendlyError(error,'Le lien ne peut pas être envoyé pour le moment.');
+  }
+
+  async function completePasswordReset(password) {
+    await readyPromise;
+    if (!isPasswordRecovery()) throw new Error('Ce lien est invalide ou a expiré. Demandez un nouveau lien.');
+    await updatePassword(password);
+    sessionStorage.removeItem(RECOVERY_KEY);
+  }
+
   async function signOut() {
     await readyPromise.catch(() => null);
     if (client) {
@@ -441,10 +476,15 @@ BT.auth = (function () {
     signIn,
     signOut,
     updatePassword,
+    requestPasswordReset,
+    completePasswordReset,
+    isPasswordRecovery,
+    recoveryRequested,
     updateProfile,
     updateAvatar,
     removeAvatar,
     prepareAvatar,
+    decodeAvatarImage,
     ensureProfile,
     isAuthenticated,
     getCurrentUser,

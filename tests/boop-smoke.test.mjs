@@ -8,9 +8,9 @@ import vm from 'node:vm';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = file => readFile(path.join(root, file), 'utf8');
 
-test('inscription: les trois mots de passe disposent d’un contrôle de visibilité', async () => {
+test('connexion, inscription et récupération: les mots de passe disposent d’un contrôle de visibilité', async () => {
   const [html, script] = await Promise.all([read('index.html'), read('js/landing.js')]);
-  assert.equal((html.match(/data-password-toggle=/g) || []).length, 3);
+  assert.equal((html.match(/data-password-toggle=/g) || []).length, 5);
   assert.match(script, /Votre sentier attend son premier pas/);
 });
 
@@ -893,7 +893,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v44/);
+  assert.match(worker, /boo-p-webapp-v45/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

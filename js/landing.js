@@ -11,6 +11,8 @@
   const signupForm = document.querySelector('[data-signup-form]');
   const loginMessage = document.querySelector('[data-login-message]');
   const signupMessage = document.querySelector('[data-signup-message]');
+  const forgotDialog=document.querySelector('[data-forgot-dialog]'), forgotForm=document.querySelector('[data-forgot-form]'), forgotMessage=document.querySelector('[data-forgot-message]');
+  const resetDialog=document.querySelector('[data-reset-dialog]'), resetForm=document.querySelector('[data-reset-form]'), resetMessage=document.querySelector('[data-reset-message]');
 
   const updateHeader = () => {
     header?.classList.toggle('is-scrolled', window.scrollY > 24);
@@ -49,6 +51,36 @@
   const openProtectedArea = () => {
     window.location.href = 'app.html';
   };
+
+  function openForgot() { closeDialog(loginDialog); forgotForm.elements.email.value=loginForm.elements.email.value; showDialog(forgotDialog); }
+  document.querySelector('[data-forgot-open]')?.addEventListener('click',openForgot);
+  document.querySelector('[data-forgot-close]')?.addEventListener('click',()=>closeDialog(forgotDialog));
+  document.querySelector('[data-forgot-login]')?.addEventListener('click',()=>{closeDialog(forgotDialog);showDialog(loginDialog);});
+  forgotForm?.addEventListener('submit',async event=>{
+    event.preventDefault();const submit=forgotForm.querySelector('[type=submit]');if(submit.disabled)return;
+    submit.disabled=true;forgotMessage.textContent='Envoi de la demande…';forgotMessage.classList.remove('is-info');
+    try { await BT.auth.requestPasswordReset(forgotForm.elements.email.value);forgotMessage.textContent='Si un compte correspond à cette adresse, vous recevrez un lien pour choisir un nouveau mot de passe. Pensez à vérifier vos courriers indésirables.';forgotMessage.classList.add('is-info'); }
+    catch(error){forgotMessage.textContent=error.message || 'Envoi impossible. Réessayez.';}
+    finally {submit.disabled=false;}
+  });
+  async function openRecovery() {
+    closeDialog(loginDialog);closeDialog(signupDialog);closeDialog(forgotDialog);showDialog(resetDialog);
+    try {await BT.auth.ready();} catch { /* Show a recoverable error instead of the login screen. */ }
+    const valid=BT.auth.isPasswordRecovery();resetForm.hidden=!valid;
+    resetMessage.textContent=valid?'':'Ce lien est invalide ou a expiré. Demandez un nouveau lien pour réessayer.';
+    document.querySelector('[data-reset-intro]').hidden=!valid;
+    if(valid) resetForm.elements.password.focus();
+    history.replaceState(null,'','index.html?auth=recovery');
+  }
+  window.addEventListener('boop:password-recovery',()=>{void openRecovery();});
+  resetForm?.addEventListener('submit',async event=>{
+    event.preventDefault();const submit=resetForm.querySelector('[type=submit]');if(submit.disabled)return;
+    if(resetForm.elements.password.value!==resetForm.elements.confirm.value){resetMessage.textContent='Les deux mots de passe ne correspondent pas.';resetForm.elements.confirm.focus();return;}
+    submit.disabled=true;resetMessage.textContent='Enregistrement…';
+    try {await BT.auth.completePasswordReset(resetForm.elements.password.value);resetForm.reset();resetPasswordVisibility(resetForm);resetForm.hidden=true;document.querySelector('[data-reset-intro]').hidden=true;resetMessage.textContent='Votre mot de passe a été modifié.';resetMessage.classList.add('is-info');document.querySelector('[data-reset-request]').hidden=true;const next=document.querySelector('[data-reset-success]');next.hidden=false;next.focus();}
+    catch(error){resetMessage.textContent=error.message || 'Le mot de passe n’a pas pu être modifié.';}
+    finally {submit.disabled=false;}
+  });
 
   const openLogin = async () => {
     try { await BT.auth?.ready?.(); }
@@ -168,6 +200,8 @@
   });
 
   async function initializeAuthUI() {
+    const requestedAuth=new URLSearchParams(window.location.search).get('auth');
+    if(BT.auth?.recoveryRequested){await openRecovery();return;}
     try {
       await BT.auth?.ready?.();
     } catch (error) {
@@ -175,6 +209,7 @@
       signupMessage.textContent = loginMessage.textContent;
     }
 
+    if(requestedAuth==='forgot') {showDialog(forgotDialog);return;}
     if (BT.auth?.isAuthenticated()) {
       loginButtons.forEach(button => { button.textContent = 'Ouvrir l’application'; });
       signupButtons.forEach(button => { button.textContent = 'Continuer mon sentier'; });
@@ -182,7 +217,6 @@
     }
 
     const params = new URLSearchParams(window.location.search);
-    const requestedAuth = params.get('auth');
     if (requestedAuth === 'signup') showDialog(signupDialog);
     if (requestedAuth === 'login') {
       if (params.get('reason') === 'protected') {

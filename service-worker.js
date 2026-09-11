@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'boo-p-webapp-v44';
+const CACHE_VERSION = 'boo-p-webapp-v45';
 const APP_SHELL = [
   './',
   './index.html',
@@ -21,6 +21,8 @@ const APP_SHELL = [
   './css/screens.css',
   './css/tokens.css',
   './js/auth.js',
+  './js/avatar-crop.js',
+  './css/account-controls.css',
   './js/book-lookup.js',
   './js/community-api.js',
   './js/components/trail-mindmap.js',

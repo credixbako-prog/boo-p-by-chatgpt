@@ -1596,7 +1596,7 @@
     ui.pendingProfilePhotoFile = null;
     ui.removeProfilePhoto = false;
     const hasPhoto = Boolean(avatarSource(profile));
-    openDialog({ title: 'Modifier le profil', eyebrow: 'Identité du lecteur', body: `<form class="form-grid" data-form="profile"><div class="profile-photo-field"><span class="profile-photo-preview" id="profile-photo-preview" aria-hidden="true">${avatarInner(profile)}</span><div><label class="button button--secondary button--small profile-photo-button" for="profile-photo-file">${hasPhoto ? 'Changer la photo' : 'Ajouter une photo'}<input class="sr-only" id="profile-photo-file" name="avatar" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" data-change="profile-photo"></label><button class="text-link small" id="remove-profile-photo" type="button" data-action="remove-profile-photo" ${hasPhoto ? '' : 'hidden'}>Retirer la photo</button><p class="field-help" id="profile-photo-help">Recadrage carré et compression automatiques · 15 Mo maximum.</p></div></div><label class="field">Nom ou pseudonyme<input name="name" required value="${attr(profile.name)}"></label><label class="field">Identifiant<input name="handle" value="${attr(profile.handle || '')}"></label><label class="field">Phrase de profil<input name="title" value="${attr(profile.title || '')}"></label><label class="field">Biographie<textarea name="bio">${esc(profile.bio || '')}</textarea></label><label class="field">Centres d’intérêt<input name="interests" value="${attr((profile.interests || []).join(', '))}"><span class="field-help">Séparés par des virgules</span></label><button class="button button--primary" type="submit">Enregistrer</button></form>` });
+    openDialog({ title: 'Modifier le profil', eyebrow: 'Identité du lecteur', body: `<form class="form-grid" data-form="profile"><div class="profile-photo-field"><span class="profile-photo-preview" id="profile-photo-preview" aria-hidden="true">${avatarInner(profile)}</span><div><label class="button button--secondary button--small profile-photo-button" for="profile-photo-file">${hasPhoto ? 'Changer la photo' : 'Ajouter une photo'}<input class="sr-only" id="profile-photo-file" name="avatar" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" data-change="profile-photo"></label><button class="text-link small" id="remove-profile-photo" type="button" data-action="remove-profile-photo" ${hasPhoto ? '' : 'hidden'}>Retirer la photo</button><p class="field-help" id="profile-photo-help">Déplacez la photo et zoomez pour choisir le cadrage · 15 Mo maximum.</p></div></div><label class="field">Nom ou pseudonyme<input name="name" required value="${attr(profile.name)}"></label><label class="field">Identifiant<input name="handle" value="${attr(profile.handle || '')}"></label><label class="field">Phrase de profil<input name="title" value="${attr(profile.title || '')}"></label><label class="field">Biographie<textarea name="bio">${esc(profile.bio || '')}</textarea></label><label class="field">Centres d’intérêt<input name="interests" value="${attr((profile.interests || []).join(', '))}"><span class="field-help">Séparés par des virgules</span></label><button class="button button--primary" type="submit">Enregistrer</button></form>` });
   }
 
   function openFinishSessionDialog() {
@@ -2104,7 +2104,7 @@
     store.saveSettings(settings); showToast('Suggestion écartée · une nouvelle proposition est affichée'); render();
   }
 
-  function previewProfilePhoto(file) {
+  async function previewProfilePhoto(file) {
     const preview = document.getElementById('profile-photo-preview');
     const help = document.getElementById('profile-photo-help');
     const removeButton = document.getElementById('remove-profile-photo');
@@ -2116,12 +2116,18 @@
       document.getElementById('profile-photo-file').value = '';
       return;
     }
+    const owner=BT.auth.getCurrentUser()?.id;
+    let cropped;
+    try { cropped=await BT.avatarCrop.open(file); }
+    catch(error){showToast(error.message || 'Cette photo ne peut pas être lue. Essayez une image JPEG ou PNG.');}
+    const input=document.getElementById('profile-photo-file');if(input)input.value='';
+    if(!cropped || !preview.isConnected || owner!==BT.auth.getCurrentUser()?.id)return;
     if (ui.pendingProfilePhotoUrl) URL.revokeObjectURL(ui.pendingProfilePhotoUrl);
-    ui.pendingProfilePhotoUrl = URL.createObjectURL(file);
-    ui.pendingProfilePhotoFile = file;
+    ui.pendingProfilePhotoUrl = URL.createObjectURL(cropped);
+    ui.pendingProfilePhotoFile = cropped;
     ui.removeProfilePhoto = false;
     preview.innerHTML = avatarInner({ name:store.getProfile().name, avatarUrl:ui.pendingProfilePhotoUrl });
-    help.textContent = `${file.name} · la photo sera recadrée et compressée lors de l’enregistrement.`;
+    help.textContent = 'Cadrage choisi. Enregistrez le profil pour conserver cette photo.';
     removeButton.hidden = false;
   }
 

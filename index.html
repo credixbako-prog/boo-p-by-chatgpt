@@ -21,6 +21,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500..700;1,500..600&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/landing.css?v=20260820-3">
+  <link rel="stylesheet" href="css/account-controls.css?v=20260911-1">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Aller au contenu</a>
@@ -60,7 +61,7 @@
   <dialog class="login-dialog" aria-labelledby="login-title" data-login-dialog>
     <button class="login-dialog__close" type="button" aria-label="Fermer" data-login-close>×</button><div class="login-dialog__brand"><img src="assets/brand/closed-book-proposals/boo-p-closed-01-signet.png" alt="" width="54" height="54"><span>BOO-P</span></div>
     <p class="eyebrow">Heureux de vous revoir</p><h2 id="login-title">Reprendre votre sentier</h2><p>Retrouvez vos lectures, vos sessions et toutes les traces que vous avez choisies de garder.</p>
-    <form data-login-form novalidate><label for="login-email">Adresse e-mail</label><input id="login-email" name="email" type="email" autocomplete="email" placeholder="vous@exemple.fr" required><label for="login-password">Mot de passe</label><span class="password-field"><input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required minlength="8"><button class="password-toggle" type="button" data-password-toggle="login-password" aria-pressed="false" aria-label="Afficher le mot de passe">Voir</button></span><div class="login-dialog__form-row"><label class="remember"><input type="checkbox" name="remember"> <span>Se souvenir de moi</span></label></div><p class="auth-message" role="alert" data-login-message></p><button class="button button--primary button--full" type="submit">Se connecter <span aria-hidden="true">→</span></button></form>
+    <form data-login-form novalidate><label for="login-email">Adresse e-mail</label><input id="login-email" name="email" type="email" autocomplete="email" placeholder="vous@exemple.fr" required><label for="login-password">Mot de passe</label><span class="password-field"><input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required minlength="8"><button class="password-toggle" type="button" data-password-toggle="login-password" aria-pressed="false" aria-label="Afficher le mot de passe">Voir</button></span><div class="login-dialog__form-row"><button class="auth-text-button" type="button" data-forgot-open>Mot de passe oublié ?</button><label class="remember"><input type="checkbox" name="remember"> <span>Se souvenir de moi</span></label></div><p class="auth-message" role="alert" data-login-message></p><button class="button button--primary button--full" type="submit">Se connecter <span aria-hidden="true">→</span></button></form>
     <p class="login-dialog__new">Nouveau sur BOO-P ? <button type="button" data-switch-signup>Créer un compte</button></p><p class="prototype-note">Connexion et données communautaires sécurisées par Supabase.</p>
   </dialog>
   <dialog class="login-dialog" aria-labelledby="signup-title" data-signup-dialog>
@@ -69,9 +70,24 @@
     <form data-signup-form novalidate><label for="signup-name">Prénom ou nom</label><input id="signup-name" name="name" type="text" autocomplete="name" placeholder="Votre nom" required minlength="2"><label for="signup-email">Adresse e-mail</label><input id="signup-email" name="email" type="email" autocomplete="email" placeholder="vous@exemple.fr" required><label for="signup-password">Mot de passe</label><span class="password-field"><input id="signup-password" name="password" type="password" autocomplete="new-password" placeholder="8 caractères minimum" required minlength="8"><button class="password-toggle" type="button" data-password-toggle="signup-password" aria-pressed="false" aria-label="Afficher le mot de passe">Voir</button></span><label for="signup-confirm">Confirmer le mot de passe</label><span class="password-field"><input id="signup-confirm" name="confirm" type="password" autocomplete="new-password" placeholder="Confirmez votre mot de passe" required minlength="8"><button class="password-toggle" type="button" data-password-toggle="signup-confirm" aria-pressed="false" aria-label="Afficher la confirmation du mot de passe">Voir</button></span><p class="auth-message" role="alert" data-signup-message></p><button class="button button--primary button--full" type="submit">Créer mon compte <span aria-hidden="true">→</span></button></form>
     <p class="login-dialog__new">Déjà inscrit ? <button type="button" data-switch-login>Se connecter</button></p><p class="prototype-note">Votre mot de passe est géré par Supabase et n’est jamais enregistré par BOO-P.</p>
   </dialog>
+  <dialog class="login-dialog" data-forgot-dialog aria-labelledby="forgot-title">
+    <button class="login-dialog__close" type="button" aria-label="Fermer" data-forgot-close>×</button>
+    <p class="eyebrow">Retrouver votre espace</p><h2 id="forgot-title">Mot de passe oublié ?</h2>
+    <p>Indiquez l’adresse e-mail de votre compte pour recevoir un lien de réinitialisation.</p>
+    <form data-forgot-form><label for="forgot-email">Adresse e-mail</label><input id="forgot-email" name="email" type="email" autocomplete="email" required placeholder="vous@exemple.fr"><p class="auth-message" role="status" data-forgot-message></p><button class="button button--primary button--full" type="submit">Recevoir le lien</button></form>
+    <p class="login-dialog__new"><button type="button" data-forgot-login>Revenir à la connexion</button></p>
+  </dialog>
+  <dialog class="login-dialog" data-reset-dialog aria-labelledby="reset-title">
+    <p class="eyebrow">Un nouvel accès à votre carnet</p><h2 id="reset-title">Nouveau mot de passe</h2>
+    <p data-reset-intro>Choisissez un mot de passe d’au moins 8 caractères.</p>
+    <form data-reset-form hidden><label for="reset-password">Nouveau mot de passe</label><span class="password-field"><input id="reset-password" name="password" type="password" autocomplete="new-password" required minlength="8"><button class="password-toggle" type="button" data-password-toggle="reset-password" aria-pressed="false" aria-label="Afficher le mot de passe">Voir</button></span><label for="reset-confirm">Confirmer le mot de passe</label><span class="password-field"><input id="reset-confirm" name="confirm" type="password" autocomplete="new-password" required minlength="8"><button class="password-toggle" type="button" data-password-toggle="reset-confirm" aria-pressed="false" aria-label="Afficher le mot de passe">Voir</button></span><button class="button button--primary button--full" type="submit">Enregistrer le mot de passe</button></form>
+    <p class="auth-message" role="status" data-reset-message>Vérification du lien…</p>
+    <a class="button button--primary button--full" href="app.html" data-reset-success hidden>Continuer vers mon espace</a>
+    <p class="login-dialog__new"><a href="index.html?auth=forgot" data-reset-request>Demander un nouveau lien</a></p>
+  </dialog>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
   <script src="js/supabase-config.js?v=20260820-1"></script>
-  <script src="js/auth.js?v=20260826-2"></script><script src="js/landing.js?v=20260826-2"></script>
+  <script src="js/auth.js?v=20260911-1"></script><script src="js/landing.js?v=20260911-1"></script>
   <script src="js/pwa.js?v=20260820-1"></script>
 </body>
 </html>
