@@ -289,13 +289,27 @@
     for (let y = 30; y < HEIGHT; y += 34) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WIDTH, y + 12); ctx.stroke(); }
   }
 
+  let brandImages;
+  function loadBrandImages() {
+    brandImages ||= Promise.all(['boo-p-horizontal', 'boo-p-horizontal-reverse'].map(name => new Promise(resolve => {
+      const image = new Image();
+      const timer = window.setTimeout(() => resolve(null), 4000);
+      image.onload = () => { window.clearTimeout(timer); resolve(image); };
+      image.onerror = () => { window.clearTimeout(timer); resolve(null); };
+      image.src = new URL(`assets/brand/${name}.svg`, document.baseURI).href;
+    })));
+    return brandImages;
+  }
+
   async function render(data) {
     await document.fonts?.ready?.catch?.(() => {});
+    const [brand, brandReverse] = await loadBrandImages();
     const canvas = document.createElement('canvas'); canvas.width = WIDTH; canvas.height = HEIGHT;
     const ctx = canvas.getContext('2d', { alpha:false }); drawBackground(ctx);
 
     roundedRect(ctx, 48, 34, 142, 48, 24); ctx.fillStyle = COLORS.ink; ctx.fill();
-    ctx.fillStyle = COLORS.white; ctx.font = '700 20px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 82, 66);
+    if (brandReverse) ctx.drawImage(brandReverse, 59, 40, 120, 36);
+    else { ctx.fillStyle = COLORS.white; ctx.font = '700 20px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 82, 66); }
     ctx.fillStyle = COLORS.sageDark; ctx.font = '600 14px Poppins, Arial, sans-serif'; ctx.fillText('MON SENTIER · RAPPORT MENSUEL', 48, 112);
     ctx.fillStyle = COLORS.ink; ctx.font = '600 55px "Playfair Display", Georgia, serif'; ctx.fillText(data.label, 48, 173);
     ctx.fillStyle = COLORS.muted; ctx.font = '500 17px Poppins, Arial, sans-serif'; ctx.fillText(truncate(data.handle || data.profileName, 36), 50, 207);
@@ -323,8 +337,8 @@
       : data.discoveries[0] ? `${truncate(data.discoveries[0].text, 34)} · ${truncate(data.discoveries[0].definition, 88)}` : '';
     if (highlight) { ctx.fillStyle = COLORS.muted; ctx.font = 'italic 16px "Playfair Display", Georgia, serif'; drawLines(ctx, highlight, 50, 1253, 960, 21, 2); }
 
-    ctx.fillStyle = COLORS.ochre; ctx.beginPath(); ctx.arc(62, 1317, 8, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = COLORS.ink; ctx.font = '700 16px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 80, 1323);
+    if (brand) ctx.drawImage(brand, 50, 1300, 90, 27);
+    else { ctx.fillStyle = COLORS.ink; ctx.font = '700 16px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 50, 1323); }
     ctx.fillStyle = COLORS.muted; ctx.font = '500 14px Poppins, Arial, sans-serif'; ctx.fillText('Lire · garder une trace · avancer', 150, 1323);
     ctx.textAlign = 'right'; ctx.fillStyle = COLORS.sageDark; ctx.font = '600 13px Poppins, Arial, sans-serif'; ctx.fillText('Quel chemin vos lectures dessinent-elles ?', 1028, 1323); ctx.textAlign = 'left';
     return canvas;

@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><title>BOO-P</title><path fill="#F2EDE3" d="M0 0H1024V1024H0Z"/><svg x="182" y="125" width="660" height="774" viewBox="320 190 610 715"><defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="320 190 610 715" role="img" aria-labelledby="title">
+  <title id="title">BOO-P — trois livres et un sentier</title>
+  <defs>
     <linearGradient id="opening" x1="388" y1="362" x2="548" y2="392" gradientUnits="userSpaceOnUse">
       <stop stop-color="#0F1B2D" stop-opacity=".48"/>
       <stop offset="1" stop-color="#0F1B2D" stop-opacity="0"/>
@@ -15,4 +17,5 @@
     <path fill="#D28B3D" d="M536 354L590 373V559L571 534L551 557V384Q551 368 536 354Z"/>
     <path fill="#0F1B2D" stroke="#F2EDE3" stroke-opacity=".35" stroke-width="1" d="M375 332Q375 319 387 328L501 420Q512 429 512 443V867Q512 880 501 873L383 782Q375 776 375 767Z"/>
   </g>
-  <path id="trail" fill="#6D8F7A" d="M824 311C902 379 932 468 893 562C864 637 797 704 814 751C829 791 870 826 899 850C943 892 851 904 794 847C734 788 757 730 791 675C855 573 902 488 829 330C819 312 811 300 824 311Z"/></svg></svg>
+  <path id="trail" fill="#6D8F7A" d="M824 311C902 379 932 468 893 562C864 637 797 704 814 751C829 791 870 826 899 850C943 892 851 904 794 847C734 788 757 730 791 675C855 573 902 488 829 330C819 312 811 300 824 311Z"/>
+</svg>

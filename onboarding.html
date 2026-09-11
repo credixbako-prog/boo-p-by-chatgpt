@@ -10,7 +10,9 @@
   <meta name="apple-mobile-web-app-title" content="BOO-P">
   <title>BOO-P — Onboarding</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="assets/icons/boo-p-apple-touch-icon.png">
+  <link rel="apple-touch-icon" href="assets/icons/boo-p-apple-touch-icon.png?v=20260911-logo">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/boo-p-favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/boo-p-favicon-32.png">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
   <script src="js/supabase-config.js?v=20260820-1"></script>
   <script src="js/auth.js?v=20260911-2"></script>
@@ -573,6 +575,7 @@
     @media (max-width: 479px) { .onboarding-book-tools { align-items:stretch; flex-direction:column; } .onboarding-scan-button { width:100%; } }
     @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:.001ms !important; transition-duration:.001ms !important; } }
   </style>
+  <link rel="stylesheet" href="css/brand.css?v=20260911-1">
 </head>
 <body>
 
@@ -581,7 +584,7 @@
     
     <!-- STEP 1: Éveil des Souvenirs -->
     <div class="step-wrapper active" id="step1">
-      <div class="onboarding-logo onboarding-brand" aria-label="BOO-P"><img src="assets/brand/closed-book-proposals/boo-p-closed-01-signet.png" alt=""><span>BOO-P</span></div>
+      <div class="onboarding-logo onboarding-brand" aria-label="BOO-P"><img class="brand__lockup" src="assets/brand/boo-p-horizontal.svg" alt="BOO-P" width="150" height="45"></div>
       <h1 class="onboarding-title text-display-md">Quels livres avez-vous déjà lus&nbsp;?</h1>
       <p class="onboarding-book-intro text-body-md">Choisissez jusqu’à 5 livres, anciens ou récents, pour donner une première direction à votre ADN de lecteur. Cette étape est facultative.</p>
       

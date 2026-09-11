@@ -1,5 +1,5 @@
 importScripts('./js/push-worker.js');
-const CACHE_VERSION = 'boo-p-webapp-v47';
+const CACHE_VERSION = 'boo-p-webapp-v48';
 const APP_SHELL = [
   './',
   './index.html',
@@ -43,7 +43,14 @@ const APP_SHELL = [
   './js/store.js',
   './js/user-data-sync-api.js',
   './js/supabase-config.js',
-  './assets/brand/closed-book-proposals/boo-p-closed-01-signet.png',
+  './css/brand.css',
+  './assets/brand/boo-p-horizontal.svg',
+  './assets/brand/boo-p-horizontal-reverse.svg',
+  './assets/brand/boo-p-symbol-reverse.svg',
+  './assets/brand/boo-p-app-icon.png',
+  './assets/icons/boo-p-favicon.svg',
+  './assets/icons/boo-p-favicon-32.png',
+  './assets/icons/boo-p-maskable-512.png',
   './assets/community/boo-p-reading-moments-sprite-v1.png',
   './assets/icons/boo-p-apple-touch-icon.png',
   './assets/icons/boo-p-icon-192.png',

@@ -10,9 +10,10 @@
   <meta name="apple-mobile-web-app-title" content="BOO-P">
   <meta name="description" content="BOO-P, compagnon personnel et communautaire de lecture — prototype web MVP v5 avec authentification et Traces sécurisées.">
   <title>BOO-P — Compagnon de lecture</title>
-  <link rel="icon" type="image/png" href="assets/icons/boo-p-icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="assets/icons/boo-p-apple-touch-icon.png">
+  <link rel="apple-touch-icon" href="assets/icons/boo-p-apple-touch-icon.png?v=20260911-logo">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/boo-p-favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/boo-p-favicon-32.png">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.2/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
   <script src="js/supabase-config.js?v=20260820-1"></script>
   <script src="js/auth.js?v=20260911-2"></script>
@@ -26,6 +27,7 @@
   <link rel="stylesheet" href="css/reading-ux.css?v=20260909-5">
   <link rel="stylesheet" href="css/reading-voice.css?v=20260909-5">
   <link rel="stylesheet" href="css/account-controls.css?v=20260911-2">
+  <link rel="stylesheet" href="css/brand.css?v=20260911-1">
 </head>
 <body>
   <a class="skip-link" href="#main-view">Aller au contenu</a>
@@ -40,8 +42,7 @@
   <div class="app-shell" id="app-shell">
     <aside class="side-nav" aria-label="Navigation principale">
       <a class="brand" href="#home" aria-label="BOO-P, Accueil">
-        <img src="assets/brand/closed-book-proposals/boo-p-closed-01-signet.png" alt="" width="42" height="42">
-        <span>BOO-P</span>
+        <img class="brand__lockup" src="assets/brand/boo-p-horizontal.svg" alt="BOO-P" width="150" height="45">
       </a>
       <nav class="side-nav__links" id="desktop-nav"></nav>
       <p class="simulation-note"><span class="status-dot" aria-hidden="true"></span> Prototype hybride<br><small>Traces et photos sécurisées · exemples fictifs</small></p>
@@ -50,8 +51,7 @@
     <div class="app-column">
       <header class="topbar" id="topbar">
         <a class="brand brand--mobile" href="#home" aria-label="BOO-P, Accueil">
-          <img src="assets/brand/closed-book-proposals/boo-p-closed-01-signet.png" alt="" width="36" height="36">
-          <span>BOO-P</span>
+          <img class="brand__lockup" src="assets/brand/boo-p-horizontal.svg" alt="BOO-P" width="150" height="45">
         </a>
         <div class="topbar__context" aria-live="polite">
           <span class="eyebrow" id="view-eyebrow">Votre espace</span>
@@ -112,12 +112,12 @@
   <script src="js/speech.js?v=20260820-2"></script>
   <script src="js/book-lookup.js?v=20260909-1"></script>
   <script src="js/dictionary.js?v=20260826-2"></script>
-  <script src="js/monthly-report.js?v=20260907-3"></script>
+  <script src="js/monthly-report.js?v=20260911-logo"></script>
   <script src="js/components/trail-mindmap.js?v=20260908-1"></script>
   <link rel="stylesheet" href="css/reading-reflection.css?v=20260909-5">
   <link rel="stylesheet" href="css/reflection-immersive.css?v=20260909-5">
   <link rel="stylesheet" href="css/reading-moments.css?v=20260909-1">
-  <script src="js/reading-reflection.js?v=20260909-5"></script>
+  <script src="js/reading-reflection.js?v=20260911-logo"></script>
   <script src="js/reading-voice.js?v=20260909-3"></script>
   <script src="js/avatar-crop.js?v=20260911-1"></script>
   <script src="js/mvp-app.js?v=20260911-3"></script>

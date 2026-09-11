@@ -1,0 +1,20 @@
+/* Shared lockups: preserve the master proportions, without a tile or shadow. */
+.brand img.brand__lockup,
+.onboarding-brand img.brand__lockup,
+.login-dialog__brand img.brand__lockup {
+  display: block;
+  width: 150px;
+  height: 45px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 0;
+  box-shadow: none;
+}
+.brand--mobile img.brand__lockup { width: 120px; height: 36px; }
+.onboarding-brand img.brand__lockup { width: 200px; height: 60px; }
+.login-dialog__brand img.brand__lockup { width: 160px; height: 48px; }
+.final-cta__content > img.brand__symbol { width: 72px; height: 84px; border-radius: 0; box-shadow: none; }
+.reflection-brand { display: none; width: 110px; height: 33px; margin-bottom: 10px; }
+.reflection-dialog[data-panel="notebook"] .reflection-brand--light { display: block; }
+.reflection-dialog[data-panel="notebook"][data-ambiance="paper"] .reflection-brand--light { display: none; }
+.reflection-dialog[data-panel="notebook"][data-ambiance="paper"] .reflection-brand--dark { display: block; }
