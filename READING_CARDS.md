@@ -1,6 +1,6 @@
 # BOO-P — cartes conservées, citations et rangement
 
-Évolution préparée le 11 septembre 2026. Interface et tests locaux prêts ; la nouvelle migration des cartes n’est pas encore appliquée et cette évolution n’est pas publiée.
+Évolution du 11 septembre 2026. Migration des cartes appliquée après autorisation explicite ; tests locaux et droits serveur vérifiés. Interface autorisée pour publication sur GitHub main.
 
 ## Cartes de lecture
 
@@ -14,11 +14,11 @@ L’image est conservée d’abord dans IndexedDB (`boop-reading-cards-v1`), dan
 
 ## Droits et mise en service
 
-Migration **préparée, non appliquée** : `supabase/migrations/20260911202723_reading_cards.sql`.
+Migration **appliquée et vérifiée** : `supabase/migrations/20260911204712_reading_cards.sql`.
 
 La table `reading_cards` stocke une image JPEG encodée, limitée à 2,2 millions de caractères, et ses métadonnées. RLS réserve l’insertion au propriétaire avec une visibilité privée. Seules la légende et la visibilité sont modifiables après insertion. La lecture est autorisée au propriétaire, aux amis acceptés pour une carte destinée aux amis, ou aux comptes connectés pour une carte communautaire. Aucun accès anonyme n’est accordé.
 
-`tests/reading-cards-access.sql` prépare une vérification transactionnelle avec comptes fictifs et annulation : carte privée, usurpation, insertion publique interdite, image immuable, amis, étrangers, publication, retrait et accès anonyme. **Ce test SQL reste à exécuter après application de la migration.** Les résultats des parcours locaux avec API simulée ne remplacent pas ce contrôle serveur.
+`tests/reading-cards-access.sql` a exécuté une vérification transactionnelle avec comptes fictifs et annulation : carte privée, usurpation, insertion publique interdite, image immuable, amis, étrangers, publication, retrait et accès anonyme. **Le test SQL passe après migration, avec annulation des données fictives.** Il complète les parcours locaux avec API simulée. Les conseillers de sécurité ne signalent rien de nouveau : quatre tables techniques restent fermées sans politique client ; l’avertissement préexistant de [protection des mots de passe compromis](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) est inchangé.
 
 ## Citations et légendes
 

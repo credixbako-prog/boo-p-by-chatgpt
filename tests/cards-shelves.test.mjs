@@ -16,6 +16,6 @@ test('citation : guillemets et légende échappent les contenus, sans HTML utili
  assert.equal(BT.sharing.citation('Une citation historique').quote,'Une citation historique');
 });
 test('cartes : publication serveur limitée à une image figée et une audience explicite',()=>{
- const sql=read('supabase/migrations/20260911202723_reading_cards.sql');assert.match(sql,/grant update\(caption,visibility\)/);assert.match(sql,/visibility='private'/);assert.match(sql,/private.is_accepted_reader_friend/);assert.match(sql,/enable row level security/);
+ const sql=read('supabase/migrations/20260911204712_reading_cards.sql');assert.match(sql,/grant update\(caption,visibility\)/);assert.match(sql,/visibility='private'/);assert.match(sql,/private.is_accepted_reader_friend/);assert.match(sql,/enable row level security/);
  const js=read('js/reading-cards.js');assert.match(js,/canvas.toDataURL\('image\/jpeg'/);assert.doesNotMatch(js,/buildData|reading_content|\.reflection/);
 });
