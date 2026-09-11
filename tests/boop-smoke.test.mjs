@@ -72,7 +72,7 @@ test('nouveau compte: la bibliothèque commence vide avant les choix de l’onbo
 test('mémoire, communauté et parcours exposent les fonctions demandées', async () => {
   const [app, store, css] = await Promise.all([read('js/mvp-app.js'), read('js/store.js'), read('css/mvp-v5.css')]);
   assert.match(app, /\$\{memory\.length\} carte/);
-  assert.match(app, /Trace · \$\{comments\.length\}/);
+  assert.match(app, /<span>Trace<\/span><span class="reader-action-count">\$\{comments\.length\}/);
   assert.match(app, /Photo facultative/);
   assert.match(app, /customBookTitle/);
   assert.doesNotMatch(app, /Ne plus rendre actif/);
@@ -893,7 +893,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v50/);
+  assert.match(worker, /boo-p-webapp-v51/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

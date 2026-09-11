@@ -5,7 +5,7 @@ Le profil visité devient un espace de lecture, organisé en **Son parcours**, *
 ## Parcours et bibliothèque
 
 - **Son parcours** : phrase d’accueil, repères sans classement, jusqu’à six lectures en cours, sélection de livres et publications accessibles avec filtre discret par type.
-- **Bibliothèque** : couvertures, titres, auteurs et statuts ; rayons Tous, En cours, Lus, À lire ; pagination de 24 livres.
+- **Bibliothèque** : meuble affiché par défaut, avec les mêmes finitions que la bibliothèque personnelle, livres sur la tranche, rayons repliables par statut et défilement horizontal. Une première touche sélectionne le livre ; une seconde ouvre sa fiche partagée. Les pages suivantes complètent le même meuble. Les filtres Tous, En cours, Lus et À lire et la pagination de 24 livres restent disponibles. « Affichage de la bibliothèque » propose aussi les couvertures et les six couleurs du meuble ; ces choix de consultation ne modifient pas les préférences de l’ami.
 - **Carnets** : publications de carnets avec miniature, introduction choisie et lecture intégrale. Les échanges IA et notes privées ne sont jamais repris.
 - **Fiche d’un livre visité** : détails bibliographiques limités, échanges et publications de début/fin/carnet directement associées à son identifiant. Les mots et pensées restent dans le parcours ; ils ne sont pas rattachés à cette fiche par une simple ressemblance de titre.
 - **Ajouter à ma bibliothèque** : confirmation avec choix Bibliothèque/À lire ou liste d’envies. Seules les métadonnées partagées sont copiées, sans notes, progression ni état terminé du lecteur source. Les doublons sont détectés par ISBN ou titre.
@@ -14,7 +14,7 @@ Seules les couvertures de catalogue autorisées (Open Library et domaines Google
 
 ## Encouragements et Traces
 
-Sur une lecture en cours : **Bonne lecture !**, puis **Laisser une Trace**. Sur une publication : **Encourager**, ou **Cette réflexion me parle** pour un carnet. Un encouragement par personne et par livre peut être retiré. Les Traces sont liées à leur livre ou publication, peuvent recevoir des réponses et sont affichées par pages de 50.
+Les boutons **Encourager** et **Trace** sont alignés sur une même ligne dans les profils, fiches partagées et publications, avec le même style dans le fil communauté : cœur dessiné et bulle avec un crayon, contours arrondis, couleurs BOO-P et compteurs. Les états actif et déplié sont indiqués visuellement et par les attributs d’accessibilité. Trace ouvre la conversation sous cette rangée. Un encouragement par personne et par livre peut être retiré. Les Traces sont liées à leur livre ou publication, peuvent recevoir des réponses et sont affichées par pages de 50.
 
 L’audience est indiquée avant envoi. Pour un livre de la bibliothèque, ce sont le propriétaire et ses amis acceptés ; pour une publication, les échanges suivent son audience. Le propriétaire peut supprimer les Traces reçues, et chaque auteur peut supprimer les siennes. La confirmation précise que les réponses sont supprimées également. Une erreur réseau conserve le texte du formulaire ouvert ; il ne s’agit pas d’un brouillon persistant après fermeture.
 

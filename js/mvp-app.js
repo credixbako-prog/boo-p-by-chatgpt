@@ -795,9 +795,9 @@
       </header>
       ${renderPostPhoto(post)}
       ${post.bookTitle ? `<p class="eyebrow">${esc(post.bookTitle)}</p>` : ''}<p class="activity-text">${esc(post.text)}</p>${post.readingKind ? `<button class="text-link activity-publication-link" type="button" data-action="view-publication" data-id="${attr(post.id)}">${post.readingKind === 'notebook' ? 'Lire le carnet' : 'Lire la publication'}</button>` : ''}
-      <div class="activity-actions">
-        <button class="button button--ghost button--small" type="button" data-action="encourage" data-id="${attr(post.id)}" aria-pressed="${post.encouraged}">Encourager · ${post.encouragements}</button>
-        <button class="button button--ghost button--small" type="button" data-action="comment-post" data-id="${attr(post.id)}" aria-expanded="${open}">Trace · ${comments.length}</button>
+      <div class="activity-actions reader-actionbar">
+        <button class="button reader-interaction-button" type="button" data-action="encourage" data-id="${attr(post.id)}" aria-pressed="${post.encouraged}">${BT.readerProfile?.actionIcon('encourage') || ''}<span>Encourager</span><span class="reader-action-count">${post.encouragements}</span></button>
+        <button class="button reader-interaction-button" type="button" data-action="comment-post" data-id="${attr(post.id)}" aria-expanded="${open}">${BT.readerProfile?.actionIcon('trace') || ''}<span>Trace</span><span class="reader-action-count">${comments.length}</span></button>
       </div>
       ${open ? renderComments(post) : ''}
     </article>`;

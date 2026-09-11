@@ -9,6 +9,8 @@
 .reader-profile .reader-tabs button { flex:1; white-space:nowrap; padding:10px 8px; }
 .reader-current-shelf,.reader-featured-shelf { display:grid; gap:16px; }
 .reader-library-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.reader-bookcase { min-width:0; max-width:100%; }
+.reader-profile .shelf-appearance .filter-chips { margin-bottom:12px; }
 .reader-book-card { min-width:0; display:grid; grid-template-columns:64px minmax(0,1fr); align-content:start; gap:14px; padding:16px; background:var(--boo-paper-2); border:1px solid var(--boo-line); border-radius:18px; }
 .reader-book-card--compact { grid-template-columns:80px minmax(0,1fr); }
 .reader-book-card>.reader-card-actions,.reader-book-card>.reader-interactions { grid-column:1/-1; }
@@ -26,8 +28,14 @@
 .reader-post-excerpt { white-space:pre-wrap; line-height:1.65; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
 .reader-interactions { margin-top:14px; border-top:1px solid var(--boo-line); padding-top:12px; min-width:0; }
 .reader-interactions>p:empty { display:none; }
+.reader-actionbar { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); gap:8px; width:100%; max-width:360px; align-items:stretch; }
+.reader-actionbar .reader-interaction-button { min-width:0; min-height:44px; padding:9px 6px; gap:5px; border:1px solid var(--boo-line); background:var(--boo-paper); color:var(--boo-ink); white-space:nowrap; font-size:var(--boo-text-small); box-shadow:none; }
+.reader-action-icon { width:17px; height:17px; flex:0 0 17px; color:var(--boo-sage-dark); }
+.reader-action-count { font-variant-numeric:tabular-nums; opacity:.7; }
+.reader-interaction-button[aria-pressed=true],.reader-interaction-button[aria-expanded=true] { background:color-mix(in srgb,var(--boo-sage) 14%,var(--boo-paper)); border-color:var(--boo-sage); }
+.reader-interaction-button[aria-pressed=true] .reader-action-icon { fill:color-mix(in srgb,var(--boo-sage) 24%,transparent); }
+.reader-actionbar .reader-interaction-button:hover { border-color:var(--boo-sage); background:color-mix(in srgb,var(--boo-sage) 8%,var(--boo-paper)); }
 .reader-traces { margin-top:8px; }
-.reader-traces>summary { cursor:pointer; color:var(--boo-sage); font-size:var(--boo-text-small); padding:8px 0; }
 .reader-trace { padding:14px 0; border-bottom:1px solid var(--boo-line); }
 .reader-trace time { display:block; margin-top:3px; }
 .reader-trace p { margin:8px 0; }
