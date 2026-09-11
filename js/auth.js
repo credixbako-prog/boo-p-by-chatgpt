@@ -460,6 +460,7 @@ BT.auth = (function () {
 
   async function signOut() {
     await readyPromise.catch(() => null);
+    await window.BT.push?.disable?.().catch(() => null);
     if (client) {
       const { error } = await client.auth.signOut();
       if (error) throw friendlyError(error, 'Déconnexion impossible.');
