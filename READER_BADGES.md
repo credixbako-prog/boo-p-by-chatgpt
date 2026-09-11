@@ -1,6 +1,6 @@
 # BOO-P — portrait et badges du lecteur
 
-Évolution du 11 septembre 2026. Interface préparée localement ; publication en attente. La migration `supabase/migrations/20260911193610_reader_badges.sql` doit être autorisée et vérifiée avant publication.
+Évolution du 11 septembre 2026. Migration `supabase/migrations/20260911195339_reader_badges.sql` appliquée après autorisation explicite et vérifiée. Interface prête pour publication.
 
 ## Profil
 
@@ -55,16 +55,16 @@ Une obtention déclenche une carte animée d’environ 3,2 secondes, fermable im
 
 Le premier chargement du nouveau catalogue, la récupération de données et les acquis synchronisés ne rejouent pas les anciennes célébrations. Les acquis persistent même si un élément est supprimé ensuite. Effacer les données locales ne supprime pas les acquis synchronisés du compte.
 
-## Synchronisation et accès — migration en attente
+## Synchronisation et accès — migration appliquée
 
 `reader_badges` conserve uniquement `user_id`, `badge_id` et `unlocked_at`. Le propriétaire peut lire ses acquis et insérer ceux calculés par l’application. Les doublons sont ignorés ; les dates déjà enregistrées ne sont pas modifiables par le client. Les badges restent disponibles localement en cas de panne réseau et la synchronisation est retentée lors d’une mutation, d’un retour sur la page ou du retour en ligne.
 
 Les autres lecteurs n’accèdent pas à la collection complète. `get_reader_latest_badge` projette uniquement le dernier identifiant et sa date aux utilisateurs connectés autorisés par la visibilité du profil ou une amitié acceptée. Les contenus des carnets, conversations, livres et lexiques ne sont pas joints au badge. Le blocage local existant ne remplace pas le retrait d’amitié. Les comptes publics gardent un badge accessible à la communauté connectée. La suppression du compte supprime la collection par cascade.
 
-Le contrôle automatique a refusé le test SQL distant et demandé une approbation explicite de la migration. Aucune validation distante n’est revendiquée à ce stade. `tests/reader-badges-access.sql` est préparé avec données fictives et annulation transactionnelle : accès propriétaire, lecture du seul dernier badge pour l’ami, profil public/privé, retrait d’amitié, accès anonyme, doublons, identifiants invalides et écriture sur autrui.
+Après autorisation explicite, la migration a été appliquée et `tests/reader-badges-access.sql` exécuté avec données fictives et annulation transactionnelle. Les assertions passent : accès propriétaire, lecture du seul dernier badge pour l’ami, profil public/privé, retrait d’amitié, accès anonyme, doublons, identifiants invalides et écriture sur autrui. Les avis de sécurité Supabase ne signalent rien de nouveau. Les quatre tables techniques fermées restent sans politique client ; l’avertissement préexistant de [protection des mots de passe compromis](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) reste distinct de cette évolution.
 
 ## Vérification locale
 
-96 tests Node passent. `tests/reader-badges-journeys.cjs` vérifie le profil à 320, 390 et 1024 px, les 30 SVG, l’ADN en 16 px, les statistiques repliables, la personnalisation, l’attente des dialogues, la réduction des mouvements, la fermeture automatique et l’absence de répétition. Les captures sont dans `.tmp/badges-review/`. Les parcours de profil ami utilisent des API simulées ; la synchronisation entre deux appareils réels devra être essayée après activation de la migration.
+96 tests Node passent. `tests/reader-badges-journeys.cjs` vérifie le profil à 320, 390 et 1024 px, les 30 SVG, l’ADN en 16 px, les statistiques repliables, la personnalisation, l’attente des dialogues, la réduction des mouvements, la fermeture automatique et l’absence de répétition. Les captures sont dans `.tmp/badges-review/`. Les parcours de profil ami utilisent des API simulées ; la synchronisation entre deux appareils réels devra être essayée après publication de l’interface.
 
 Les suites `reading-journeys.cjs`, `reader-profile-journeys.cjs` et `reading-sharing-journeys.cjs` passent également : lecture, carnet, sauvegarde et récupération de brouillons, catalogue simulé, bibliothèque, Sentier, réglages, thème sombre, interactions entre amis, badge près du nom, droits de publication et changement de compte. Le test historique du carnet pointe maintenant vers l’onglet Carnet ; les célébrations sont fermées par le test général et vérifiées séparément dans leur parcours dédié.
