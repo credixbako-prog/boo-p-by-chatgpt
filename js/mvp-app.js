@@ -138,6 +138,8 @@
     ui.memoryIndex = Number(store.getSettings().memoryIndex) || 0;
     applyTheme();
     bindGlobalEvents();
+    document.addEventListener('boop:create-reading-card',()=>openMonthlyReportDialog());
+    document.addEventListener('boop:shelf-moved',event=>{render();showToast(`« ${event.detail.title} » rangé dans ${event.detail.genre}`);});
     renderNavigation();
     window.addEventListener('hashchange', () => { render(true); });
     window.addEventListener('boop:sharing-changed', async () => { await refreshCommunity({quiet:true}); render(); });
@@ -309,6 +311,8 @@
         view.innerHTML = `<section class="empty-state" role="alert"><h1>Un passage s’est refermé trop vite</h1><p>Vos données locales sont intactes. Vous pouvez revenir à l’Accueil et réessayer.</p><a class="button button--primary" href="#home">Revenir à l’Accueil</a></section>`;
       }
       BT.reflection?.decorate(view);
+      const cardHost=view.querySelector('[data-saved-cards]');if(cardHost)BT.readingCards.mount(cardHost,{creation:true});
+      const publishedCards=view.querySelector('[data-profile-cards]');if(publishedCards&&BT.auth.getCurrentUser()?.id&&!isGuestMode())BT.readingCards.mount(publishedCards,{owner:BT.auth.getCurrentUser().id,published:true});
       BT.push?.renderControls?.();
       ui.renderedRoute = ui.route; ui.renderedHash = location.hash;
       checkCelebrations();
@@ -528,7 +532,7 @@
       <section class="section-block card active-book-card active-book-card--${sessionColor}" aria-labelledby="active-book-title">
         ${surfaceColorPicker('session-card-color', sessionColor, 'Personnaliser la couleur de la session', 'session-card-color-picker')}
         <div class="active-book-main">
-          ${active ? cover(active) : `<div class="book-cover" style="background:linear-gradient(145deg,#17324d,#6f927c)"><span>Votre prochain livre</span></div>`}
+          <div class="active-book-cover-tools">${active ? cover(active) : `<div class="book-cover" style="background:linear-gradient(145deg,#17324d,#6f927c)"><span>Votre prochain livre</span></div>`}<details class="reading-quick-menu"><summary aria-label="Mettre à jour ma lecture" title="Mettre à jour ma lecture"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></summary><div>${active ? `<button class="text-link" type="button" data-action="quick-progress" data-id="${attr(active.id)}">Mettre à jour ma ${active.mediaType === 'audio' ? 'minute' : 'page'}</button>` : ''}<button class="text-link" type="button" data-action="manual-session" data-book-id="${attr(active?.id || '')}">Ajouter une session passée</button></div></details></div>
           <div class="active-book-info">
             <p class="eyebrow">Lectures en cours</p>
             ${inProgress.length > 1 ? `<label class="sr-only" for="active-book-select">Choisir la lecture affichée</label><select class="book-switcher" id="active-book-select" data-change="active-book">${inProgress.map(book => `<option value="${attr(book.id)}" ${active?.id === book.id ? 'selected' : ''}>${esc(book.title)} — ${esc(book.authors.join(', '))}</option>`).join('')}</select>` : ''}
@@ -539,8 +543,7 @@
           </div>
         </div>
         ${active ? `<div class="active-book-actions"><button class="button button--secondary" type="button" data-action="capture-memory" data-book-id="${attr(active.id)}">Garder une Trace</button><button class="button button--primary" type="button" data-action="${session ? 'resume-session' : 'start-session'}" data-id="${attr(session?.id || '')}">${session ? 'Reprendre la session' : 'Commencer à lire'}</button></div>` : `<a class="button button--primary" href="#path?tab=library">Choisir un livre</a>`}
-        ${active ? `<button class="text-link" type="button" data-action="quick-progress" data-id="${attr(active.id)}">Mettre à jour ma ${active.mediaType === 'audio' ? 'minute' : 'page'}</button>` : ''}
-        <button class="button button--ghost active-book-manual" type="button" data-action="manual-session">Ajouter une session passée</button>
+
         ${openSessions.length > 1 ? `<div class="open-session-list" aria-label="Sessions ouvertes">${openSessions.map(item => { const itemBook = store.getBookById(item.bookId); return `<button class="open-session-chip" type="button" data-action="focus-session" data-id="${attr(item.id)}"><span>${item.status === 'running' ? '▶' : 'Ⅱ'}</span><strong>${esc(itemBook?.title || 'Livre')}</strong><small>${formatDuration(store.activeDuration(item))}</small></button>`; }).join('')}</div>` : ''}
       </section>
 
@@ -778,13 +781,15 @@
 
   function renderCommunity() {
     const tabs = [
-      ['public','Fil'], ['clubs','Mes clubs'], ['salons','Salons'], ['friends','Amis']
+      ['public','Fil'], ['clubs','Clubs & salons'], ['friends','Amis']
     ];
-    const bodies = { public: renderPublicFeed, clubs: renderClubs, salons: renderSalons, friends: renderFriends };
+    const bodies = { public: renderPublicFeed, clubs: renderClubsAndSalons, salons: renderClubsAndSalons, friends: renderFriends };
     return `<section class="page-head"><div><p class="eyebrow">Des échanges sans classement</p><h1>Communauté</h1><p>Découvrez des lectures partagées et choisissez toujours ce qui devient visible.</p></div><span class="simulated-badge">Exemples fictifs · contributions Supabase</span></section>
-      <nav class="tabs" aria-label="Sections de la Communauté">${tabs.map(([id,label]) => `<a class="tab" href="#community?tab=${id}" aria-current="${ui.communityTab === id ? 'page' : 'false'}">${label}</a>`).join('')}</nav>
+      <nav class="tabs" aria-label="Sections de la Communauté">${tabs.map(([id,label]) => `<a class="tab" href="#community?tab=${id}" aria-current="${(ui.communityTab === id || id === 'clubs' && ui.communityTab === 'salons') ? 'page' : 'false'}">${label}</a>`).join('')}</nav>
       ${bodies[ui.communityTab]()}`;
   }
+
+  function renderClubsAndSalons() { return `<section class="clubs-and-salons">${renderSalons()}<div class="section-block">${renderClubs()}</div></section>`; }
 
   function renderPublicFeed() {
     const posts = store.getCommunity().posts.slice().sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -800,7 +805,7 @@
         ${post.authorId !== 'me' ? `<details class="safety-menu"><summary aria-label="Modérer cette publication">•••</summary><div class="safety-menu__panel"><button type="button" data-action="report-post" data-id="${attr(post.id)}">Signaler la publication</button><button type="button" data-action="block-user" data-id="${attr(post.authorId)}">Bloquer ${esc(post.authorName)}</button></div></details>` : `<span class="privacy-badge">${VISIBILITY_LABELS[post.visibility] || post.visibility}</span>`}
       </header>
       ${renderPostPhoto(post)}
-      ${post.bookTitle ? `<p class="eyebrow">${esc(post.bookTitle)}</p>` : ''}<p class="activity-text">${esc(post.text)}</p>${post.readingKind ? `<button class="text-link activity-publication-link" type="button" data-action="view-publication" data-id="${attr(post.id)}">${post.readingKind === 'notebook' ? 'Lire le carnet' : 'Lire la publication'}</button>` : ''}
+      ${post.bookTitle ? `<p class="eyebrow">${esc(post.bookTitle)}</p>` : ''}${post.readingKind==='citation'&&post.readingContent ? BT.sharing.quoteHTML(post.readingContent,post.text) : `<p class="activity-text">${esc(post.text)}</p>`}${post.readingKind ? `<button class="text-link activity-publication-link" type="button" data-action="view-publication" data-id="${attr(post.id)}">${post.readingKind === 'notebook' ? 'Lire le carnet' : 'Lire la publication'}</button>` : ''}
       <div class="activity-actions reader-actionbar">
         <button class="button reader-interaction-button" type="button" data-action="encourage" data-id="${attr(post.id)}" aria-pressed="${post.encouraged}">${BT.readerProfile?.actionIcon('encourage') || ''}<span>Encourager</span><span class="reader-action-count">${post.encouragements}</span></button>
         <button class="button reader-interaction-button" type="button" data-action="comment-post" data-id="${attr(post.id)}" aria-expanded="${open}">${BT.readerProfile?.actionIcon('trace') || ''}<span>Trace</span><span class="reader-action-count">${comments.length}</span></button>
@@ -970,9 +975,9 @@
     const shelves = ordered.map(([genre, items]) => {
       const genreKey = normalize(genre).replace(/\s+/g, '-') || 'a-classer';
       const isOpen = ui.libraryQuery || !collapsed.has(genreKey);
-      return `<details class="genre-shelf" data-library-genre="${attr(genreKey)}" ${isOpen ? 'open' : ''}><summary><span>${esc(genre)}</span><small>${items.length} livre${items.length > 1 ? 's' : ''} · glissez horizontalement</small></summary><div class="physical-shelf" role="group" tabindex="0" aria-label="Rayon ${attr(genre)}, défilement horizontal">${items.map((book,index) => renderBookSpine(book,index)).join('')}</div></details>`;
+      return `<details class="genre-shelf" data-library-genre="${attr(genreKey)}" data-drop-genre="${attr(genre)}" ${isOpen ? 'open' : ''}><summary><span>${esc(genre)}</span><small>${items.length} livre${items.length > 1 ? 's' : ''} · glissez horizontalement</small></summary><div class="physical-shelf" role="group" tabindex="0" aria-label="Rayon ${attr(genre)}, défilement horizontal">${items.map((book,index) => renderBookSpine(book,index)).join('')}</div></details>`;
     }).join('');
-    return `<details class="shelf-appearance"><summary>Apparence de l’étagère</summary><div class="bookcase-finish-picker" role="group" aria-label="Couleur du meuble">${SURFACE_COLORS.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="library-finish" data-finish="${key}" aria-label="${label}" title="${label}" aria-pressed="${finish === key}"><span aria-hidden="true"></span></button>`).join('')}</div></details><div class="bookcase bookcase--${finish}" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↔</span> Glissez un rayon pour parcourir les livres. Touchez une première fois pour sélectionner, puis une seconde fois pour ouvrir.</p>${shelves}</div>`;
+    return `<details class="shelf-appearance"><summary>Apparence de l’étagère</summary><div class="bookcase-finish-picker" role="group" aria-label="Couleur du meuble">${SURFACE_COLORS.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="library-finish" data-finish="${key}" aria-label="${label}" title="${label}" aria-pressed="${finish === key}"><span aria-hidden="true"></span></button>`).join('')}</div></details><div class="bookcase bookcase--${finish}" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↔</span> Glissez pour parcourir. Maintenez un livre pour le déplacer vers un autre rayon. Deux touches ouvrent sa fiche.</p>${shelves}</div>`;
   }
 
   function renderBookSpine(book, index) {
@@ -1131,9 +1136,12 @@
 
   function renderLexicon() { return renderNotebookEntries(false); }
   function renderNotebook() {
+    const cards=ui.params.get('section')==='cards';
+    const navigation=`<nav class="tabs notebook-sections" aria-label="Sections du carnet"><a class="tab" href="#path?tab=notebook" aria-current="${cards?'false':'page'}">Réflexions</a><a class="tab" href="#path?tab=notebook&section=cards" aria-current="${cards?'page':'false'}">Cartes de lecture</a></nav>`;
+    if(cards)return navigation+'<section class="section-block" data-saved-cards></section>';
     const selectedBook = ui.params.get('book') || ui.notebookBook;
     const books = store.getBooks().filter(b => b.libraryState === 'library' && (!selectedBook || b.id === selectedBook) && b.reflection && (b.reflection.messages?.length || b.reflection.notebook || b.reflection.draft || b.reflection.edit || b.reflection.sections?.retained || b.reflection.sections?.questions || b.reflection.sectionDraft));
-    return `<section class="notebook-intro"><p class="eyebrow">Chaque lecture laisse une trace</p><h2>Vos lectures, vos réflexions</h2><div data-reflection-host></div></section>${books.length ? `<div class="reflection-book-grid">${books.map(b => `<article class="card reflection-book-card"><p class="eyebrow">${b.reflection.edit !== undefined || b.reflection.sectionDraft ? 'Brouillon personnel' : b.reflection.notebook || b.reflection.sections ? 'Carnet de réflexion' : 'Conversation en cours'}</p><h2>${esc(b.title)}</h2><p class="muted">${esc((b.reflection.notebook || b.reflection.edit || b.reflection.sections?.retained || b.reflection.draft || 'Reprenez le fil de votre échange.').slice(0,160))}</p><div class="button-row"><button type="button" class="text-link" data-open-reflection="${attr(b.id)}" data-reflection-tab="notebook">Ouvrir le carnet</button><button type="button" class="text-link" data-open-reflection="${attr(b.id)}">Poursuivre l’échange</button><button type="button" class="text-link" data-action="share-reading" data-kind="notebook" data-id="${attr(b.id)}">Partager le carnet</button></div></article>`).join('')}</div>` : ''}${renderNotebookEntries(true)}`;
+    return `${navigation}<section class="notebook-intro"><p class="eyebrow">Chaque lecture laisse une trace</p><h2>Vos lectures, vos réflexions</h2><div data-reflection-host></div></section>${books.length ? `<div class="reflection-book-grid">${books.map(b => `<article class="card reflection-book-card"><p class="eyebrow">${b.reflection.edit !== undefined || b.reflection.sectionDraft ? 'Brouillon personnel' : b.reflection.notebook || b.reflection.sections ? 'Carnet de réflexion' : 'Conversation en cours'}</p><h2>${esc(b.title)}</h2><p class="muted">${esc((b.reflection.notebook || b.reflection.edit || b.reflection.sections?.retained || b.reflection.draft || 'Reprenez le fil de votre échange.').slice(0,160))}</p><div class="button-row"><button type="button" class="text-link" data-open-reflection="${attr(b.id)}" data-reflection-tab="notebook">Ouvrir le carnet</button><button type="button" class="text-link" data-open-reflection="${attr(b.id)}">Poursuivre l’échange</button><button type="button" class="text-link" data-action="share-reading" data-kind="notebook" data-id="${attr(b.id)}">Partager le carnet</button></div></article>`).join('')}</div>` : ''}${renderNotebookEntries(true)}`;
   }
   function renderNotebookEntries(notebook) {
     const labels = notebook ? { all:'Tout', thought:'Pensées', citation:'Citations' } : { all:'Tout', word:'Mots', expression:'Expressions' };
@@ -1218,11 +1226,12 @@
     const badges = store.getBadges();
     return `<section class="card profile-hero profile-hero--compact">
       <div class="profile-tools"><a class="icon-button" href="#profile?section=settings" aria-label="Réglages du compte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="var(--boo-paper)"/><circle cx="15" cy="17" r="3" fill="var(--boo-paper)"/></svg></a></div>
-      <div class="profile-main">${avatarBubble(profile,'profile-avatar')}<div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="small muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div>
+      <div class="profile-main">${avatarBubble(profile,'profile-avatar')}<div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="small muted">Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div>
       <div data-own-badge></div>${profile.bio ? `<p class="profile-bio">${esc(profile.bio)}</p>` : ''}
       <div class="profile-actions"><button class="button button--primary button--small" type="button" data-action="profile-customize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg>Modifier</button><button class="text-link" type="button" data-action="preview-reader">Voir mon profil <span aria-hidden="true">↗</span></button></div></section>
       <section class="section-block profile-dna" aria-labelledby="reader-dna-title"><div class="section-heading"><div><h2 id="reader-dna-title">ADN du lecteur</h2></div><button class="text-link" type="button" data-action="open-dna-history">Voir mon évolution</button></div><article class="reader-dna-card"><span class="reader-dna-card__mark" aria-hidden="true">✦</span><div><blockquote>${esc(dna.phrase)}</blockquote>${dna.topGenres.length ? `<div class="reader-dna-traits" aria-label="Territoires littéraires dominants">${dna.topGenres.slice(0,2).map(genre => `<span>${esc(genre)}</span>`).join('')}</div>` : ''}<details class="reader-dna-evidence"><summary>Ce qui façonne cet ADN</summary><ul><li>${dna.metrics.completedCount} livre${dna.metrics.completedCount > 1 ? 's' : ''} terminé${dna.metrics.completedCount > 1 ? 's' : ''}</li><li>${store.getLexicon().length} élément${store.getLexicon().length > 1 ? 's' : ''} conservé${store.getLexicon().length > 1 ? 's' : ''} dans le lexique</li><li>${store.getTraces().length} Trace${store.getTraces().length > 1 ? 's' : ''} personnelle${store.getTraces().length > 1 ? 's' : ''}</li></ul></details></div></article></section>
       ${renderLatestBadge(badges)}
+      <section class="section-block" data-profile-cards></section>
       <section class="section-block profile-goals" id="profile-goals" tabindex="-1"><div class="section-heading"><div><p class="eyebrow">Progression personnelle</p><h2>Mes objectifs</h2></div></div>${renderGoals()}</section>
       <details class="section-block profile-statistics card"><summary><span>Statistiques</span><span class="small muted">Mon parcours en chiffres</span></summary><div class="stats-grid"><div class="card stat-card"><strong>${stats.booksRead}</strong><span>livres lus</span></div><div class="card stat-card"><strong>${Math.floor(stats.totalMinutes/60)} h ${stats.totalMinutes%60}</strong><span>temps de lecture</span></div><div class="card stat-card"><strong>${stats.streak}</strong><span>jours de série</span></div><div class="card stat-card"><strong>${stats.totalTraces}</strong><span>Traces et lexique</span></div><div class="card stat-card"><strong>${stats.booksTransmitted}</strong><span>prêtés ou donnés</span></div></div></details>
       <section class="section-block" id="profile-settings" tabindex="-1"><div class="section-heading"><h2>Compte et préférences</h2><button class="icon-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button></div><p class="sync-indicator" id="sync-indicator" role="status"></p><div class="settings-list">
@@ -1328,9 +1337,6 @@
   function openBookDialog(book = null, { openScanner = false } = {}) {
     const editing = Boolean(book);
     ui.catalogRequest++;
-    const knownGenres = store.getBooks().flatMap(item => [item.genre, ...(item.genres || [])]).map(value => String(value || '').trim()).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
-    const genreKeys = new Set();
-    const genreOptions = knownGenres.concat(DEFAULT_GENRES).filter(value => { const key = normalize(value); if (!key || genreKeys.has(key)) return false; genreKeys.add(key); return true; });
     ui.pendingCover = book?.coverUrl || '';
     ui.pendingCoverKind = book?.customCover ? 'custom' : (book?.coverUrl ? 'catalogue' : '');
     ui.pendingISBNPhoto = '';
@@ -1347,7 +1353,7 @@
       <section class="isbn-lookup-card section-block" aria-labelledby="isbn-lookup-title"><h3 id="isbn-lookup-title">Rechercher avec le code ISBN</h3><p class="small muted">Le numéro se trouve généralement près du code-barres au dos du livre.</p><form class="isbn-lookup-form" data-form="isbn-lookup"><label class="field" for="book-isbn-lookup"><span class="sr-only">ISBN-10 ou ISBN-13</span><input id="book-isbn-lookup" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="Ex. 9782070360024" value="${attr(book?.isbn || '')}" required></label><button class="button button--secondary" type="submit">Rechercher l’ISBN</button></form></section>
       <div id="book-lookup-results" aria-live="polite"></div>
       <hr class="section-block"><p class="eyebrow">Saisie manuelle ou correction</p>
-      <form class="form-grid" data-form="book"><input type="hidden" name="id" value="${attr(book?.id || '')}"><input type="hidden" name="coverUrl" id="book-cover-value" value="${attr(book?.coverUrl || '')}"><input type="hidden" name="coverSource" id="book-cover-source" value="${attr(ui.pendingCoverKind)}"><div class="field-row"><label class="field">Destination<select name="libraryState"><option value="library" ${book?.libraryState !== 'wishlist' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${book?.libraryState === 'wishlist' ? 'selected' : ''}>Ma wishlist</option></select></label><label class="field">Support<select name="mediaType" data-change="book-media"><option value="print" ${book?.mediaType !== 'ebook' && book?.mediaType !== 'audio' ? 'selected' : ''}>Livre papier</option><option value="ebook" ${book?.mediaType === 'ebook' ? 'selected' : ''}>Livre numérique</option><option value="audio" ${book?.mediaType === 'audio' ? 'selected' : ''}>Livre audio</option></select></label></div><div class="field-row"><label class="field">Titre<input id="book-title-field" name="title" required value="${attr(book?.title || '')}" placeholder="Titre du livre"></label><label class="field">Auteur(s)<input id="book-authors-field" name="authors" required value="${attr(book?.authors.join(', ') || '')}" placeholder="Prénom Nom, autre auteur"></label></div><label class="field">Rayon littéraire<input id="book-genre-field" name="genre" list="book-genres" value="${attr(book?.genre || '')}" placeholder="Ex. Romans, Science-fiction…"><datalist id="book-genres">${genreOptions.map(genre => `<option value="${attr(genre)}"></option>`).join('')}</datalist><span class="field-help">Les rayons déjà présents dans votre bibliothèque sont proposés en premier, puis les catégories BOO-P.</span></label><div class="field-row"><label class="field">ISBN<input id="book-isbn-field" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" value="${attr(book?.isbn || '')}" placeholder="ISBN-10 ou ISBN-13"></label><label class="field">Date de publication<input id="book-published-field" name="publishedDate" value="${attr(book?.publishedDate || '')}" placeholder="Ex. 2024"></label></div><div class="field-row"><label class="field">Éditeur<input id="book-publisher-field" name="publisher" value="${attr(book?.publisher || '')}"></label><label class="field">Édition<input id="book-edition-field" name="edition" value="${attr(book?.edition || '')}"></label></div><div class="field-row" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}><label class="field">Format<input id="book-format-field" name="format" value="${attr(book?.format || 'Broché')}"></label><label class="field">Nombre de pages<input id="book-pages-field" type="number" min="0" name="totalPages" value="${book?.totalPages || ''}"></label></div><fieldset class="audio-book-fields" data-audio-fields ${book?.mediaType === 'audio' ? '' : 'hidden'}><legend>Informations du livre audio</legend><div class="field-row"><label class="field">Durée totale (minutes)<input type="number" min="0" name="durationMinutes" value="${book?.durationMinutes || ''}"></label><label class="field">Minute atteinte<input type="number" min="0" name="currentMinute" value="${book?.currentMinute || 0}"></label></div><div class="field-row"><label class="field">Narrateur ou narratrice<input name="narrator" value="${attr(book?.narrator || '')}"></label><label class="field">Plateforme ou source<input name="audioPlatform" value="${attr(book?.audioPlatform || '')}" placeholder="Audible, CD, bibliothèque…"></label></div></fieldset><label class="field">Résumé<textarea id="book-description-field" name="description">${esc(book?.description || '')}</textarea></label><div class="field-row"><label class="field">Statut<select name="status">${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${book?.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Situation<select name="situation">${Object.entries(SITUATION_LABELS).map(([value,label]) => `<option value="${value}" ${book?.situation === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><div class="field-row"><label class="field" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}>Page atteinte<input type="number" min="0" name="currentPage" value="${book?.currentPage || 0}"></label><label class="checkbox-row"><input type="checkbox" name="historicalBeforeJoin" ${book?.historicalBeforeJoin ? 'checked' : ''}> Lu avant mon inscription</label></div><p class="small muted">Vous pouvez toujours compléter ou corriger les informations avant l’ajout.</p><button class="button button--primary" type="submit">${editing ? 'Enregistrer le livre' : 'Ajouter à BOO-P'}</button></form>` });
+      <form class="form-grid" data-form="book"><input type="hidden" name="id" value="${attr(book?.id || '')}"><input type="hidden" name="coverUrl" id="book-cover-value" value="${attr(book?.coverUrl || '')}"><input type="hidden" name="coverSource" id="book-cover-source" value="${attr(ui.pendingCoverKind)}"><div class="field-row"><label class="field">Destination<select name="libraryState"><option value="library" ${book?.libraryState !== 'wishlist' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${book?.libraryState === 'wishlist' ? 'selected' : ''}>Ma wishlist</option></select></label><label class="field">Support<select name="mediaType" data-change="book-media"><option value="print" ${book?.mediaType !== 'ebook' && book?.mediaType !== 'audio' ? 'selected' : ''}>Livre papier</option><option value="ebook" ${book?.mediaType === 'ebook' ? 'selected' : ''}>Livre numérique</option><option value="audio" ${book?.mediaType === 'audio' ? 'selected' : ''}>Livre audio</option></select></label></div><div class="field-row"><label class="field">Titre<input id="book-title-field" name="title" required value="${attr(book?.title || '')}" placeholder="Titre du livre"></label><label class="field">Auteur(s)<input id="book-authors-field" name="authors" required value="${attr(book?.authors.join(', ') || '')}" placeholder="Prénom Nom, autre auteur"></label></div>${BT.shelves.field(book?.genre || '')}<div class="field-row"><label class="field">ISBN<input id="book-isbn-field" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" value="${attr(book?.isbn || '')}" placeholder="ISBN-10 ou ISBN-13"></label><label class="field">Date de publication<input id="book-published-field" name="publishedDate" value="${attr(book?.publishedDate || '')}" placeholder="Ex. 2024"></label></div><div class="field-row"><label class="field">Éditeur<input id="book-publisher-field" name="publisher" value="${attr(book?.publisher || '')}"></label><label class="field">Édition<input id="book-edition-field" name="edition" value="${attr(book?.edition || '')}"></label></div><div class="field-row" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}><label class="field">Format<input id="book-format-field" name="format" value="${attr(book?.format || 'Broché')}"></label><label class="field">Nombre de pages<input id="book-pages-field" type="number" min="0" name="totalPages" value="${book?.totalPages || ''}"></label></div><fieldset class="audio-book-fields" data-audio-fields ${book?.mediaType === 'audio' ? '' : 'hidden'}><legend>Informations du livre audio</legend><div class="field-row"><label class="field">Durée totale (minutes)<input type="number" min="0" name="durationMinutes" value="${book?.durationMinutes || ''}"></label><label class="field">Minute atteinte<input type="number" min="0" name="currentMinute" value="${book?.currentMinute || 0}"></label></div><div class="field-row"><label class="field">Narrateur ou narratrice<input name="narrator" value="${attr(book?.narrator || '')}"></label><label class="field">Plateforme ou source<input name="audioPlatform" value="${attr(book?.audioPlatform || '')}" placeholder="Audible, CD, bibliothèque…"></label></div></fieldset><label class="field">Résumé<textarea id="book-description-field" name="description">${esc(book?.description || '')}</textarea></label><div class="field-row"><label class="field">Statut<select name="status">${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${book?.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Situation<select name="situation">${Object.entries(SITUATION_LABELS).map(([value,label]) => `<option value="${value}" ${book?.situation === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><div class="field-row"><label class="field" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}>Page atteinte<input type="number" min="0" name="currentPage" value="${book?.currentPage || 0}"></label><label class="checkbox-row"><input type="checkbox" name="historicalBeforeJoin" ${book?.historicalBeforeJoin ? 'checked' : ''}> Lu avant mon inscription</label></div><p class="small muted">Vous pouvez toujours compléter ou corriger les informations avant l’ajout.</p><button class="button button--primary" type="submit">${editing ? 'Enregistrer le livre' : 'Ajouter à BOO-P'}</button></form>` });
     const bookForm = document.querySelector('form[data-form="book"]');
     const formHint = bookForm?.querySelector(':scope > p.small.muted');
     if (bookForm && formHint) {
@@ -1576,13 +1582,16 @@
   async function submitMonthlyReport(form, data) {
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true; submit.textContent = 'Création de l’image…';
     try {
+      ui.savedMonthlyCard=null;
+      const reportOwner=BT.auth.getCurrentUser()?.id;
       ui.monthlyReportData = window.BT.monthlyReport.buildData(store.getState(), data.get('monthKey'), data.get('includePersonalNotes') === 'on');
       ui.monthlyReportCanvas = await window.BT.monthlyReport.render(ui.monthlyReportData);
+      if(reportOwner!==BT.auth.getCurrentUser()?.id||!form.isConnected)return;
       ui.monthlyReportCanvas.className = 'monthly-report-preview';
       ui.monthlyReportCanvas.setAttribute('role', 'img');
       ui.monthlyReportCanvas.setAttribute('aria-label', `Rapport de lecture de ${ui.monthlyReportData.label}`);
       const body = document.getElementById('dialog-body');
-      body.innerHTML = `<div class="report-preview-wrap" id="monthly-report-preview-host"></div><p class="small muted">Relisez l’image avant de la publier. Le bouton Partager ouvre la feuille de partage de votre téléphone lorsque le navigateur le permet.</p><div class="button-row report-actions"><button class="button button--primary" type="button" data-action="share-monthly-report">Partager l’image</button><button class="button button--secondary" type="button" data-action="download-monthly-report">Télécharger le PNG</button><button class="button button--ghost" type="button" data-action="edit-monthly-report">Modifier les options</button></div>`;
+      body.innerHTML = `<div class="report-preview-wrap" id="monthly-report-preview-host"></div><p class="small muted">Relisez l’image avant de la publier. Le bouton Partager ouvre la feuille de partage de votre téléphone lorsque le navigateur le permet.</p><div class="button-row report-actions"><button class="button button--primary" type="button" data-action="save-monthly-card">Enregistrer dans mon carnet</button><button class="button button--primary" type="button" data-action="share-monthly-report">Partager l’image</button><button class="button button--secondary" type="button" data-action="download-monthly-report">Télécharger le PNG</button><button class="button button--ghost" type="button" data-action="edit-monthly-report">Modifier les options</button></div>`;
       document.getElementById('monthly-report-preview-host').appendChild(ui.monthlyReportCanvas);
       showToast('Rapport mensuel prêt à être publié');
     } catch (error) { submit.disabled = false; submit.textContent = 'Générer mon image'; showToast(error.message || 'Le rapport ne peut pas être créé sur cet appareil'); }
@@ -1630,6 +1639,7 @@
     const clickedSpine = event.target.closest?.('.book-spine[data-action="select-book"]');
     if (ui.selectedLibraryBookId && clickedSpine?.dataset.id !== ui.selectedLibraryBookId) clearLibraryBookSelection(true);
     const trigger = event.target.closest('[data-action]'); if (!trigger) return;
+    const quickMenu=trigger.closest('.reading-quick-menu');if(quickMenu)quickMenu.open=false;
     const action = trigger.dataset.action, id = trigger.dataset.id;
     switch (action) {
       case 'close-dialog': closeDialog(); break;
@@ -1732,6 +1742,7 @@
       case 'lexicon-filter': ui.lexiconKind = trigger.dataset.kind || 'all'; render(); break;
       case 'edit-goal': openGoalDialog(trigger.dataset.period); break;
       case 'open-monthly-report': openMonthlyReportDialog(); break;
+      case 'save-monthly-card': { trigger.disabled=true;try{ui.savedMonthlyCard ||= await BT.readingCards.save(ui.monthlyReportCanvas,ui.monthlyReportData);trigger.textContent='Enregistrée dans le carnet';const go=document.createElement('a');go.href='#path?tab=notebook&section=cards';go.className='text-link';go.textContent='Voir mes cartes';go.onclick=()=>closeDialog();trigger.after(go);showToast(ui.savedMonthlyCard.synced?'Carte enregistrée en privé dans votre carnet':'Carte enregistrée en privé sur cet appareil');}catch(error){trigger.disabled=false;showToast(error.message);} break; }
       case 'download-monthly-report': await downloadMonthlyReport(); break;
       case 'share-monthly-report': await shareMonthlyReport(); break;
       case 'edit-monthly-report': openMonthlyReportDialog(ui.monthlyReportData?.monthKey); break;
@@ -2339,7 +2350,7 @@
     const values = {
       'book-title-field': item.title,
       'book-authors-field': (item.authors || []).join(', '),
-      'book-genre-field': item.genre || '',
+
       'book-isbn-field': item.isbn || '',
       'book-published-field': item.publishedDate || '',
       'book-publisher-field': item.publisher || '',
@@ -2348,6 +2359,8 @@
       'book-pages-field': item.totalPages || '',
       'book-description-field': item.description || ''
     };
+
+    BT.shelves.setValue(document.querySelector('[data-form=book]'),item.genre || '');
     Object.entries(values).forEach(([id, value]) => { const field = document.getElementById(id); if (field) field.value = value; });
     const lookupField = document.getElementById('book-isbn-lookup');
     if (lookupField && item.isbn) lookupField.value = item.isbn;
@@ -2428,7 +2441,7 @@
       form.querySelector('button[type="submit"]').before(notice); notice.scrollIntoView({block:'center'}); return;
     }
     const mediaType = data.get('mediaType');
-    const genre = String(data.get('genre') || '').trim();
+    const genre = BT.shelves.formValue(form);
     const status = data.get('status'), historicalBeforeJoin = data.get('historicalBeforeJoin') === 'on';
     const startedDate = String(data.get('startedAt') || ''), completedDate = String(data.get('completedAt') || '');
     if (startedDate && completedDate && completedDate < startedDate) {
@@ -2779,14 +2792,16 @@
     clearTimeout(ui.syncTimer);
     ui.syncUnsubscribe?.();
     ui.syncUnsubscribe = null;
+    const cardsOwner=BT.auth.isGuest()?'guest':BT.auth.getCurrentUser()?.id;
     try {
       await window.BT.auth.signOut();
       clearInterval(ui.timer);
       clearInterval(ui.heartbeat);
+      if(cardsOwner)await BT.readingCards.clearLocal(cardsOwner);
       store.clearAll();
       location.href = 'index.html?reason=local-data-deleted';
     } catch (error) {
-      showToast('Déconnexion impossible : les données locales sont conservées. Réessayez ou rechargez la page.');
+      showToast('L’effacement local n’a pas pu être terminé. Rechargez la page et réessayez.');
     }
   }
 
@@ -2821,7 +2836,7 @@
     if(viewer!==BT.auth.getCurrentUser()?.id)return;
     const locked = user.profileVisibility === 'private' && !details;
     const avatarProfile = { ...user, avatarUrl:details?.avatarUrl || user.avatarUrl || '' };
-    openDialog({ title:userId===viewer?'Mon espace de lecture':'Son espace de lecture', wide:true, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2><p class="muted">${esc(user.handle || '')}</p></div></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'Ce lecteur n’a pas encore rédigé de biographie.')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<div class="reader-profile-options"><details><summary>Confidentialité</summary><p class="small muted">La bibliothèque est réservée aux amis acceptés. Les carnets et souvenirs apparaissent selon leur audience de publication. Les notes et conversations IA restent privées.</p></details>${userId===viewer?'':user.friendState==='friend'?`<details><summary>Vous êtes amis · Gérer</summary>${friendAction(user)}</details>`:friendAction(user)}</div><div data-reader-sharing></div>` });
+    openDialog({ title:userId===viewer?'Mon espace de lecture':'Son espace de lecture', wide:true, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2></div></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'Ce lecteur n’a pas encore rédigé de biographie.')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<div class="reader-profile-options"><details><summary>Confidentialité</summary><p class="small muted">La bibliothèque est réservée aux amis acceptés. Les carnets et souvenirs apparaissent selon leur audience de publication. Les notes et conversations IA restent privées.</p></details>${userId===viewer?'':user.friendState==='friend'?`<details><summary>Vous êtes amis · Gérer</summary>${friendAction(user)}</details>`:friendAction(user)}</div><div data-reader-sharing></div>` });
     const profileDialog=document.getElementById('app-dialog');profileDialog.classList.add('reader-profile-dialog');profileDialog.addEventListener('close',()=>profileDialog.classList.remove('reader-profile-dialog'),{once:true});
     const sharingHost=document.querySelector('#app-dialog [data-reader-sharing]');
     if(sharingHost && user.isRemote && !isGuestMode())BT.sharing.mountReader(sharingHost,userId);
@@ -2967,8 +2982,9 @@
     finally { ui.syncBootstrapping = false; }
   }
 
-  function exportData() {
-    downloadJSON(store.exportData(), 'export');
+  async function exportData() {
+    try {const snapshot=store.exportData();snapshot.readingCards=await BT.readingCards.exportLocal();downloadJSON(snapshot, 'export');}
+    catch(error){showToast(error.message || 'L’export n’a pas pu être préparé.');}
   }
   function exportRecoveryData() {
     const userId = window.BT.auth.getSession()?.user?.id;

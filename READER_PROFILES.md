@@ -43,3 +43,13 @@ Les échanges avec deux comptes réels sur deux appareils, et la réception push
 ## Portrait compact et badges — évolution préparée le 11 septembre 2026
 
 Le profil personnel regroupe les actions de personnalisation, réduit l’ADN, réunit les objectifs et replie les statistiques. La carte à partager est déplacée à la fin de l’accueil. La collection passe à 30 badges SVG, avec dernier badge automatique près du nom et célébration groupée des nouveaux acquis. Voir [READER_BADGES.md](READER_BADGES.md) pour le catalogue, la synchronisation et les vérifications. La migration des badges est appliquée après autorisation explicite ; les tests SQL des droits d’accès passent, avec annulation des données fictives. Les migrations de profils décrites plus haut sont également appliquées.
+
+### Cartes de lecture, citations et rangement — 11 septembre 2026, mise à jour préparée
+
+Le carnet distingue Réflexions et Cartes de lecture. Les cartes mensuelles sont enregistrables, privées par défaut, puis publiables pour les amis ou la communauté connectée avec une légende modifiable. Un carrousel commence par la création de la carte du mois ; les profils reprennent seulement les cartes publiées, sans création. Une image figée est conservée et synchronisée, sans joindre les notes ni les données sources du bilan. Voir READING_CARDS.md pour les droits, les limites et les tests.
+
+Les citations occupent le premier plan, en italique avec de grands guillemets et leur attribution. Le texte personnel vient dessous comme légende, dans le formulaire, l’aperçu et la publication. La personnalisation des cartes de citations par IA est prévue pour de futures offres payantes ; ses modalités seront définies plus tard. Aucune fonction IA ou tarification correspondante n’est activée dans cette mise à jour.
+
+Communauté regroupe Clubs & salons. Les profils gardent le nom ou pseudonyme sans identifiant secondaire. Les badges ont un fond bleu nuit. Les actions de progression et de session passée se regroupent dans un menu à pictogramme sous la couverture. La bibliothèque permet de déplacer une tranche par appui long vers un rayon, et la fiche propose de choisir un rayon existant ou d’en créer un, en évitant les doublons de casse, d’accents et d’espaces.
+
+La précédente version des profils et badges a été publiée dans 484618f. Cette nouvelle évolution passe 99 tests Node et les parcours navigateur locaux. La migration reading_cards est préparée mais non appliquée ; la vérification SQL des droits et la publication restent à effectuer. Le geste tactile doit aussi être essayé sur iPhone physique.

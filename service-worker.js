@@ -1,5 +1,5 @@
 importScripts('./js/push-worker.js');
-const CACHE_VERSION = 'boo-p-webapp-v52';
+const CACHE_VERSION = 'boo-p-webapp-v53';
 const APP_SHELL = [
   './',
   './index.html',
@@ -46,6 +46,9 @@ const APP_SHELL = [
   './js/pwa.js',
   './js/speech.js',
   './js/store.js',
+  './js/reading-cards.js',
+  './js/library-shelves.js',
+  './css/reading-cards.css',
   './js/reader-badges.js',
   './css/reader-badges.css',
   './js/user-data-sync-api.js',

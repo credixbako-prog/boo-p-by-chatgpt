@@ -21,7 +21,7 @@ BT.sharing = (() => {
       content=[clean(item.word),clean(item.definition)].filter(Boolean).join('\n\n');
     }else if(kind==='citation'){
       text='Quelques mots qui résonnent encore après la lecture. Et vous, que vous évoquent-ils ?';
-      content=[clean(item.word),clean(item.author || book?.authors?.join(', '))].filter(Boolean).join('\n\n');
+      content=JSON.stringify({type:'boop-citation-v1',quote:clean(item.word),author:clean(item.author || book?.authors?.join(', '))});
     }else if(kind==='thought'){
       text='Une pensée née de ma lecture, que j’ai envie de partager avec vous.';content=clean(item.text);
     }else text=kind==='session'?`Un moment de lecture avec « ${bookTitle} ». Voici ce que j’ai envie d’en partager.`:kind==='debut'?`J’ouvre « ${bookTitle} » : une nouvelle lecture commence. L’avez-vous déjà lu ?`:`Je viens de refermer « ${bookTitle} ». Une lecture de plus, et des idées qui continuent leur chemin.`;
@@ -40,6 +40,8 @@ BT.sharing = (() => {
     const l=element('label',label,'field'),input=element(tag);Object.assign(input,attributes);l.append(input);form.append(l);return input;
   }
   function changed(id) {if(id)BT.store.removeCommunityPost?.(id);window.dispatchEvent(new CustomEvent('boop:sharing-changed'));}
+  function citation(value){try{const data=JSON.parse(value);if(data?.type==='boop-citation-v1'&&typeof data.quote==='string')return {quote:data.quote,author:typeof data.author==='string'?data.author:''};}catch{}return {quote:String(value||''),author:''};}
+  function quoteHTML(content,caption='') {const data=citation(content),escape=value=>String(value||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));return `<figure class="publication-quote"><blockquote><p>${escape(data.quote)}</p></blockquote><figcaption>${data.author?`<cite>${escape(data.author)}</cite>`:''}${caption?`<p class="publication-quote-caption">${escape(caption)}</p>`:''}</figcaption></figure>`;}
   async function open(kind,id,extraText='',allowMissing=false) {
     composer?.close();
     if(kind==='book'){
@@ -51,15 +53,19 @@ BT.sharing = (() => {
     const {d,body}=dialog('Préparer ma publication');composer=d;const account=owner();
     body.append(element('p',labels[kind]+(original.bookTitle?' · '+original.bookTitle:''),'eyebrow'));
     const form=element('form',undefined,'form-grid');body.append(form);
-    const intro=field(form,'Votre message · modifiable et personnel','textarea',{name:'message',rows:4,maxLength:1200,required:true,value:original.text});
-    const content=field(form,'Contenu partagé · vous pouvez le modifier','textarea',{name:'content',rows:kind==='notebook'?8:4,maxLength:100000,value:original.content});
+    const quote=kind==='citation'?citation(original.content):null;
+    const intro=field(form,quote?'Légende personnelle · sous la citation':'Votre message · modifiable et personnel','textarea',{name:'message',rows:quote?2:4,maxLength:1200,required:true,value:original.text});
+    const content=field(form,quote?'La citation':'Contenu partagé · vous pouvez le modifier','textarea',{name:'content',rows:kind==='notebook'?8:4,maxLength:100000,value:quote?quote.quote:original.content});
+    let author;
+    if(quote){const box=element('div',undefined,'citation-editor');author=field(form,'Auteur ou autrice','input',{name:'citationAuthor',maxLength:240,value:quote.author});box.append(content.closest('label'),author.closest('label'));form.prepend(box);intro.closest('label').classList.add('citation-legend-field');}
     if(kind==='notebook' && !original.content)body.prepend(element('p','Votre carnet enregistré est vide. Vous pouvez rédiger une version à partager ci-dessous. Les brouillons non enregistrés et les échanges avec l’IA ne sont pas repris.','small muted'));
     const audience=field(form,'Qui pourra lire cette publication ?','select',{name:'audience'});
     for(const [value,label] of [['friends','Amis uniquement'],['public','Communauté · public, même sans compte']]){const opt=element('option',label);opt.value=value;audience.append(opt);}
     form.append(element('p','Vous publiez une copie. Vos modifications ici ne changent pas votre carnet personnel. Les modifications futures de l’original ne seront pas publiées automatiquement.','small muted'));
     const preview=element('details',undefined,'sharing-preview');preview.append(element('summary','Aperçu de la publication'));
     const messagePreview=element('p'),contentPreview=element('div',undefined,'sharing-content');preview.append(messagePreview,contentPreview);form.append(preview);
-    function paint(){messagePreview.textContent=intro.value;contentPreview.textContent=content.value;}intro.oninput=content.oninput=paint;paint();
+    const preparedContent=()=>quote?JSON.stringify({type:'boop-citation-v1',quote:content.value,author:author.value.trim()}):content.value;
+    function paint(){if(quote){messagePreview.hidden=true;contentPreview.innerHTML=quoteHTML(preparedContent(),intro.value);}else{messagePreview.textContent=intro.value;contentPreview.textContent=content.value;}}intro.oninput=content.oninput=paint;if(author)author.oninput=paint;paint();
     const status=element('p','Vérification du statut de publication…','small');status.dataset.sharingStatus='';status.setAttribute('role','status');form.append(status);
     const submit=element('button','Publier','button button--primary');submit.type='submit';submit.disabled=true;form.append(submit);
     const withdraw=button('Retirer la publication',async()=>{
@@ -71,18 +77,18 @@ BT.sharing = (() => {
     let existing=null,busy=false;
     const sameAccount=()=>d.isConnected && owner()===account;
     if(!account){notice(d,'Connectez-vous pour publier. Cet aperçu n’est envoyé à personne.');return;}
-    intro.disabled=content.disabled=audience.disabled=true;
+    intro.disabled=content.disabled=audience.disabled=true;if(author)author.disabled=true;
     try{
       existing=await BT.community.getOwnReadingPublication(kind,id);if(!sameAccount())return;
-      if(existing){original.bookTitle=existing.book_title;intro.value=existing.body;content.value=existing.reading_content;audience.value=existing.visibility==='public'?'public':'friends';submit.textContent='Mettre à jour la publication';withdraw.hidden=false;
-        form.insertBefore(button('Reprendre le contenu personnel actuel',()=>{try{content.value=source(kind,id).content;paint();}catch(e){notice(d,e.message);}} ,'text-link'),preview);paint();}
-      notice(d,existing?'Déjà publié · '+(existing.visibility==='public'?'Public':'Amis uniquement'):'Privé · rien n’est encore publié.');submit.disabled=false;intro.disabled=content.disabled=audience.disabled=false;
+      if(existing){original.bookTitle=existing.book_title;intro.value=existing.body;content.value=quote?citation(existing.reading_content).quote:existing.reading_content;if(author)author.value=citation(existing.reading_content).author;audience.value=existing.visibility==='public'?'public':'friends';submit.textContent='Mettre à jour la publication';withdraw.hidden=false;
+        form.insertBefore(button('Reprendre le contenu personnel actuel',()=>{try{const saved=source(kind,id).content;content.value=quote?citation(saved).quote:saved;if(author)author.value=citation(saved).author;paint();}catch(e){notice(d,e.message);}} ,'text-link'),preview);paint();}
+      notice(d,existing?'Déjà publié · '+(existing.visibility==='public'?'Public':'Amis uniquement'):'Privé · rien n’est encore publié.');submit.disabled=false;intro.disabled=content.disabled=audience.disabled=false;if(author)author.disabled=false;
     }catch(e){notice(d,e.message+' Fermez puis réessayez.');}
     form.onsubmit=async e=>{
       e.preventDefault();if(busy || submit.disabled || !sameAccount())return;
       busy=true;submit.disabled=withdraw.disabled=true;notice(d,'Publication en cours…');
       try{
-        const post=await BT.community.publishReading({...original,text:intro.value,content:content.value,visibility:audience.value,expectedUserId:account});
+        const post=await BT.community.publishReading({...original,text:intro.value,content:preparedContent(),visibility:audience.value,expectedUserId:account});
         if(!sameAccount())return;existing=post;submit.textContent='Mettre à jour la publication';withdraw.hidden=false;changed(post.id);
         notice(d,'Publication enregistrée · '+(post.visibility==='public'?'Public':'Amis uniquement')+'.');
       }catch(error){if(sameAccount())notice(d,error.message);}finally{busy=false;if(sameAccount())submit.disabled=withdraw.disabled=false;}
@@ -95,6 +101,7 @@ BT.sharing = (() => {
       const post=await BT.community.getReadingPublication(id);if(!d.isConnected || owner()!==account)return;
       body.replaceChildren();if(!post){body.append(element('p','Cette publication a été retirée ou n’est plus accessible.'));changed(id);return;}
       body.append(element('p',post.author_name,'eyebrow'),element('h3',post.book_title || labels[post.reading_kind]),element('p',post.body,'sharing-content'),element('div',post.reading_content,'sharing-content'));
+      if(post.reading_kind==='citation'){body.querySelectorAll('.sharing-content').forEach(n=>n.remove());const quote=element('div');quote.innerHTML=quoteHTML(post.reading_content,post.body);body.append(quote);}
       if(account===post.author_id)body.append(button('Modifier ou retirer',()=>{d.close();open(post.reading_kind,post.reading_source_id,'',true);}));
     }catch(e){body.replaceChildren(element('p',e.message));}
   }
@@ -127,5 +134,5 @@ BT.sharing = (() => {
   }
   window.addEventListener('pagehide',()=>composer?.close());
   BT.store?.subscribe(()=>{for(const [d,account] of windows)if(d.open && owner()!==account)d.close();});
-  return {source,open,view,mountReader,labels};
+  return {source,open,view,mountReader,labels,citation,quoteHTML};
 })();

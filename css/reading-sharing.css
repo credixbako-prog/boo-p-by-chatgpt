@@ -11,6 +11,21 @@
 .reader-book h3, .reader-publication h3 { font-size: var(--boo-text-body, 16px); margin: 0 0 6px; }
 .reader-book p { margin: 4px 0 10px; }
 .activity-publication-link { margin: 0 0 12px; }
+.publication-quote { margin:16px 0; padding:24px 18px 18px; border-radius:16px; background:linear-gradient(145deg,color-mix(in srgb,var(--boo-ochre) 12%,var(--boo-paper)),var(--boo-paper)); }
+.publication-quote blockquote { margin:0; text-align:center; }
+.publication-quote blockquote::before,.publication-quote blockquote::after { display:block; color:var(--boo-sage); font:600 46px/.75 var(--boo-display); }
+.publication-quote blockquote::before { content:'“'; margin-bottom:12px; }
+.publication-quote blockquote::after { content:'”'; margin-top:18px; }
+.publication-quote blockquote p { font:italic 600 20px/1.55 var(--boo-display); white-space:pre-wrap; overflow-wrap:anywhere; margin:0; color:var(--boo-ink); }
+.publication-quote cite { display:block; text-align:center; font:500 14px/1.5 var(--boo-body); margin-top:10px; }
+.publication-quote .publication-quote-caption { font:400 14px/1.6 var(--boo-body); color:var(--boo-muted); white-space:pre-wrap; overflow-wrap:anywhere; padding-top:16px; margin:16px 0 0; border-top:1px solid var(--boo-line); }
+.citation-editor { padding:20px 16px; border-radius:16px; background:color-mix(in srgb,var(--boo-ochre) 10%,var(--boo-paper)); display:grid; gap:12px; }
+.citation-editor::before,.citation-editor::after { font:600 42px/.6 var(--boo-display); color:var(--boo-sage); text-align:center; }
+.citation-editor::before { content:'“'; }
+.citation-editor::after { content:'”'; }
+.sharing-dialog .citation-editor textarea { font:italic 600 20px/1.5 var(--boo-display); text-align:center; }
+.citation-legend-field { font-size:14px; }
+.sharing-dialog .citation-legend-field textarea { font-size:16px; font-style:normal; }
 @media (max-width: 600px) {
   .sharing-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; }
 }

@@ -88,7 +88,7 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.match(app, /class="book-spine__peek"/);
   assert.match(app, /data-action="select-book"/);
   assert.match(app, /selectedLibraryBookId/);
-  assert.match(app, /Touchez une première fois pour sélectionner/);
+  assert.match(app, /Maintenez un livre pour le déplacer/);
   assert.match(app, /data-change="library-sort"/);
   assert.match(app, /Suggestions BOO-P · analyse locale/);
   assert.match(store, /post-10/);
@@ -551,9 +551,9 @@ test('ajout de livre: photo du code ISBN et saisie manuelle restent disponibles'
   assert.match(app, /data-form="isbn-lookup"/);
   assert.doesNotMatch(app, /data-form="book-search"/);
   assert.match(app, /id="book-isbn-field"/);
-  assert.match(app, /id="book-genre-field"/);
-  assert.match(app, /knownGenres\.concat\(DEFAULT_GENRES\)/);
-  assert.match(app, /Les rayons déjà présents dans votre bibliothèque sont proposés en premier/);
+  assert.match(await read("js/library-shelves.js"), /id="book-genre-field"/);
+  assert.match(app, /BT.shelves.field/);
+  assert.match(await read("js/library-shelves.js"), /Choisissez un rayon existant/);
   assert.match(app, /data-action="scan-book-isbn"/);
   assert.match(app, /capture="environment"/);
   assert.match(app, /La photo reste sur cet appareil et n’est pas enregistrée comme couverture/);
@@ -893,7 +893,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v52/);
+  assert.match(worker, /boo-p-webapp-v53/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

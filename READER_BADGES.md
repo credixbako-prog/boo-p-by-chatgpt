@@ -1,6 +1,6 @@
 # BOO-P — portrait et badges du lecteur
 
-Évolution du 11 septembre 2026. Migration `supabase/migrations/20260911195339_reader_badges.sql` appliquée après autorisation explicite et vérifiée. Interface prête pour publication.
+Évolution du 11 septembre 2026. Migration `supabase/migrations/20260911195339_reader_badges.sql` appliquée après autorisation explicite et vérifiée. Première interface publiée dans `484618f` ; le fond bleu nuit décrit ci-dessous fait partie de la mise à jour suivante, en préparation.
 
 ## Profil
 
@@ -47,7 +47,7 @@ Les dix identifiants historiques et leurs dates acquises sont conservés. Les se
 
 ## Présentation et célébration
 
-Les illustrations SVG locales utilisent ivoire, bleu nuit, sauge et ocre. Livres, lettres, plume, sablier, chemin, boussole et transmission constituent les familles graphiques, avec variantes et repères de niveau. Elles restent fixes dans le profil et la collection.
+Les illustrations SVG locales utilisent un fond de médaillon bleu nuit, avec traits ivoire et accents sauge et ocre. Livres, lettres, plume, sablier, chemin, boussole et transmission constituent les familles graphiques, avec variantes et repères de niveau. Elles restent fixes dans le profil et la collection.
 
 Le dernier badge est choisi automatiquement par date d’obtention décroissante, puis identifiant croissant pour départager les égalités. Le lecteur ne choisit pas un badge à épingler. Le clic sur le badge du profil ouvre sa signification. Les trois badges récents du profil personnel ouvrent la collection.
 

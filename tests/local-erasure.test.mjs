@@ -9,9 +9,10 @@ const deletion = app.slice(app.indexOf('  async function submitDeleteAccount('),
 function setup(signOut) {
   const events = [];
   const ui = { syncReady:true, syncPending:true, syncUnsubscribe:() => events.push('unsubscribe') };
+  const BT={auth:{signOut,isGuest:()=>false,getCurrentUser:()=>({id:'owner'})},readingCards:{clearLocal:async id=>events.push('erase-cards:'+id)}};
   const context = {
     ui, store:{ clearAll:() => events.push('erase') },
-    window:{ BT:{ auth:{ signOut } } }, location:{},
+    BT,window:{BT}, location:{},
     clearTimeout:() => events.push('cancel-sync'), clearInterval:() => {},
     showToast:message => events.push(message)
   };
@@ -30,6 +31,7 @@ test('effacement: suspend les envois avant une déconnexion lente et efface ensu
   finish();
   await task;
   assert.equal(events.at(-1), 'erase');
+  assert.equal(events.includes('erase-cards:owner'),true);
   assert.equal(context.location.href, 'index.html?reason=local-data-deleted');
 });
 
@@ -37,6 +39,7 @@ test('effacement: conserve la copie locale si la déconnexion échoue', async ()
   const { context, events } = setup(async () => { throw new Error('offline'); });
   await context.erase(null, new Map([['confirmation','SUPPRIMER']]));
   assert.equal(events.includes('erase'), false);
+  assert.equal(events.includes('erase-cards:owner'),false);
   assert.equal(context.location.href, undefined);
 });
 

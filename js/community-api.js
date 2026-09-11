@@ -141,7 +141,7 @@ BT.community = (() => {
     const api = client();
     let request = api
       .from('community_posts')
-      .select('id, author_id, author_name, author_initials, activity_type, book_title, body, visibility, photo_path, created_at, reading_kind, reading_source_id, community_comments(id, post_id, author_id, author_name, parent_id, body, created_at)')
+      .select('id, author_id, author_name, author_initials, activity_type, book_title, body, visibility, photo_path, created_at, reading_kind, reading_source_id, reading_content, community_comments(id, post_id, author_id, author_name, parent_id, body, created_at)')
       .order('created_at', { ascending:false })
       .limit(50);
     if (!user) request = request.eq('visibility', 'public');
@@ -168,7 +168,7 @@ BT.community = (() => {
         id:post.id, remoteId:post.id, authorId:user && post.author_id === user.id ? 'me' : post.author_id,
         authorName:post.author_name, initials:post.author_initials, type:post.activity_type,
         bookTitle:post.book_title, text:post.body, visibility:post.visibility,
-        readingKind:post.reading_kind, readingSourceId:post.reading_source_id,
+        readingKind:post.reading_kind, readingSourceId:post.reading_source_id, readingContent:post.reading_kind==='citation'?post.reading_content:null,
         photoPath:post.photo_path, photoUrl:await signedPhotoUrl(post.photo_path), date:post.created_at,
         encouraged:encouragement.mine, encouragements:encouragement.count,
         comments:nestComments(post.community_comments || []), isRemote:true
