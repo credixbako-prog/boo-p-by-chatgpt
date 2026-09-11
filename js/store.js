@@ -306,6 +306,7 @@ BT.store = (() => {
   }
   function emit() { listeners.forEach(listener => { try { listener(clone(state)); } catch { /* view isolation */ } }); }
   function commit({ queue = null } = {}) {
+    getBadges();
     state.meta.updatedAt = nowISO();
     if (queue && typeof navigator !== 'undefined' && !navigator.onLine) state.outbox.push({ id: uid('queued'), action: queue, createdAt: nowISO(), status: 'waiting-for-network' });
     persistState(); emit();
@@ -381,6 +382,7 @@ BT.store = (() => {
     if (!bookIds.has(state.activeBookId)) state.activeBookId = state.books.find(book => book.status === 'en-cours' && book.libraryState === 'library')?.id || null;
     if (!state.activeSessions.some(session => session.id === state.focusedSessionId)) state.focusedSessionId = state.activeSessions[0]?.id || null;
     state.meta.lastRemoteHydrationAt = nowISO();
+    getBadges({ silent:true });
     commit();
     return getSyncedData();
   }
@@ -406,6 +408,7 @@ BT.store = (() => {
     if (!localStorage.getItem(STATE_KEY)) writeJSON(STATE_KEY, cleanId === 'guest' ? makeDefaultState() : makeEmptyAccountState());
     state = normalizeState(readJSON(STATE_KEY, null));
     state.community.posts=state.community.posts.filter(p=>!p.isRemote);
+    getBadges({ silent:true });
     persistState();
     emit();
     return getState();
@@ -443,7 +446,7 @@ BT.store = (() => {
     if(new TextEncoder().encode(JSON.stringify(next.books[index])).length>250000)return false;
     next.meta.updatedAt=nowISO();
     if(!writeJSON(STATE_KEY,next))return false;
-    state=next;emit();return true;
+    state=next;getBadges();emit();return true;
   }
   function deleteBook(id) { state.books = state.books.filter(book => book.id !== id); state.sessions = state.sessions.filter(session => session.bookId !== id); state.activeSessions = state.activeSessions.filter(session => session.bookId !== id); state.traces = state.traces.filter(trace => trace.bookId !== id); state.lexicon = state.lexicon.map(item => item.bookId === id ? { ...item, bookId: null } : item); if (state.activeBookId === id) state.activeBookId = state.books.find(book => book.status === 'en-cours' && book.libraryState === 'library')?.id || null; if (!state.activeSessions.some(session => session.id === state.focusedSessionId)) state.focusedSessionId = state.activeSessions[0]?.id || null; commit({ queue: 'book.delete' }); }
   function getCurrentBook() { const session = getActiveSession(); const sessionBook = session && state.books.find(book => book.id === session.bookId && book.status === 'en-cours' && book.libraryState === 'library'); if (sessionBook) return clone(sessionBook); const active = state.books.filter(book => book.status === 'en-cours' && book.libraryState === 'library').sort((a, b) => new Date(b.lastUsedAt || b.startedAt || b.addedAt) - new Date(a.lastUsedAt || a.startedAt || a.addedAt))[0]; return active ? clone(active) : null; }
@@ -742,7 +745,7 @@ BT.store = (() => {
 
   function getStats() { const libraryBooks = state.books.filter(book => book.libraryState === 'library'); const totalSeconds = state.sessions.reduce((sum, session) => sum + (Number(session.durationSeconds) || 0), 0) + state.activeSessions.reduce((sum, session) => sum + activeDuration(session), 0); const readDates = new Set(state.sessions.map(session => localDateKey(session.startedAt))); let streak = 0; const cursor = new Date(); if (!readDates.has(localDateKey(cursor))) cursor.setDate(cursor.getDate() - 1); while (readDates.has(localDateKey(cursor))) { streak += 1; cursor.setDate(cursor.getDate() - 1); } const progress = getGoalProgress(); return { totalBooks: libraryBooks.length, wishlistBooks: state.books.filter(book => book.libraryState === 'wishlist').length, booksRead: libraryBooks.filter(book => book.status === 'lu').length, booksInProgress: libraryBooks.filter(book => book.status === 'en-cours').length, booksToRead: libraryBooks.filter(book => book.status === 'a-lire').length, booksTransmitted: libraryBooks.filter(book => ['prete','donne'].includes(book.situation)).length, totalHours: Math.floor(totalSeconds / 3600), totalMinutes: Math.round(totalSeconds / 60), totalSessions: state.sessions.length, totalTraces: state.traces.length + state.lexicon.length, streak, booksReadThisYear: progress.year.value, dailyGoalMinutes: state.goals.week.dailyMinutes, todayReadingMinutes: Math.round(getTodayReadingTime() / 60) }; }
 
-  function getBadges() {
+  function getBadges({ silent = false } = {}) {
     const progress = getGoalProgress(), libraryBooks = state.books.filter(book => book.libraryState === 'library');
     const longestSeconds = Math.max(
       state.sessions.reduce((max, session) => Math.max(max, Number(session.durationSeconds) || 0), 0),
@@ -767,10 +770,74 @@ BT.store = (() => {
       { id:'goal-month', icon:'M', name:'Mois accompli', description:'Objectif principal du mois atteint.', unlocked:progress.month.value >= progress.month.target },
       { id:'goal-year', icon:'A', name:'Année accomplie', description:'Objectif principal de l’année atteint.', unlocked:progress.year.filledValue >= progress.year.target }
     ];
-    let changed = false;
-    definitions.forEach(badge => { if (badge.unlocked && !state.badges.unlocked[badge.id]) { state.badges.unlocked[badge.id] = nowISO(); changed = true; } });
-    if (changed) commit();
-    return { items:clone(definitions.map(badge => ({ ...badge, unlockedAt:state.badges.unlocked[badge.id] || null }))), records:{ longestSessionSeconds:longestSeconds, longestStreakDays:longestStreak, booksInBestMonth } };
+    const finished = libraryBooks.filter(book => book.status === 'lu').length;
+    const words = state.lexicon.filter(item => item.kind === 'word').length;
+    const expressions = state.lexicon.filter(item => item.kind === 'expression').length;
+    const citations = state.lexicon.filter(item => item.kind === 'citation').length;
+    const thoughts = state.traces.length;
+    const notebooks = libraryBooks.filter(book => [book.reflection?.notebook, ...Object.values(book.reflection?.sections || {})].some(text => typeof text === 'string' && text.trim())).length;
+    const hours = state.sessions.reduce((sum, session) => sum + Math.max(0, Number(session.durationSeconds) || 0), 0) / 3600;
+    const genres = new Set(libraryBooks.filter(book => book.status === 'lu' && book.genre && book.genre !== 'À classer').map(book => book.genre)).size;
+    const add = (id,name,description,family,value,target,tier=1) => definitions.push({id,name,description,family,value,target,tier,unlocked:value>=target});
+    add('last-page','Dernière page','Terminer un premier livre.','reading',finished,1);
+    add('five-books','Quelques escales','Terminer cinq livres.','reading',finished,5,2);
+    add('ten-books','Un beau chemin','Terminer dix livres.','reading',finished,10,3);
+    add('twenty-five-books','Bibliothèque vivante','Terminer vingt-cinq livres.','reading',finished,25,4);
+    add('fifty-books','Grand voyage','Terminer cinquante livres.','reading',finished,50,5);
+    add('first-word','Premier mot','Conserver un premier mot.','lexicon',words,1);
+    add('word-collector','Collectionneur de mots','Conserver vingt-cinq mots.','lexicon',words,25,3);
+    add('word-treasure','Trésor de mots','Conserver cent mots.','lexicon',words,100,5);
+    add('expressions','L’art de dire','Conserver dix expressions.','lexicon',expressions,10,2);
+    add('citations','Échos de lecture','Conserver dix citations.','lexicon',citations,10,4);
+    add('first-thought','Première pensée','Enregistrer une première pensée personnelle.','reflection',thoughts,1);
+    add('ten-thoughts','Au fil des pensées','Enregistrer dix pensées personnelles.','reflection',thoughts,10,3);
+    add('first-notebook','Carnet ouvert','Renseigner un premier carnet de réflexion.','reflection',notebooks,1,2);
+    add('five-notebooks','Cinq regards','Renseigner les carnets de cinq livres.','reflection',notebooks,5,5);
+    add('ten-sessions','Dix rendez-vous','Enregistrer dix sessions de lecture.','time',state.sessions.length,10,2);
+    add('fifty-sessions','Compagnon des pages','Enregistrer cinquante sessions de lecture.','time',state.sessions.length,50,4);
+    add('ten-hours','Du temps pour soi','Cumuler dix heures de lecture enregistrées.','time',hours,10,3);
+    add('three-genres','Hors des sentiers','Terminer des livres dans trois genres.','exploration',genres,3,2);
+    add('five-genres','Horizons multiples','Terminer des livres dans cinq genres.','exploration',genres,5,4);
+    add('book-passer','Passeur de livres','Prêter ou donner un premier livre.','sharing',libraryBooks.filter(book => ['prete','donne'].includes(book.situation)).length,1);
+    const legacy = {
+      'first-step':['reading',state.sessions.length,1,1], 'between-pages':['reading',libraryBooks.filter(book=>book.status==='en-cours').length,2,2],
+      'words-path':['lexicon',state.lexicon.length,10,2], 'deep-trace':['reflection',Number(definitions.find(b=>b.id==='deep-trace').unlocked),1,4],
+      'open-curiosity':['exploration',mediaCount,3,3], 'long-reading':['time',longestSeconds/60,60,1],
+      'goal-day':['goals',progress.week.todayMinutes,progress.week.dailyTarget,1], 'goal-week':['goals',progress.week.value,progress.week.target,2],
+      'goal-month':['goals',progress.month.value,progress.month.target,3], 'goal-year':['goals',progress.year.filledValue,progress.year.target,4]
+    };
+    for (const badge of definitions) if (legacy[badge.id]) {
+      [badge.family,badge.value,badge.target,badge.tier]=legacy[badge.id];
+    }
+    const baseline = state.badges.catalogVersion !== 2;
+    let changed = baseline;
+    state.badges.pending ||= [];
+    definitions.forEach(badge => {
+      if (badge.unlocked && !state.badges.unlocked[badge.id]) {
+        state.badges.unlocked[badge.id] = nowISO(); changed = true;
+        if (!silent && !baseline) state.badges.pending.push(badge.id);
+      }
+    });
+    state.badges.catalogVersion = 2;
+    if (changed) persistState();
+    const items=definitions.map(badge => ({...badge,unlockedAt:state.badges.unlocked[badge.id] || null}));
+    const latest=items.filter(b=>b.unlockedAt).sort((a,b)=>new Date(b.unlockedAt)-new Date(a.unlockedAt)||a.id.localeCompare(b.id))[0] || null;
+    return clone({items,latest,records:{ longestSessionSeconds:longestSeconds, longestStreakDays:longestStreak, booksInBestMonth }});
+  }
+
+  function consumeBadgeCelebrations() {
+    const badges=getBadges(), ids=state.badges.pending || [];
+    state.badges.pending=[];persistState();
+    return badges.items.filter(b=>ids.includes(b.id));
+  }
+  function mergeBadgeAwards(rows, { preservePending = false } = {}) {
+    const known=new Set(getBadges({silent:true}).items.map(b=>b.id));
+    for(const row of rows || []) {
+      if(!known.has(row.badge_id) || !Number.isFinite(Date.parse(row.unlocked_at)))continue;
+      state.badges.unlocked[row.badge_id]=row.unlocked_at;
+      if(!preservePending)state.badges.pending=(state.badges.pending || []).filter(id=>id!==row.badge_id);
+    }
+    persistState();
   }
 
   function exportData() { return clone(state); }
@@ -795,7 +862,7 @@ BT.store = (() => {
     getDraft, saveDraft, clearDraft,
     getGoal, saveGoal, getGoalProgress, updateGoal, markGoalCelebrated, isGoalCelebrated,
     getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, removeCommunityPost, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, addGroup, getGroups, updateGroup, toggleClub, addGroupMember, removeGroupMember, addGroupPost, addGroupComment, toggleGroupPostEncouragement, addGroupBook, updateGroupBook, updateSalon, addSalon, addSalonMessage,
-    getNotifications, replaceNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getReaderDNA, getStats, getBadges, exportData, flushOutbox, clearAll, loadDemoData,
+    getNotifications, replaceNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getReaderDNA, getStats, getBadges, consumeBadgeCelebrations, mergeBadgeAwards, exportData, flushOutbox, clearAll, loadDemoData,
     statusLabel, situationLabel, localDateKey
   };
 })();

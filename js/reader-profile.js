@@ -95,6 +95,8 @@ BT.readerProfile=(()=>{
     const tabLabels=[['path','Son parcours'],['library','Bibliothèque'],['notebook','Carnets']];
     async function intro(){try{const [prefs,library,posts,notebooks]=await Promise.all([api().preferences(userId),api().books(userId),api().publications(userId),api().publications(userId,'notebook')]);if(!current())return;
       welcome.replaceChildren();if(prefs.welcome)welcome.append(el('blockquote',prefs.welcome));
+      const badgeHost=host.closest('.dialog-body')?.querySelector('.profile-main>div');
+      if(badgeHost && api().latestBadge)api().latestBadge(userId).then(row=>{if(!current())return;badgeHost.querySelector('.profile-badge-chip')?.remove();const badge=BT.store.getBadges().items.find(b=>b.id===row?.badge_id);if(badge)badgeHost.append(BT.badges.chip(badge));}).catch(()=>{});
       if(userId===account)welcome.append(button('Personnaliser mon profil',editPreferences,'text-link'));
       stats.replaceChildren();for(const [value,label] of [[library.available?library.finished:null,'livres terminés'],[notebooks.count,'carnets partagés'],[Math.max(0,posts.count-notebooks.count),'autres partages']]){if(value===null)continue;const s=el('div');s.append(el('strong',String(value)),el('span',label));stats.append(s);}
     }catch(e){if(current())welcome.replaceChildren(message(e.message));}}

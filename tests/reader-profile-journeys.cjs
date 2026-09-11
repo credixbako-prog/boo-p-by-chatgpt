@@ -15,7 +15,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const post={id:'p1',author_id:'friend',author_name:'Léa Martin',book_title:book.title,body:'Cette lecture me fait réfléchir à ce que nous transmettons.',reading_kind:'notebook',reading_source_id:'b1',reading_content:'Le temps et la transmission.\nUne réflexion partagée, sans mon journal privé.',created_at:new Date().toISOString(),visibility:'friends'};
   const rows=[];let mine=null,prefs={welcome:'En ce moment, je prends le temps de découvrir Yourcenar.',show_current:true,featured:['b1']};
   window.profileTest={writes:0,fail:false,revoked:false,setUser:v=>{user=v;BT.store.saveSettings({});}};
-  BT.readerProfileApi={identity:async()=>friend,preferences:async()=>prefs,
+  BT.readerProfileApi={identity:async()=>friend,preferences:async()=>prefs,latestBadge:async()=>({badge_id:'first-word',unlocked_at:'2026-09-10T12:00:00Z'}),
    savePreferences:async p=>{prefs=p;profileTest.writes++;return p;},
    books:async(id,shelf,cursor,bookId)=>({available:!profileTest.revoked,total:7,finished:4,showCurrent:prefs.show_current,next:shelf==='all'&&!bookId&&!cursor?'page2':null,books:profileTest.revoked?[]:shelf==='all'&&!bookId?(cursor?[{...book,id:'last',title:'Une dernière lecture'}]:Array.from({length:24},(_,i)=>({...book,id:'b'+(i+1),title:i?'Lecture '+(i+1):book.title}))) :shelf==='current'&&!prefs.show_current?[]:shelf==='lu'||shelf==='a-lire'?[]:[book]}),
    publications:async(id,kind,offset=0)=>({rows:offset?[]:[post],count:1}),publication:async()=>profileTest.revoked?null:post,
@@ -27,6 +27,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  });
  await page.evaluate(()=>location.hash='#community?tab=friends');await page.locator('[data-action=view-user][data-id=friend]').click();
  const profile=page.locator('#app-dialog [data-reader-sharing]');await profile.getByText('En ce moment, je lis…',{exact:true}).waitFor();await profile.getByText('En ce moment, je prends le temps de découvrir Yourcenar.',{exact:true}).waitFor();
+ await page.locator('#app-dialog .profile-main .profile-badge-chip').getByText('Premier mot',{exact:true}).waitFor();
  await page.screenshot({path:'.tmp/profile-review/profile-mobile.png'});
  for(const width of [320,390]){
   await page.setViewportSize({width,height:844});const bar=profile.locator('.reader-current-shelf .reader-actionbar').first();await bar.scrollIntoViewIfNeeded();

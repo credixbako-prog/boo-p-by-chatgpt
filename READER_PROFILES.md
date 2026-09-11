@@ -39,3 +39,7 @@ Le blocage existant reste un masquage local. Le retrait d’amitié révoque ré
 `tests/reader-profile-access.sql` a été exécuté après migration avec annulation transactionnelle : projection sûre, couverture personnelle exclue, préférences, accès amis/étranger, unicité des encouragements, réponses entre livres interdites, modération, notifications et révocation. Les avis de sécurité Supabase ne signalent rien de nouveau ; l’avertissement préexistant de [protection des mots de passe compromis](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) reste distinct de cette évolution.
 
 Les échanges avec deux comptes réels sur deux appareils, et la réception push correspondante, restent à essayer après publication de l’interface.
+
+## Portrait compact et badges — évolution préparée le 11 septembre 2026
+
+Le profil personnel regroupe les actions de personnalisation, réduit l’ADN, réunit les objectifs et replie les statistiques. La carte à partager est déplacée à la fin de l’accueil. La collection passe à 30 badges SVG, avec dernier badge automatique près du nom et célébration groupée des nouveaux acquis. Voir [READER_BADGES.md](READER_BADGES.md) pour le catalogue, la synchronisation et les vérifications. La migration des badges reste à autoriser et à tester avant publication ; les migrations de profils décrites plus haut sont déjà appliquées.
