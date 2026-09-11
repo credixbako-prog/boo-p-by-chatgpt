@@ -297,13 +297,18 @@ BT.store = (() => {
   }
 
   let state = normalizeState(readJSON(STATE_KEY, null));
-  writeJSON(STATE_KEY, state);
+  state.community.posts=state.community.posts.filter(p=>!p.isRemote);
+  persistState();
 
+  function persistState() {
+    const snapshot={...state,community:{...state.community,posts:state.community.posts.filter(p=>!p.isRemote)}};
+    return writeJSON(STATE_KEY,snapshot);
+  }
   function emit() { listeners.forEach(listener => { try { listener(clone(state)); } catch { /* view isolation */ } }); }
   function commit({ queue = null } = {}) {
     state.meta.updatedAt = nowISO();
     if (queue && typeof navigator !== 'undefined' && !navigator.onLine) state.outbox.push({ id: uid('queued'), action: queue, createdAt: nowISO(), status: 'waiting-for-network' });
-    writeJSON(STATE_KEY, state); emit();
+    persistState(); emit();
   }
   function getState() { return clone(state); }
   function getSyncedData() {
@@ -345,7 +350,7 @@ BT.store = (() => {
     state.meta.lastSyncedSnapshot = clone(snapshot);
     state.meta.lastSyncedFingerprint = syncedFingerprint(snapshot);
     state.meta.lastSyncedAt = value;
-    writeJSON(STATE_KEY, state);
+    persistState();
     return getDataSyncStatus();
   }
   function replaceSyncedData(snapshot = {}) {
@@ -400,7 +405,8 @@ BT.store = (() => {
     }
     if (!localStorage.getItem(STATE_KEY)) writeJSON(STATE_KEY, cleanId === 'guest' ? makeDefaultState() : makeEmptyAccountState());
     state = normalizeState(readJSON(STATE_KEY, null));
-    writeJSON(STATE_KEY, state);
+    state.community.posts=state.community.posts.filter(p=>!p.isRemote);
+    persistState();
     emit();
     return getState();
   }
@@ -474,7 +480,7 @@ BT.store = (() => {
     if (timestamp - lastSeen > 1800000) { const beforeBackground = Math.max(0, Math.floor((lastSeen - new Date(session.resumedAt).getTime()) / 1000)); session.accumulatedSeconds = (Number(session.accumulatedSeconds) || 0) + beforeBackground + 1800; session.status = 'paused'; session.pausedAt = new Date(lastSeen + 1800000).toISOString(); session.autoPaused = true; addNotification({ type: 'session', title: 'Session mise en pause', text: 'Après 30 minutes en arrière-plan, votre session a été mise en pause automatiquement.', route: '#session' }, false); commit(); }
     return getActiveSession();
   }
-  function heartbeatActiveSession() { const session = state.activeSessions.find(item => item.status === 'running'); if (session) { session.lastSeenAt = nowISO(); writeJSON(STATE_KEY, state); } }
+  function heartbeatActiveSession() { const session = state.activeSessions.find(item => item.status === 'running'); if (session) { session.lastSeenAt = nowISO(); persistState(); } }
   function updateActiveSession(updates, id = null) { const session = findActiveSession(id); if (!session) return null; Object.assign(session, updates, { lastSeenAt: nowISO() }); state.focusedSessionId = session.id; commit(); return getActiveSession(session.id); }
   function addActiveSessionCitation(value, id = null) {
     const session = findActiveSession(id), text = String(value || '').trim();
@@ -584,7 +590,7 @@ BT.store = (() => {
     });
     if (changed) {
       state.meta.updatedAt = nowISO();
-      writeJSON(STATE_KEY, state);
+      persistState();
     }
     return changed;
   }
@@ -618,8 +624,9 @@ BT.store = (() => {
   function getCommunity() { return clone(state.community); }
   function toggleEncouragement(postId) { const post = state.community.posts.find(item => item.id === postId); if (!post) return null; post.encouraged = !post.encouraged; post.encouragements = Math.max(0, Number(post.encouragements) + (post.encouraged ? 1 : -1)); commit({ queue: 'community.encouragement' }); return clone(post); }
   function addComment(postId, text, parentId = null) { const post = state.community.posts.find(item => item.id === postId); if (!post || !String(text).trim()) return null; const comment = { id: uid(parentId ? 'reply' : 'comment'), authorName: state.profile.name, text: String(text).trim(), date: nowISO(), replies: [] }; if (parentId) { const parent = post.comments.find(item => item.id === parentId); if (!parent) return null; parent.replies ||= []; parent.replies.push(comment); } else post.comments.push(comment); commit({ queue: 'community.comment' }); return clone(comment); }
-  function addPost(post) { const record = { id: post.id || uid('post'), remoteId: post.remoteId || null, authorId: post.authorId || 'me', authorName: post.authorName || state.profile.name, initials: post.initials || state.profile.name.split(/\s+/).map(item => item[0]).slice(0, 2).join('').toUpperCase(), type: post.type || 'trace', date: post.date || nowISO(), bookTitle: post.bookTitle || '', text: String(post.text || '').trim(), visibility: post.visibility || state.settings.defaultPostVisibility, photoData: post.photoData || null, photoPath: post.photoPath || null, photoUrl: post.photoUrl || null, isRemote: Boolean(post.isRemote), encouraged: Boolean(post.encouraged), encouragements: Number(post.encouragements) || 0, comments: Array.isArray(post.comments) ? post.comments : [] }; const existing = state.community.posts.findIndex(item => item.id === record.id || (record.remoteId && item.remoteId === record.remoteId)); if (existing >= 0) state.community.posts[existing] = { ...state.community.posts[existing], ...record }; else state.community.posts.unshift(record); commit({ queue: 'community.post' }); return clone(record); }
-  function mergeRemotePosts(posts) { if (!Array.isArray(posts)) return getCommunity(); posts.forEach(post => addPost({ ...post, isRemote:true })); return getCommunity(); }
+  function addPost(post) { const record = { id: post.id || uid('post'), remoteId: post.remoteId || null, authorId: post.authorId || 'me', authorName: post.authorName || state.profile.name, initials: post.initials || state.profile.name.split(/\s+/).map(item => item[0]).slice(0, 2).join('').toUpperCase(), type: post.type || 'trace', readingKind:post.readingKind || null, readingSourceId:post.readingSourceId || null, date: post.date || nowISO(), bookTitle: post.bookTitle || '', text: String(post.text || '').trim(), visibility: post.visibility || state.settings.defaultPostVisibility, photoData: post.photoData || null, photoPath: post.photoPath || null, photoUrl: post.photoUrl || null, isRemote: Boolean(post.isRemote), encouraged: Boolean(post.encouraged), encouragements: Number(post.encouragements) || 0, comments: Array.isArray(post.comments) ? post.comments : [] }; const existing = state.community.posts.findIndex(item => item.id === record.id || (record.remoteId && item.remoteId === record.remoteId)); if (existing >= 0) state.community.posts[existing] = { ...state.community.posts[existing], ...record }; else state.community.posts.unshift(record); commit({ queue: 'community.post' }); return clone(record); }
+  function mergeRemotePosts(posts) { if (!Array.isArray(posts)) return getCommunity(); state.community.posts=state.community.posts.filter(p=>!p.isRemote); posts.filter(p=>!state.settings.blockedUsers.includes(p.authorId)).forEach(post => addPost({ ...post, isRemote:true })); commit(); return getCommunity(); }
+  function removeCommunityPost(id) {state.community.posts=state.community.posts.filter(p=>p.id!==id && p.remoteId!==id);commit();}
   function mergeRemoteUsers(users) { if (!Array.isArray(users)) return getCommunity(); users.forEach(user => { const index = state.community.users.findIndex(item => item.id === user.id); const record = { ...user, isRemote:true }; if (index >= 0) state.community.users[index] = { ...state.community.users[index], ...record }; else state.community.users.push(record); }); commit(); return getCommunity(); }
   function replaceRemoteClubs(clubs) { state.community.clubs = Array.isArray(clubs) ? clubs.map(club => ({ ...club, isRemote:true })) : []; commit(); return getCommunity(); }
   function replaceRemoteSalons(salons) { state.community.salons = Array.isArray(salons) ? salons.map(salon => ({ ...salon, isRemote:true })) : []; commit(); return getCommunity(); }
@@ -728,7 +735,7 @@ BT.store = (() => {
       state.readerDNA.snapshots = [snapshot, ...(state.readerDNA.snapshots || []).filter(item => item.signature !== current.signature)].slice(0, 24);
       state.readerDNA.lastSignature = current.signature;
       state.meta.updatedAt = createdAt;
-      writeJSON(STATE_KEY, state);
+      persistState();
     }
     return clone({ ...current, history:state.readerDNA.snapshots || [] });
   }
@@ -787,7 +794,7 @@ BT.store = (() => {
     getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, reviewLexiconWord, deleteLexiconWord,
     getDraft, saveDraft, clearDraft,
     getGoal, saveGoal, getGoalProgress, updateGoal, markGoalCelebrated, isGoalCelebrated,
-    getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, addGroup, getGroups, updateGroup, toggleClub, addGroupMember, removeGroupMember, addGroupPost, addGroupComment, toggleGroupPostEncouragement, addGroupBook, updateGroupBook, updateSalon, addSalon, addSalonMessage,
+    getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, removeCommunityPost, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, addGroup, getGroups, updateGroup, toggleClub, addGroupMember, removeGroupMember, addGroupPost, addGroupComment, toggleGroupPostEncouragement, addGroupBook, updateGroupBook, updateSalon, addSalon, addSalonMessage,
     getNotifications, replaceNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getReaderDNA, getStats, getBadges, exportData, flushOutbox, clearAll, loadDemoData,
     statusLabel, situationLabel, localDateKey
   };

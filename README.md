@@ -14,6 +14,10 @@ https://credixbako-prog.github.io/boo-p-by-chatgpt/
 
 Le logo à trois livres en perspective est décliné dans la navigation, l’onboarding, le carnet, les exports, les aperçus de partage et les icônes installables. Les masters SVG, couleurs, usages et instructions de régénération sont réunis dans le [guide d’identité visuelle](BRAND_GUIDELINES.md).
 
+## Partages entre lecteurs — 11 septembre 2026
+
+Les amis acceptés peuvent consulter leurs bibliothèques. Carnets, mots, expressions, citations, pensées et étapes de lecture disposent d’un partage volontaire : message et contenu modifiables, aperçu, audience amis ou publique, mise à jour et retrait. Les originaux personnels et conversations IA restent privés. Le [guide des partages](READING_SHARING.md) détaille les accès et les vérifications.
+
 ## Développement local
 
 Servez le dossier avec un serveur HTTP local puis ouvrez `index.html`. Les pages servies directement avec le protocole `file://` ne permettent pas l’installation de la webapp ni l’enregistrement du service worker.

@@ -1,0 +1,16 @@
+.sharing-dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
+.sharing-dialog textarea { font-size: 16px; min-width: 0; }
+.sharing-dialog .dialog-head h2 { font-size: var(--boo-text-section, 20px); }
+.sharing-dialog .dialog-body { min-height: 0; overflow-y: auto; }
+.sharing-content { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.sharing-preview { padding: 14px; border: 1px solid var(--boo-line, #d4d8cd); border-radius: 12px; }
+.sharing-preview summary { cursor: pointer; }
+.reader-tabs { margin: 20px 0 12px; flex-wrap: wrap; }
+.reader-content { display: grid; gap: 12px; }
+.reader-book, .reader-publication { padding: 16px; overflow-wrap: anywhere; }
+.reader-book h3, .reader-publication h3 { font-size: var(--boo-text-body, 16px); margin: 0 0 6px; }
+.reader-book p { margin: 4px 0 10px; }
+.activity-publication-link { margin: 0 0 12px; }
+@media (max-width: 600px) {
+  .sharing-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; }
+}

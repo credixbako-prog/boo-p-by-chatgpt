@@ -141,7 +141,7 @@ BT.community = (() => {
     const api = client();
     let request = api
       .from('community_posts')
-      .select('id, author_id, author_name, author_initials, activity_type, book_title, body, visibility, photo_path, created_at, community_comments(id, post_id, author_id, author_name, parent_id, body, created_at)')
+      .select('id, author_id, author_name, author_initials, activity_type, book_title, body, visibility, photo_path, created_at, reading_kind, reading_source_id, community_comments(id, post_id, author_id, author_name, parent_id, body, created_at)')
       .order('created_at', { ascending:false })
       .limit(50);
     if (!user) request = request.eq('visibility', 'public');
@@ -168,6 +168,7 @@ BT.community = (() => {
         id:post.id, remoteId:post.id, authorId:user && post.author_id === user.id ? 'me' : post.author_id,
         authorName:post.author_name, initials:post.author_initials, type:post.activity_type,
         bookTitle:post.book_title, text:post.body, visibility:post.visibility,
+        readingKind:post.reading_kind, readingSourceId:post.reading_source_id,
         photoPath:post.photo_path, photoUrl:await signedPhotoUrl(post.photo_path), date:post.created_at,
         encouraged:encouragement.mine, encouragements:encouragement.count,
         comments:nestComments(post.community_comments || []), isRemote:true
@@ -611,7 +612,60 @@ BT.community = (() => {
     return data ? { ...data, avatarUrl:await signedAvatarUrl(data.avatar_path) } : null;
   }
 
+  function sharingUser() {
+    if (window.BT.auth?.isGuest?.() || !window.BT.auth?.isAuthenticated?.()) throw new Error('Connectez-vous pour publier ou consulter la bibliothèque d’un ami.');
+    return currentUser();
+  }
+  const PUBLICATION_FIELDS = 'id,author_id,author_name,book_title,body,visibility,reading_kind,reading_source_id,reading_content,created_at';
+  async function getReadingPublication(id) {
+    await window.BT.auth.ready();
+    const {data,error}=await client().from('community_posts').select(PUBLICATION_FIELDS).eq('id',id).not('reading_kind','is',null).maybeSingle();
+    if(error)throw friendly(error,'Cette publication ne peut pas être ouverte.');
+    return data;
+  }
+  async function getOwnReadingPublication(kind, sourceId) {
+    await window.BT.auth.ready();const user=sharingUser();
+    const {data,error}=await client().from('community_posts').select(PUBLICATION_FIELDS)
+      .eq('author_id',user.id).eq('reading_kind',kind).eq('reading_source_id',sourceId).maybeSingle();
+    if(error)throw friendly(error,'Le statut de publication ne peut pas être vérifié.');
+    return data;
+  }
+  async function publishReading({kind,sourceId,bookTitle,text,content,visibility,expectedUserId=sharingUser().id}) {
+    await window.BT.auth.ready();const user=sharingUser();
+    if(user.id!==expectedUserId)throw new Error('Votre compte a changé. Rouvrez la publication depuis votre compte.');
+    if(!['notebook','word','expression','citation','thought','debut','fin','session'].includes(kind) || !['friends','public'].includes(visibility)) throw new Error('Choisissez un contenu et une audience valides.');
+    const record={author_id:user.id,author_name:user.name,
+      author_initials:String(user.name || 'B').split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase(),
+      activity_type:['debut','fin'].includes(kind)?kind:'trace',book_title:String(bookTitle || '').slice(0,240),
+      body:String(text || '').trim(),visibility,reading_kind:kind,reading_source_id:sourceId,reading_content:String(content || '')};
+    if(!record.body || record.body.length>1200 || record.reading_content.length>100000) throw new Error('Vérifiez la longueur du texte avant de publier.');
+    const {data,error}=await client().from('community_posts').upsert(record,{onConflict:'author_id,reading_kind,reading_source_id'}).select(PUBLICATION_FIELDS).single();
+    if(error)throw friendly(error,'La publication n’a pas été enregistrée.');
+    return data;
+  }
+  async function withdrawReading(id,expectedUserId=sharingUser().id) {
+    await window.BT.auth.ready();const user=sharingUser();
+    if(user.id!==expectedUserId)throw new Error('Votre compte a changé. Rouvrez la publication depuis votre compte.');
+    const {error}=await client().from('community_posts').delete().eq('id',id).eq('author_id',user.id).not('reading_kind','is',null);
+    if(error)throw friendly(error,'La publication n’a pas pu être retirée.');
+  }
+  async function getReaderLibrary(userId,afterId='') {
+    await window.BT.auth.ready();sharingUser();
+    const {data,error}=await client().rpc('get_reader_library',{target_user:userId,after_id:afterId});
+    if(error)throw friendly(error,'La bibliothèque ne peut pas être chargée.');
+    return data;
+  }
+  async function listReaderPublications(userId,kind,offset=0) {
+    await window.BT.auth.ready();
+    let query=client().from('community_posts').select('id,author_name,book_title,body,visibility,reading_kind,created_at')
+      .eq('author_id',userId).in('visibility',['friends','public']).not('reading_kind','is',null)
+      .order('created_at',{ascending:false}).order('id').range(offset,offset+23);
+    query=kind==='notebook'?query.eq('reading_kind','notebook'):query.neq('reading_kind','notebook');
+    const {data,error}=await query;if(error)throw friendly(error,'Les publications ne peuvent pas être chargées.');return data || [];
+  }
+
   return {
+    getReadingPublication, getOwnReadingPublication, publishReading, withdrawReading, getReaderLibrary, listReaderPublications,
     listPosts, createPost, createComment, toggleEncouragement,
     createClub, listClubs, updateClub, toggleClubMembership, addClubMember, removeClubMember,
     getClubSpace, addClubBook, updateClubBook, createClubPost, createClubComment, toggleClubPostEncouragement,

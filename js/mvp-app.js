@@ -139,6 +139,7 @@
     bindGlobalEvents();
     renderNavigation();
     window.addEventListener('hashchange', () => { render(true); });
+    window.addEventListener('boop:sharing-changed', async () => { await refreshCommunity({quiet:true}); render(); });
     window.addEventListener('online', () => { updateNetworkState(); bootstrapUserDataSync({ quiet:true }); });
     window.addEventListener('offline', updateNetworkState);
     updateNetworkState();
@@ -151,7 +152,7 @@
     }
     ui.timer = window.setInterval(() => { tickSessionClock(); updateSyncIndicator(); }, 1000);
     ui.heartbeat = window.setInterval(() => store.heartbeatActiveSession(), 10000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); refreshNotifications({ quiet:true }); bootstrapUserDataSync({ quiet:true, refresh:true }).finally(() => render()); } });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); refreshNotifications({ quiet:true }); refreshCommunity({quiet:true}); bootstrapUserDataSync({ quiet:true, refresh:true }).finally(() => render()); } });
     window.addEventListener('pagehide', () => { ui.notificationUnsubscribe?.(); ui.syncUnsubscribe?.(); clearTimeout(ui.syncTimer); }, { once:true });
   }
 
@@ -770,7 +771,7 @@
 
   function renderCommunity() {
     const tabs = [
-      ['public','Public'], ['clubs','Mes clubs'], ['salons','Salons'], ['friends','Amis']
+      ['public','Fil'], ['clubs','Mes clubs'], ['salons','Salons'], ['friends','Amis']
     ];
     const bodies = { public: renderPublicFeed, clubs: renderClubs, salons: renderSalons, friends: renderFriends };
     return `<section class="page-head"><div><p class="eyebrow">Des échanges sans classement</p><h1>Communauté</h1><p>Découvrez des lectures partagées et choisissez toujours ce qui devient visible.</p></div><span class="simulated-badge">Exemples fictifs · contributions Supabase</span></section>
@@ -780,7 +781,7 @@
 
   function renderPublicFeed() {
     const posts = store.getCommunity().posts.slice().sort((a,b) => new Date(b.date) - new Date(a.date));
-    return `<div class="section-heading"><div><h2>Fil public</h2><p class="small muted">10 exemples fictifs, avec ou sans photo, puis les Traces réellement enregistrées. Rien n’est publié automatiquement.</p></div><button class="button button--primary button--small" type="button" data-action="create-post">Laisser une Trace</button></div>
+    return `<div class="section-heading"><div><h2>Fil des lecteurs</h2><p class="small muted">Publications de la communauté et de vos amis, selon l’audience choisie. Les exemples sont fictifs.</p></div><button class="button button--primary button--small" type="button" data-action="create-post">Laisser une Trace</button></div>
       <div class="public-feed" tabindex="0" aria-label="Fil de Traces, faire défiler pour voir toutes les publications">${posts.map(post => renderPost(post)).join('')}</div>`;
   }
 
@@ -792,7 +793,7 @@
         ${post.authorId !== 'me' ? `<details class="safety-menu"><summary aria-label="Modérer cette publication">•••</summary><div class="safety-menu__panel"><button type="button" data-action="report-post" data-id="${attr(post.id)}">Signaler la publication</button><button type="button" data-action="block-user" data-id="${attr(post.authorId)}">Bloquer ${esc(post.authorName)}</button></div></details>` : `<span class="privacy-badge">${VISIBILITY_LABELS[post.visibility] || post.visibility}</span>`}
       </header>
       ${renderPostPhoto(post)}
-      ${post.bookTitle ? `<p class="eyebrow">${esc(post.bookTitle)}</p>` : ''}<p class="activity-text">${esc(post.text)}</p>
+      ${post.bookTitle ? `<p class="eyebrow">${esc(post.bookTitle)}</p>` : ''}<p class="activity-text">${esc(post.text)}</p>${post.readingKind ? `<button class="text-link activity-publication-link" type="button" data-action="view-publication" data-id="${attr(post.id)}">${post.readingKind === 'notebook' ? 'Lire le carnet' : 'Lire la publication'}</button>` : ''}
       <div class="activity-actions">
         <button class="button button--ghost button--small" type="button" data-action="encourage" data-id="${attr(post.id)}" aria-pressed="${post.encouraged}">Encourager · ${post.encouragements}</button>
         <button class="button button--ghost button--small" type="button" data-action="comment-post" data-id="${attr(post.id)}" aria-expanded="${open}">Trace · ${comments.length}</button>
@@ -809,6 +810,7 @@
   }
 
   function activityLabel(post) {
+    if (post.readingKind) return ({notebook:'a publié un carnet',word:'a découvert un mot',expression:'a partagé une expression',citation:'a partagé une citation',thought:'a partagé une pensée',session:'a partagé un moment de lecture',debut:'a commencé une lecture',fin:'a terminé une lecture'})[post.readingKind];
     return ({ fin: 'a terminé une lecture', debut: 'a commencé une lecture', trace: 'a partagé une Trace', goal: 'a atteint un objectif' })[post.type] || 'a partagé une lecture';
   }
 
@@ -905,7 +907,7 @@
         ? 'Profil privé · accès accepté'
         : 'Profil privé · verrouillé avant acceptation';
     return `<label class="search-field friend-search" for="friend-search"><span aria-hidden="true">⌕</span><span class="sr-only">Rechercher un lecteur ou un pseudonyme</span><input id="friend-search" data-input="friend-search" type="search" value="${attr(ui.friendQuery)}" placeholder="Rechercher un lecteur…"></label>
-      <p class="small muted">Recherche réelle parmi les comptes BOO-P. Les profils privés restent limités à leur aperçu tant que la demande n’est pas acceptée.</p>
+      <p class="small muted">En devenant amis, vous partagez les titres, auteurs et statuts de votre bibliothèque. Vos carnets et souvenirs restent privés jusqu’à leur publication.</p>
       ${ui.friendSearchBusy ? '<div class="view-loading" role="status"><span class="loader" aria-hidden="true"></span> Recherche des lecteurs…</div>' : `<div class="grid-2">${users.length ? users.map(user => `<article class="card friend-card">${avatarBubble(user)}<div class="card-content"><h3>${esc(user.name)}</h3><p class="micro muted">${esc(user.handle || '')}</p><p class="small muted">${accessLabel(user)}</p><div class="card-actions">${friendAction(user)}<button class="button button--ghost button--small" type="button" data-action="view-user" data-id="${attr(user.id)}">${user.profileVisibility === 'private' && user.friendState !== 'friend' ? 'Voir l’aperçu' : 'Voir le profil'}</button></div></div><details class="safety-menu"><summary aria-label="Options de sécurité">•••</summary><div class="safety-menu__panel"><button type="button" data-action="report-user" data-id="${attr(user.id)}">Signaler</button><button type="button" data-action="block-user" data-id="${attr(user.id)}">Bloquer</button></div></details></article>`).join('') : `<div class="empty-state"><h3>Aucun lecteur trouvé</h3><p>${ui.friendQuery ? 'Essayez un prénom ou un pseudonyme plus court.' : 'Aucun autre compte BOO-P n’est encore visible.'}</p></div>`}</div>`}`;
   }
   function friendAction(user) {
@@ -1124,7 +1126,7 @@
   function renderNotebook() {
     const selectedBook = ui.params.get('book') || ui.notebookBook;
     const books = store.getBooks().filter(b => b.libraryState === 'library' && (!selectedBook || b.id === selectedBook) && b.reflection && (b.reflection.messages?.length || b.reflection.notebook || b.reflection.draft || b.reflection.edit || b.reflection.sections?.retained || b.reflection.sections?.questions || b.reflection.sectionDraft));
-    return `<section class="notebook-intro"><p class="eyebrow">Chaque lecture laisse une trace</p><h2>Vos lectures, vos réflexions</h2><div data-reflection-host></div></section>${books.length ? `<div class="reflection-book-grid">${books.map(b => `<article class="card reflection-book-card"><p class="eyebrow">${b.reflection.edit !== undefined || b.reflection.sectionDraft ? 'Brouillon personnel' : b.reflection.notebook || b.reflection.sections ? 'Carnet de réflexion' : 'Conversation en cours'}</p><h2>${esc(b.title)}</h2><p class="muted">${esc((b.reflection.notebook || b.reflection.edit || b.reflection.sections?.retained || b.reflection.draft || 'Reprenez le fil de votre échange.').slice(0,160))}</p><div class="button-row"><button type="button" class="text-link" data-open-reflection="${attr(b.id)}" data-reflection-tab="notebook">Ouvrir le carnet</button><button type="button" class="text-link" data-open-reflection="${attr(b.id)}">Poursuivre l’échange</button></div></article>`).join('')}</div>` : ''}${renderNotebookEntries(true)}`;
+    return `<section class="notebook-intro"><p class="eyebrow">Chaque lecture laisse une trace</p><h2>Vos lectures, vos réflexions</h2><div data-reflection-host></div></section>${books.length ? `<div class="reflection-book-grid">${books.map(b => `<article class="card reflection-book-card"><p class="eyebrow">${b.reflection.edit !== undefined || b.reflection.sectionDraft ? 'Brouillon personnel' : b.reflection.notebook || b.reflection.sections ? 'Carnet de réflexion' : 'Conversation en cours'}</p><h2>${esc(b.title)}</h2><p class="muted">${esc((b.reflection.notebook || b.reflection.edit || b.reflection.sections?.retained || b.reflection.draft || 'Reprenez le fil de votre échange.').slice(0,160))}</p><div class="button-row"><button type="button" class="text-link" data-open-reflection="${attr(b.id)}" data-reflection-tab="notebook">Ouvrir le carnet</button><button type="button" class="text-link" data-open-reflection="${attr(b.id)}">Poursuivre l’échange</button><button type="button" class="text-link" data-action="share-reading" data-kind="notebook" data-id="${attr(b.id)}">Partager le carnet</button></div></article>`).join('')}</div>` : ''}${renderNotebookEntries(true)}`;
   }
   function renderNotebookEntries(notebook) {
     const labels = notebook ? { all:'Tout', thought:'Pensées', citation:'Citations' } : { all:'Tout', word:'Mots', expression:'Expressions' };
@@ -1132,7 +1134,7 @@
     const selectedBook = ui.params.get('book') || ui.notebookBook;
     const thoughts = store.getTraces().map(trace => ({...trace, kind:'thought', word:trace.text, definition:'', bookTitle:store.getBookById(trace.bookId)?.title || '', updatedAt:trace.updatedAt || trace.createdAt }));
     const entries = [...thoughts,...store.getLexicon()].filter(item => (notebook ? ['thought','citation'].includes(item.kind) : ['word','expression'].includes(item.kind)) && (!selectedBook || item.bookId === selectedBook) && (kind === 'all' || item.kind === kind) && normalize(`${item.word} ${item.definition} ${item.bookTitle}`).includes(normalize(ui.lexiconQuery))).sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-    return `<section class="lexicon-view"><div class="library-search-row"><label class="search-field" for="lexicon-search"><span aria-hidden="true">⌕</span><input id="lexicon-search" data-input="lexicon-search" type="search" value="${attr(ui.lexiconQuery)}" placeholder="${notebook ? 'Chercher une pensée ou une citation…' : 'Chercher un mot ou une expression…'}"></label><button class="button button--primary" type="button" data-action="${notebook ? 'capture-memory' : 'add-lexicon'}" data-book-id="${attr(selectedBook)}">${notebook ? '+ Garder' : '+ Mot'}</button></div><details class="notebook-filters"><summary>Filtres${kind !== 'all' || selectedBook ? ' · actifs' : ''}</summary><div class="filter-chips" role="group" aria-label="Type de souvenir">${Object.entries(labels).map(([kind,label]) => `<button type="button" data-action="notebook-filter" data-kind="${kind}" aria-pressed="${(Object.hasOwn(labels,ui.lexiconKind) ? ui.lexiconKind : 'all') === kind}">${label}</button>`).join('')}</div><label class="field notebook-book-filter">Livre<select data-change="notebook-book"><option value="">Tous mes livres</option>${store.getBooks().map(book => `<option value="${attr(book.id)}" ${selectedBook === book.id ? 'selected' : ''}>${esc(book.title)}</option>`).join('')}</select></label></details><p class="small muted" role="status">${entries.length} ${notebook ? 'souvenir' : 'entrée'}${entries.length > 1 ? 's' : ''}</p>${entries.length ? `<div class="lexicon-grid">${entries.map(item => `<article class="card lexicon-card"><span class="lexicon-kind">${labels[item.kind]}</span><${item.kind === 'thought' ? 'p' : 'h3'} class="notebook-text">${esc(item.word)}</${item.kind === 'thought' ? 'p' : 'h3'}>${item.definition && item.definition !== item.word ? `<p>${esc(item.definition)}</p>` : ''}${item.note ? `<p class="small muted">${esc(item.note)}</p>` : ''}<footer>${item.bookId && store.getBookById(item.bookId) ? `<a class="text-link" href="#book?id=${encodeURIComponent(item.bookId)}">${esc(item.bookTitle || store.getBookById(item.bookId).title)}</a>` : 'Sans livre associé'}${item.page ? ` · ${store.getBookById(item.bookId)?.mediaType === 'audio' ? 'min.' : 'p.'} ${item.page}` : ''} · ${formatDate(item.updatedAt)}${item.kind === 'thought' ? ` · ${VISIBILITY_LABELS[item.privacy] || 'Privé'}` : ''}</footer>${item.kind !== 'thought' ? `<div class="card-actions"><button class="text-link" type="button" data-action="edit-lexicon" data-id="${attr(item.id)}">Modifier</button><button class="text-link" type="button" data-action="delete-lexicon" data-id="${attr(item.id)}">Supprimer</button></div>` : ''}</article>`).join('')}</div>` : `<div class="empty-state"><h2>${notebook ? 'Votre carnet attend un souvenir.' : 'Votre lexique attend un premier mot.'}</h2><p>${notebook ? 'Gardez une pensée ou une citation.' : 'Conservez un mot ou une expression à retrouver.'}</p></div>`}</section>`;
+    return `<section class="lexicon-view"><div class="library-search-row"><label class="search-field" for="lexicon-search"><span aria-hidden="true">⌕</span><input id="lexicon-search" data-input="lexicon-search" type="search" value="${attr(ui.lexiconQuery)}" placeholder="${notebook ? 'Chercher une pensée ou une citation…' : 'Chercher un mot ou une expression…'}"></label><button class="button button--primary" type="button" data-action="${notebook ? 'capture-memory' : 'add-lexicon'}" data-book-id="${attr(selectedBook)}">${notebook ? '+ Garder' : '+ Mot'}</button></div><details class="notebook-filters"><summary>Filtres${kind !== 'all' || selectedBook ? ' · actifs' : ''}</summary><div class="filter-chips" role="group" aria-label="Type de souvenir">${Object.entries(labels).map(([kind,label]) => `<button type="button" data-action="notebook-filter" data-kind="${kind}" aria-pressed="${(Object.hasOwn(labels,ui.lexiconKind) ? ui.lexiconKind : 'all') === kind}">${label}</button>`).join('')}</div><label class="field notebook-book-filter">Livre<select data-change="notebook-book"><option value="">Tous mes livres</option>${store.getBooks().map(book => `<option value="${attr(book.id)}" ${selectedBook === book.id ? 'selected' : ''}>${esc(book.title)}</option>`).join('')}</select></label></details><p class="small muted" role="status">${entries.length} ${notebook ? 'souvenir' : 'entrée'}${entries.length > 1 ? 's' : ''}</p>${entries.length ? `<div class="lexicon-grid">${entries.map(item => `<article class="card lexicon-card"><span class="lexicon-kind">${labels[item.kind]}</span><${item.kind === 'thought' ? 'p' : 'h3'} class="notebook-text">${esc(item.word)}</${item.kind === 'thought' ? 'p' : 'h3'}>${item.definition && item.definition !== item.word ? `<p>${esc(item.definition)}</p>` : ''}${item.note ? `<p class="small muted">${esc(item.note)}</p>` : ''}<footer>${item.bookId && store.getBookById(item.bookId) ? `<a class="text-link" href="#book?id=${encodeURIComponent(item.bookId)}">${esc(item.bookTitle || store.getBookById(item.bookId).title)}</a>` : 'Sans livre associé'}${item.page ? ` · ${store.getBookById(item.bookId)?.mediaType === 'audio' ? 'min.' : 'p.'} ${item.page}` : ''} · ${formatDate(item.updatedAt)}${item.kind === 'thought' ? ` · ${VISIBILITY_LABELS[item.privacy] || 'Privé'}` : ''}</footer>${item.kind !== 'thought' ? `<div class="card-actions"><button class="text-link" type="button" data-action="edit-lexicon" data-id="${attr(item.id)}">Modifier</button><button class="text-link" type="button" data-action="delete-lexicon" data-id="${attr(item.id)}">Supprimer</button></div>` : ''}<button class="text-link" type="button" data-action="share-reading" data-kind="${attr(item.kind)}" data-id="${attr(item.id)}">Partager</button></article>`).join('')}</div>` : `<div class="empty-state"><h2>${notebook ? 'Votre carnet attend un souvenir.' : 'Votre lexique attend un premier mot.'}</h2><p>${notebook ? 'Gardez une pensée ou une citation.' : 'Conservez un mot ou une expression à retrouver.'}</p></div>`}</section>`;
   }
 
   function renderGoals() {
@@ -1194,7 +1196,7 @@
     const id = ui.params.get('id'), book = store.getBookById(id);
     if (!book) return `<div class="empty-state"><h1>Livre introuvable</h1><p>Il a peut-être été retiré de cette bibliothèque locale.</p><a class="button button--primary" href="#path?tab=library">Retour à la bibliothèque</a></div>`;
     const sessions = store.getSessionsForBook(id), traces = store.getTraces(id), lexicon = store.getLexicon().filter(item => item.bookId === id), openSession = store.getActiveSessionForBook(id), progress = bookProgress(book), wishlist = book.libraryState === 'wishlist', audio = book.mediaType === 'audio';
-    return `<a class="text-link" href="#path?tab=${wishlist ? 'library' : 'library'}">← Ma bibliothèque</a><section class="book-detail-head section-block">${cover(book,'large')}<div class="book-detail-copy"><div class="button-row"><span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</span>${!wishlist ? `<span class="privacy-badge">${SITUATION_LABELS[book.situation]}</span>` : ''}<span class="media-chip">${MEDIA_LABELS[book.mediaType] || 'Livre'}</span>${book.historicalBeforeJoin ? '<span class="status-chip">Lu avant mon inscription</span>' : ''}</div><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p><p>${esc(book.description || 'Aucun résumé pour cette édition.')}</p>${!wishlist ? `<div class="progress-track" aria-label="Progression ${pct(progress.value,progress.total)} %"><span style="--width:${pct(progress.value,progress.total)}%"></span></div><p class="small muted">${progress.label}${book.rating ? ` · ${ratingStars(book.rating)}` : ''}</p>` : '<p class="small muted">Envie de lecture conservée dans votre wishlist.</p>'}<div class="button-row">${wishlist ? `<button class="button button--primary" type="button" data-action="move-to-library" data-id="${attr(id)}">Ajouter à ma bibliothèque</button>` : `<button class="button button--primary" type="button" data-action="book-session" data-id="${attr(id)}">${openSession ? 'Reprendre la session' : 'Démarrer une session'}</button>`}<button class="button button--ghost" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button><a class="button button--secondary" href="#path?tab=notebook&book=${encodeURIComponent(id)}">Ouvrir le carnet</a><button class="text-link" type="button" data-action="capture-memory" data-book-id="${attr(id)}">Garder quelque chose</button></div></div></section>
+    return `<a class="text-link" href="#path?tab=${wishlist ? 'library' : 'library'}">← Ma bibliothèque</a><section class="book-detail-head section-block">${cover(book,'large')}<div class="book-detail-copy"><div class="button-row"><span class="status-chip ${book.status === 'en-cours' ? 'status-chip--active' : ''}">${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</span>${!wishlist ? `<span class="privacy-badge">${SITUATION_LABELS[book.situation]}</span>` : ''}<span class="media-chip">${MEDIA_LABELS[book.mediaType] || 'Livre'}</span>${book.historicalBeforeJoin ? '<span class="status-chip">Lu avant mon inscription</span>' : ''}</div><h1>${esc(book.title)}</h1><p class="muted">${esc(book.authors.join(', '))}</p><p>${esc(book.description || 'Aucun résumé pour cette édition.')}</p>${!wishlist ? `<div class="progress-track" aria-label="Progression ${pct(progress.value,progress.total)} %"><span style="--width:${pct(progress.value,progress.total)}%"></span></div><p class="small muted">${progress.label}${book.rating ? ` · ${ratingStars(book.rating)}` : ''}</p>` : '<p class="small muted">Envie de lecture conservée dans votre wishlist.</p>'}<div class="button-row">${wishlist ? `<button class="button button--primary" type="button" data-action="move-to-library" data-id="${attr(id)}">Ajouter à ma bibliothèque</button>` : `<button class="button button--primary" type="button" data-action="book-session" data-id="${attr(id)}">${openSession ? 'Reprendre la session' : 'Démarrer une session'}</button>`}<button class="button button--ghost" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button><a class="button button--secondary" href="#path?tab=notebook&book=${encodeURIComponent(id)}">Ouvrir le carnet</a><button class="text-link" type="button" data-action="capture-memory" data-book-id="${attr(id)}">Garder quelque chose</button><button class="text-link" type="button" data-action="share-reading" data-kind="book" data-id="${attr(id)}">Partager ma lecture</button></div></div></section>
       <div class="grid-2">
         <section class="card card-pad"><div class="section-heading"><h2>Édition et progression</h2><button class="text-link" type="button" data-action="edit-book" data-id="${attr(id)}">Modifier</button></div><dl class="metadata-list"><div><dt>Rayon</dt><dd>${esc(book.genre || 'À classer')}</dd></div><div><dt>Éditeur</dt><dd>${esc(book.publisher || 'Non renseigné')}</dd></div><div><dt>Édition</dt><dd>${esc(book.edition || 'Non renseignée')}</dd></div>${audio ? `<div><dt>Support</dt><dd>Livre audio</dd></div><div><dt>Durée</dt><dd>${book.durationMinutes || 'Non renseignée'} min</dd></div><div><dt>Narration</dt><dd>${esc(book.narrator || 'Non renseignée')}</dd></div><div><dt>Plateforme</dt><dd>${esc(book.audioPlatform || 'Non renseignée')}</dd></div>` : `<div><dt>Format</dt><dd>${esc(book.format || (book.mediaType === 'ebook' ? 'Livre numérique' : 'Non renseigné'))}</dd></div><div><dt>Pages</dt><dd>${book.totalPages || 'Non renseigné'}</dd></div>`}<div><dt>Statut</dt><dd>${wishlist ? 'Wishlist' : STATUS_LABELS[book.status]}</dd></div>${!wishlist ? `<div><dt>Début de lecture</dt><dd>${book.startedAt ? formatDate(book.startedAt) : 'Non renseigné'}</dd></div><div><dt>Fin de lecture</dt><dd>${book.completedAt ? formatDate(book.completedAt) : 'Non renseignée'}</dd></div><div><dt>Situation</dt><dd>${SITUATION_LABELS[book.situation]}</dd></div>` : ''}</dl></section>
         <section class="card card-pad"><div class="section-heading"><h2>Sessions</h2><button class="text-link" type="button" data-action="manual-session" data-book-id="${attr(id)}">Ajouter une session passée</button></div>${sessions.length ? `<div class="history-list">${sessions.map(session => `<div class="history-item"><span class="history-item__icon">◷</span><div class="history-item__content"><strong>${Math.round(session.durationSeconds/60)} min · ${audio ? 'min.' : 'p.'} ${session.startPage} à ${session.endPage}</strong><span class="small muted">${formatDate(session.startedAt)}${session.manual ? ' · ajoutée manuellement' : ''}</span></div><button class="text-link small" type="button" data-action="edit-session" data-id="${attr(session.id)}">Modifier</button></div>`).join('')}</div>` : `<p class="small muted">Aucune session enregistrée.</p>`}</section>
@@ -1610,7 +1612,7 @@
     const book = store.getBookById(session.bookId), audio = book.mediaType === 'audio', total = audio ? book.durationMinutes : book.totalPages;
     const citations = Array.isArray(session.citations) ? session.citations : [];
     render();
-    openDialog({ title: 'Terminer ma lecture', eyebrow: 'Chronomètre en pause', body: `<form class="form-grid" data-form="finish-session"><p class="muted">Où vous êtes-vous arrêté dans <strong>${esc(book.title)}</strong> ?</p>${renderSessionPositionSlider(book, session.endPage, { id:'finish-session-page', name:'endPage' })}<label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(total) && total ? 'checked' : ''}> J’ai terminé ce livre</label><details class="optional-fields" ${session.traceDraft ? 'open' : ''}><summary>Garder une pensée ou noter le livre · facultatif</summary><div class="form-grid"><label class="field">Une pensée pour mon carnet<textarea name="traceText" maxlength="1200">${esc(session.traceDraft || '')}</textarea></label><fieldset class="book-rating-field"><legend>Note du livre · facultative</legend>${ratingPicker(book.rating, 'finish-rating')}<input type="hidden" name="rating" id="finish-rating" value="${book.rating || ''}"><p class="small muted" id="finish-rating-description">${book.rating ? `${book.rating} étoiles sur 5.` : 'Choisissez une note de 1 à 5 étoiles.'}</p></fieldset><label class="checkbox-row"><input type="checkbox" name="share"> Partager cette pensée dans le fil public</label><p class="small muted">Sans partage, votre pensée reste privée.</p></div></details>${citations.length ? `<p class="small muted">${citations.length} citation${citations.length > 1 ? 's' : ''} conservée${citations.length > 1 ? 's' : ''} dans votre carnet.</p>` : ''}<button class="button button--primary" type="submit">Enregistrer ma lecture</button><button class="text-link" type="button" data-action="resume-from-finish">Revenir à ma lecture</button></form>` });
+    openDialog({ title: 'Terminer ma lecture', eyebrow: 'Chronomètre en pause', body: `<form class="form-grid" data-form="finish-session"><p class="muted">Où vous êtes-vous arrêté dans <strong>${esc(book.title)}</strong> ?</p>${renderSessionPositionSlider(book, session.endPage, { id:'finish-session-page', name:'endPage' })}<label class="checkbox-row"><input type="checkbox" name="markRead" ${Number(session.endPage) >= Number(total) && total ? 'checked' : ''}> J’ai terminé ce livre</label><details class="optional-fields" ${session.traceDraft ? 'open' : ''}><summary>Garder une pensée ou noter le livre · facultatif</summary><div class="form-grid"><label class="field">Une pensée pour mon carnet<textarea name="traceText" maxlength="1200">${esc(session.traceDraft || '')}</textarea></label><fieldset class="book-rating-field"><legend>Note du livre · facultative</legend>${ratingPicker(book.rating, 'finish-rating')}<input type="hidden" name="rating" id="finish-rating" value="${book.rating || ''}"><p class="small muted" id="finish-rating-description">${book.rating ? `${book.rating} étoiles sur 5.` : 'Choisissez une note de 1 à 5 étoiles.'}</p></fieldset><label class="checkbox-row"><input type="checkbox" name="share"> Préparer une publication après ma lecture</label><p class="small muted">Un aperçu modifiable vous permettra de choisir l’audience et de confirmer. Votre pensée reste privée tant que vous ne publiez pas.</p></div></details>${citations.length ? `<p class="small muted">${citations.length} citation${citations.length > 1 ? 's' : ''} conservée${citations.length > 1 ? 's' : ''} dans votre carnet.</p>` : ''}<button class="button button--primary" type="submit">Enregistrer ma lecture</button><button class="text-link" type="button" data-action="resume-from-finish">Revenir à ma lecture</button></form>` });
   }
 
   async function handleClick(event) {
@@ -1710,6 +1712,8 @@
       case 'edit-session': openManualSessionDialog(null, id); break;
       case 'delete-session': if (confirm('Supprimer définitivement cette session locale ?')) { store.deleteSession(id); closeDialog(); showToast('Session supprimée'); render(); } break;
       case 'add-lexicon': openLexiconDialog(null, trigger.dataset.bookId || null); break;
+      case 'share-reading': BT.sharing.open(trigger.dataset.kind,id); break;
+      case 'view-publication': BT.sharing.view(id); break;
       case 'edit-lexicon': openLexiconDialog(store.getLexicon().find(item => item.id === id)); break;
       case 'delete-lexicon': if (confirm('Supprimer cette entrée du lexique ?')) { store.deleteLexiconWord(id); showToast('Entrée supprimée'); render(); } break;
       case 'dictionary-lookup': await lookupDictionary(trigger); break;
@@ -1942,11 +1946,15 @@
 
   function friendToast(mode) { return ({ send:'Demande envoyée localement', cancel:'Demande annulée', accept:'Demande acceptée', refuse:'Demande refusée', remove:'Ami retiré' })[mode] || 'Relation mise à jour'; }
 
+  let communityRequest=0;
   async function refreshCommunity({ quiet = false } = {}) {
     if (!window.BT.community) return;
+    const request=++communityRequest, account=window.BT.auth?.getCurrentUser?.()?.id, guest=isGuestMode();
+    const current=()=>request===communityRequest && account===window.BT.auth?.getCurrentUser?.()?.id && guest===isGuestMode();
     try {
       if (isGuestMode()) {
         const posts = await window.BT.community.listPosts();
+        if(!current())return;
         store.mergeRemotePosts(posts);
         ui.communityLoaded = true;
         if (ui.route === 'community') render();
@@ -1957,12 +1965,16 @@
         window.BT.community.listClubs()
       ]);
       const salons = await window.BT.community.listSalons(clubs);
+      if(!current())return;
       store.mergeRemotePosts(posts);
       store.replaceRemoteClubs(clubs);
       store.replaceRemoteSalons(salons);
       ui.communityLoaded = true;
       if (ui.route === 'community') render();
     } catch (error) {
+      if(!current())return;
+      store.mergeRemotePosts([]);
+      if(ui.route==='community')render();
       if (!quiet) showToast(error.message || 'Le fil partagé ne peut pas être actualisé');
     }
   }
@@ -2036,9 +2048,13 @@
     if (!user) return;
     if (isGuestMode() || !user.isRemote) { store.updateFriend(userId, mode); showToast(`${friendToast(mode)} · conservé sur cet appareil`); render(); return; }
     try {
+      const reopen=Boolean(document.querySelector('#app-dialog[open] [data-reader-sharing]'));
       await window.BT.community.updateFriend(userId, mode);
+      if(reopen)closeDialog();
       store.updateFriend(userId, mode);
       await refreshReaders(ui.friendQuery, { quiet:true });
+      await refreshCommunity({quiet:true});
+      if(reopen)openUserDialog(userId);
       showToast(friendToast(mode).replace(' localement',''));
     } catch (error) { showToast(error.message || 'La demande d’amitié ne peut pas être mise à jour'); }
   }
@@ -2493,30 +2509,22 @@
     const traceText = String(data.get('traceText') || '').trim(), share = data.get('share') === 'on';
     const markRead = data.get('markRead') === 'on';
     const total = book.mediaType === 'audio' ? book.durationMinutes : book.totalPages;
-    const saved = store.finishActiveSession({ endPage: clamp(data.get('endPage'), 0, total || 99999), rating: data.get('rating'), traceText, markRead, share });
+    const saved = store.finishActiveSession({ endPage: clamp(data.get('endPage'), 0, total || 99999), rating: data.get('rating'), traceText, markRead, share:false });
     if (!saved) { delete form.dataset.saving; form.querySelector('[type="submit"]').disabled = false; return; }
     closeDialog(); location.hash = '#home';
-    if (markRead) celebrateFinishedBook(book);
-    else showToast('Session enregistrée, bilan privé');
-    if (share && traceText) {
-      try {
-        const post = isGuestMode()
-          ? { type:'trace', bookTitle:book.title, text:traceText, visibility:'public' }
-          : await window.BT.community.createPost({ type:'trace', bookTitle:book.title, text:traceText, visibility:'public' });
-        if (post) { store.addPost(post); showToast('Session enregistrée et bilan partagé explicitement'); }
-      }
-      catch (error) { showToast(error.message || 'Session enregistrée, mais partage non envoyé'); }
-    }
+    const prepare=()=>{if(share)BT.sharing.open(markRead?'fin':'session',markRead?book.id:saved.id,traceText);};
+    if (markRead) celebrateFinishedBook(book,prepare);
+    else {showToast('Session enregistrée, bilan privé');prepare();}
   }
 
-  function celebrateFinishedBook(book) {
+  function celebrateFinishedBook(book,afterClose=()=>{}) {
     const dialog = document.createElement('dialog');
     dialog.className = 'app-dialog completion-dialog';
     dialog.setAttribute('aria-labelledby', 'completion-title');
     dialog.setAttribute('aria-describedby', 'completion-message');
     dialog.innerHTML = `<div class="completion-art" aria-hidden="true"><div class="completion-halo"></div><svg class="completion-book" viewBox="0 0 120 100" fill="none"><g class="completion-opening-pages"><path class="completion-page completion-page--left" d="M60 25C44 12 23 12 10 18v62c18-6 34-3 50 9Z"/><path class="completion-page completion-page--right" d="M60 25c16-13 37-13 50-7v62c-18-6-34-3-50 9Z"/><path d="M60 25v64M22 32c9-2 18 0 26 4m-26 8c9-2 18 0 26 4m-26 8c9-2 18 0 26 4m24-24c8-4 17-6 26-4m-26 16c8-4 17-6 26-4m-26 16c8-4 17-6 26-4" stroke="#d4a866" stroke-width="2" stroke-linecap="round"/></g><g class="completion-closed-cover"><rect x="29" y="9" width="64" height="82" rx="5" fill="#142438" stroke="#d4a866" stroke-width="2"/><path d="M38 10v80M44 81h42" stroke="#d4a866" stroke-width="2"/><path d="m65 30 4 11 11 4-11 4-4 11-4-11-11-4 11-4Z" fill="#d4a866"/></g></svg>${Array.from({length:12},(_,i)=>`<span class="completion-spark" style="--angle:${i*30}deg;--delay:${(i%3)*80}ms">✦</span>`).join('')}</div><p class="eyebrow">Une nouvelle page de votre parcours</p><h2 id="completion-title">Bravo, livre terminé !</h2><p class="completion-book-title">${esc(book.title)}</p><p id="completion-message">Vous avez pris le temps d’aller au bout de cette lecture. Une histoire de plus qui vous accompagne.</p><button class="button button--primary" type="button" autofocus>Savourer ce moment</button>`;
     dialog.querySelector('button').onclick = () => dialog.close();
-    dialog.addEventListener('close', () => { dialog.remove(); document.querySelector('.home-heading [data-action="add-book"]')?.focus({preventScroll:true}); }, {once:true});
+    dialog.addEventListener('close', () => { dialog.remove(); document.querySelector('.home-heading [data-action="add-book"]')?.focus({preventScroll:true}); afterClose(); }, {once:true});
     document.body.append(dialog); dialog.showModal();
   }
 
@@ -2772,7 +2780,7 @@
     const settings = store.getSettings();
     const storageNote = isGuestMode()
       ? 'Mode invité : la Trace et sa photo restent uniquement sur cet appareil et ne sont jamais publiées dans Supabase.'
-      : 'La Trace et sa photo sont enregistrées dans Supabase. Tant que les vrais liens d’amitié et de club ne sont pas activés, les visibilités Amis et Club restent accessibles uniquement à vous.';
+      : 'La Trace et sa photo sont enregistrées dans Supabase. Amis uniquement réserve la lecture aux amitiés acceptées. Pour publier dans un club, utilisez son espace dédié ; ici, Club reste privé.';
     openDialog({ title:'Laisser une Trace', eyebrow:isGuestMode() ? 'Essai local' : 'Enregistrement sécurisé', body:`<form class="form-grid" data-form="post"><label class="field">Type d’activité<select name="type"><option value="trace">Trace ou bilan</option><option value="debut">Début de lecture</option><option value="fin">Fin de lecture</option><option value="goal">Objectif atteint</option></select></label><label class="field">Livre éventuel<select name="bookTitle"><option value="">Sans livre</option>${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Texte<textarea name="text" required maxlength="1200" placeholder="Ce que cette lecture laisse en vous…"></textarea></label><label class="field">Photo facultative<input type="file" name="photo" data-change="post-photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"><span class="field-help" id="post-photo-help">Facultatif · redimensionnement et compression automatiques.</span><img class="post-photo-preview" id="post-photo-preview" alt="Aperçu de la photo choisie" hidden></label><label class="field">Visibilité<select name="visibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="club">Club</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><p class="small muted">${storageNote}</p><button class="button button--primary" type="submit">Enregistrer la Trace</button></form>` });
   }
 
@@ -2787,15 +2795,19 @@
     if (confirm(`Bloquer ${user.name} ? Ses publications seront masquées dans ce prototype local.`)) { store.blockUser(userId); showToast('Utilisateur bloqué'); render(); }
   }
   async function openUserDialog(userId) {
+    const viewer=BT.auth.getCurrentUser()?.id;
     const user = store.getCommunity().users.find(item => item.id === userId); if (!user) return;
     let details = null;
     if (user.isRemote) {
       try { details = await window.BT.community.getReaderProfile(userId); }
       catch (error) { showToast(error.message || 'Ce profil ne peut pas être ouvert'); }
     } else details = { bio:user.bio, interests:[] };
+    if(viewer!==BT.auth.getCurrentUser()?.id)return;
     const locked = user.profileVisibility === 'private' && !details;
     const avatarProfile = { ...user, avatarUrl:details?.avatarUrl || user.avatarUrl || '' };
-    openDialog({ title:user.name, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2><p class="muted">${esc(user.handle || '')}</p></div></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'Ce lecteur n’a pas encore rédigé de biographie.')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<p class="small muted">L’adresse e-mail et les lectures privées ne sont jamais affichées dans la recherche.</p>${friendAction(user)}` });
+    openDialog({ title:user.name, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2><p class="muted">${esc(user.handle || '')}</p></div></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'Ce lecteur n’a pas encore rédigé de biographie.')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<p class="small muted">Vos amis peuvent consulter les titres, auteurs et statuts de votre bibliothèque. Les carnets et souvenirs restent privés jusqu’à leur publication.</p>${friendAction(user)}<div data-reader-sharing></div>` });
+    const sharingHost=document.querySelector('#app-dialog [data-reader-sharing]');
+    if(sharingHost && user.isRemote && !isGuestMode())BT.sharing.mountReader(sharingHost,userId);
     const dialogAvatar = document.querySelector('#app-dialog .profile-avatar');
     if (dialogAvatar) dialogAvatar.innerHTML = avatarInner(avatarProfile);
   }
