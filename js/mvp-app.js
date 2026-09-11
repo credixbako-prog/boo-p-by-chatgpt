@@ -2973,6 +2973,7 @@
       if (!completedRemotely && !store.isOnboardingComplete()) { location.replace('onboarding.html'); return; }
       if (user) await bootstrapUserDataSync({ quiet:true });
       init();
+      BT.pushInvitation?.schedule();
     } catch (error) {
       console.error('BOO-P authentication gate', error);
       location.replace('index.html?auth=login&reason=auth-error');

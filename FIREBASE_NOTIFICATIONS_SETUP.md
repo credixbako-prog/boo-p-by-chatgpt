@@ -8,6 +8,12 @@ Préparer Firebase Cloud Messaging (FCM) pour les notifications push. L’authen
 
 Le branchement web est implémenté : Profil → Compte et préférences → Préférences de notifications → Sur cet appareil. Le lecteur active explicitement les alertes, peut envoyer un test et les désactiver. Firebase Authentication n’est pas utilisé.
 
+Une invitation facultative est présentée à la première ouverture de l’accueil après l’onboarding, pour les nouveaux comptes comme pour les comptes existants. « Pas maintenant » et Échap ferment l’invitation. Le navigateur n’est sollicité qu’après le clic explicite sur « Activer les notifications ».
+
+L’affichage est mémorisé dans la préférence Supabase Auth `user_metadata.boop_push_invitation_seen_v1` et localement dans IndexedDB, sous une clé propre au compte. Cette préférence ne sert jamais à l’autorisation des accès. La mémoire locale empêche la répétition si l’enregistrement distant échoue ; celui-ci est réessayé lors d’une prochaine ouverture. Une lecture distante indisponible reporte l’invitation plutôt que de répéter un choix fait sur un autre appareil. L’effacement des données locales ne réinitialise pas le marqueur enregistré sur le compte.
+
+Les invités, les comptes déjà inscrits aux alertes sur cet appareil et les navigateurs ayant déjà refusé l’autorisation ne reçoivent pas cette invitation. Une session de lecture en cours, un onglet masqué ou une autre fenêtre de dialogue reporte son affichage. Sur un navigateur incompatible, l’invitation indique les étapes d’installation et renvoie aux réglages.
+
 ## Configuration créée et vérifiée
 
 - Projet : **BOO-P**, identifiant `boo-p-a4461`.
