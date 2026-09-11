@@ -89,6 +89,7 @@ BT.sharing = (() => {
     };
   }
   async function view(id) {
+    if(BT.readerProfile)return BT.readerProfile.openPublication(id);
     const {d,body}=dialog('Publication'),account=owner();body.append(element('p','Chargement…'));
     try{
       const post=await BT.community.getReadingPublication(id);if(!d.isConnected || owner()!==account)return;
@@ -98,6 +99,7 @@ BT.sharing = (() => {
     }catch(e){body.replaceChildren(element('p',e.message));}
   }
   function mountReader(host,userId) {
+    if(BT.readerProfile)return BT.readerProfile.mount(host,userId);
     const account=owner(),nav=element('div',undefined,'filter-chips reader-tabs'),area=element('section',undefined,'reader-content');host.append(nav,area);let request=0;
     const tabs=[['library','Bibliothèque'],['notebook','Carnets publiés'],['publications','Publications']];
     async function load(tab,cursor='') {

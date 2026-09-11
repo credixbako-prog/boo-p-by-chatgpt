@@ -12,6 +12,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.goto((process.env.BOOP_TEST_URL || 'http://127.0.0.1:8766')+'/app.html?guest=1#home');
   await page.locator('[data-action=start-session]').waitFor();
   const ids=await page.evaluate(()=>{
+   // Isolate the publication composer; profile interactions have their own journey suite.
+   BT.readerProfile=null;
    const b=BT.store.addBook({title:'Mémoires d’Hadrien',authors:['Marguerite Yourcenar'],reflection:{notebook:'Ma réflexion enregistrée.',sections:{retained:'La lucidité.',questions:'Que transmettre ?'},messages:[{content:'SECRET CHAT'}],draft:'SECRET DRAFT'}});
    const w=BT.store.addLexiconWord({kind:'word',word:'Sérendipité',definition:'Une découverte inattendue',bookId:b.id,note:'SECRET NOTE'});
    const ex=BT.store.addLexiconWord({kind:'expression',word:'Prendre le temps',bookId:b.id});

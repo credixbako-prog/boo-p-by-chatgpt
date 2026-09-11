@@ -1,6 +1,6 @@
 # Partages entre lecteurs — 11 septembre 2026
 
-Depuis le profil d’un lecteur, trois onglets présentent sa **Bibliothèque**, ses **Carnets publiés** et ses **Publications**. La bibliothèque devient accessible après acceptation de l’amitié, dans les deux sens. Elle présente les titres, auteurs et statuts des livres synchronisés, par pages de 24. La wishlist, les notes, les positions de lecture, les brouillons et les conversations avec l’IA restent privés.
+Depuis le profil d’un lecteur, trois onglets présentent **Son parcours**, sa **Bibliothèque** et ses **Carnets**. Le [guide des profils](READER_PROFILES.md) décrit les lectures en cours et les nouvelles interactions. La bibliothèque devient accessible après acceptation de l’amitié, dans les deux sens. Elle présente les titres, auteurs, couvertures de catalogue autorisées et statuts des livres synchronisés, par pages de 24. La wishlist, les notes, les positions de lecture, les brouillons et les conversations avec l’IA restent privés.
 
 ## Publier volontairement
 

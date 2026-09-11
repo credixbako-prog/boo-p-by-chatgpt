@@ -16,6 +16,8 @@ Le logo à trois livres en perspective est décliné dans la navigation, l’onb
 
 ## Partages entre lecteurs — 11 septembre 2026
 
+Les [profils de lecture](READER_PROFILES.md) présentent désormais le parcours du lecteur, ses lectures en cours, une sélection personnelle et ses carnets publiés. Les visiteurs peuvent encourager, laisser une Trace, répondre et garder un livre dans leur bibliothèque. Le propriétaire personnalise son accueil et peut supprimer les Traces reçues.
+
 Les amis acceptés peuvent consulter leurs bibliothèques. Carnets, mots, expressions, citations, pensées et étapes de lecture disposent d’un partage volontaire : message et contenu modifiables, aperçu, audience amis ou publique, mise à jour et retrait. Les originaux personnels et conversations IA restent privés. Le [guide des partages](READING_SHARING.md) détaille les accès et les vérifications.
 
 ## Développement local

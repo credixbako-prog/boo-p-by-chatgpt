@@ -316,6 +316,7 @@
         const carousel = document.querySelector('[data-memory-carousel]');
         if (carousel) carousel.scrollLeft = Math.min(ui.memoryCursor, carousel.children.length - 1) * carousel.clientWidth;
         if (ui.route === 'club') loadClubSpace(ui.params.get('id'));
+        if(ui.route==='community' && ui.params.get('reader') && ui.readerLink!==location.hash){ui.readerLink=location.hash;openUserDialog(ui.params.get('reader'));}
         if (ui.route === 'path' && ui.pathTab === 'trail') restoreTrailViewport();
         if (ui.route === 'profile' && ['goals', 'settings'].includes(ui.params.get('section'))) {
           const section = document.getElementById('profile-' + ui.params.get('section'));
@@ -1209,7 +1210,7 @@
     const profile = store.getProfile(), settings = store.getSettings(), stats = store.getStats();
     const dna = store.getReaderDNA();
     const badges = store.getBadges();
-    return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main">${avatarBubble(profile,'profile-avatar')}<div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button><a class="button button--secondary button--small" href="#profile?section=settings">Réglages</a><a class="text-link" href="#profile?section=goals">Mes objectifs</a></section>
+    return `<section class="card profile-hero"><button class="icon-button theme-button" type="button" data-action="toggle-theme" aria-label="Passer au thème ${settings.theme === 'dark' ? 'clair' : 'sombre'}" aria-pressed="${settings.theme === 'dark'}">${settings.theme === 'dark' ? '☀' : '☾'}</button><div class="profile-main">${avatarBubble(profile,'profile-avatar')}<div><p class="eyebrow">${esc(profile.title)}</p><h1>${esc(profile.name)}</h1><p class="muted">${esc(profile.handle || '')} · Profil ${profile.visibility === 'private' ? 'privé' : 'public'}</p></div></div><p>${esc(profile.bio || '')}</p><button class="button button--secondary button--small" type="button" data-action="edit-profile">Modifier le profil</button><button class="button button--secondary button--small" type="button" data-action="reader-preferences">Mon espace de lecteur</button><button class="text-link" type="button" data-action="preview-reader">Voir mon profil de lecture</button><a class="button button--secondary button--small" href="#profile?section=settings">Réglages</a><a class="text-link" href="#profile?section=goals">Mes objectifs</a></section>
       <section class="section-block" aria-labelledby="reader-dna-title"><div class="section-heading"><div><p class="eyebrow">Portrait vivant</p><h2 id="reader-dna-title">ADN du lecteur</h2></div><button class="text-link" type="button" data-action="open-dna-history">Voir mon évolution</button></div><article class="reader-dna-card"><span class="reader-dna-card__mark" aria-hidden="true">✦</span><div><p class="eyebrow">Aujourd’hui</p><blockquote>${esc(dna.phrase)}</blockquote>${dna.topGenres.length ? `<div class="reader-dna-traits" aria-label="Territoires littéraires dominants">${dna.topGenres.map(genre => `<span>${esc(genre)}</span>`).join('')}</div>` : ''}<details class="reader-dna-evidence"><summary>Ce qui façonne cet ADN</summary><ul><li>${dna.metrics.completedCount} livre${dna.metrics.completedCount > 1 ? 's' : ''} terminé${dna.metrics.completedCount > 1 ? 's' : ''}</li><li>${store.getLexicon().length} élément${store.getLexicon().length > 1 ? 's' : ''} conservé${store.getLexicon().length > 1 ? 's' : ''} dans le lexique</li><li>${store.getTraces().length} Trace${store.getTraces().length > 1 ? 's' : ''} personnelle${store.getTraces().length > 1 ? 's' : ''}</li></ul></details></div></article></section>
       <section class="section-block"><h2>Statistiques</h2><div class="stats-grid"><div class="card stat-card"><strong>${stats.booksRead}</strong><span>livres lus</span></div><div class="card stat-card"><strong>${Math.floor(stats.totalMinutes/60)} h ${stats.totalMinutes%60}</strong><span>temps de lecture</span></div><div class="card stat-card"><strong>${stats.streak}</strong><span>jours de série</span></div><div class="card stat-card"><strong>${stats.totalTraces}</strong><span>Traces et lexique</span></div><div class="card stat-card"><strong>${stats.booksTransmitted}</strong><span>prêtés ou donnés</span></div></div></section>
       <section class="section-block profile-goals" id="profile-goals" tabindex="-1"><div class="section-heading"><div><p class="eyebrow">Progression personnelle</p><h2>Objectifs</h2><p class="small muted">Ouvrez seulement la période que vous souhaitez consulter ou modifier.</p></div></div>${renderGoals()}</section>
@@ -1725,6 +1726,8 @@
       case 'share-monthly-report': await shareMonthlyReport(); break;
       case 'edit-monthly-report': openMonthlyReportDialog(ui.monthlyReportData?.monthKey); break;
       case 'edit-profile': openProfileDialog(); break;
+      case 'reader-preferences': BT.readerProfile.editPreferences(); break;
+      case 'preview-reader': openUserDialog(BT.auth.getCurrentUser()?.id); break;
       case 'remove-profile-photo': removePendingProfilePhoto(); break;
       case 'open-dna-history': openReaderDNAHistory(); break;
       case 'open-badges': openBadgesDialog(); break;
@@ -2796,7 +2799,9 @@
   }
   async function openUserDialog(userId) {
     const viewer=BT.auth.getCurrentUser()?.id;
-    const user = store.getCommunity().users.find(item => item.id === userId); if (!user) return;
+    let user = store.getCommunity().users.find(item => item.id === userId);
+    if(!user && !isGuestMode()){try{user=await BT.readerProfileApi.identity(userId);}catch(e){showToast(e.message);return;}}
+    if(!user)return;
     let details = null;
     if (user.isRemote) {
       try { details = await window.BT.community.getReaderProfile(userId); }
@@ -2805,7 +2810,8 @@
     if(viewer!==BT.auth.getCurrentUser()?.id)return;
     const locked = user.profileVisibility === 'private' && !details;
     const avatarProfile = { ...user, avatarUrl:details?.avatarUrl || user.avatarUrl || '' };
-    openDialog({ title:user.name, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2><p class="muted">${esc(user.handle || '')}</p></div></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'Ce lecteur n’a pas encore rédigé de biographie.')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<p class="small muted">Vos amis peuvent consulter les titres, auteurs et statuts de votre bibliothèque. Les carnets et souvenirs restent privés jusqu’à leur publication.</p>${friendAction(user)}<div data-reader-sharing></div>` });
+    openDialog({ title:userId===viewer?'Mon espace de lecture':'Son espace de lecture', wide:true, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2><p class="muted">${esc(user.handle || '')}</p></div></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'Ce lecteur n’a pas encore rédigé de biographie.')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<div class="reader-profile-options"><details><summary>Confidentialité</summary><p class="small muted">La bibliothèque est réservée aux amis acceptés. Les carnets et souvenirs apparaissent selon leur audience de publication. Les notes et conversations IA restent privées.</p></details>${userId===viewer?'':user.friendState==='friend'?`<details><summary>Vous êtes amis · Gérer</summary>${friendAction(user)}</details>`:friendAction(user)}</div><div data-reader-sharing></div>` });
+    const profileDialog=document.getElementById('app-dialog');profileDialog.classList.add('reader-profile-dialog');profileDialog.addEventListener('close',()=>profileDialog.classList.remove('reader-profile-dialog'),{once:true});
     const sharingHost=document.querySelector('#app-dialog [data-reader-sharing]');
     if(sharingHost && user.isRemote && !isGuestMode())BT.sharing.mountReader(sharingHost,userId);
     const dialogAvatar = document.querySelector('#app-dialog .profile-avatar');
