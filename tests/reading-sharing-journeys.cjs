@@ -77,7 +77,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   await page.locator('[data-action=finish-session]').click();
   const finish=page.locator('form[data-form=finish-session]');
   await finish.locator('[name=markRead]').check();await finish.locator('summary').click();
-  const fullThought='Une pensée de lecture. '.repeat(50);await finish.locator('[name=traceText]').fill(fullThought);
+  const fullThought='Une pensée de lecture. '.repeat(50);await finish.locator('.thought-writing').fill(fullThought);
   await finish.locator('[name=share]').check();await finish.locator('button[type=submit]').click();
   await page.locator('.completion-dialog').waitFor();assert.equal(await page.evaluate(()=>sharingTest.writes),beforeFinish);
   await page.locator('.completion-dialog button').click();await form.waitFor();

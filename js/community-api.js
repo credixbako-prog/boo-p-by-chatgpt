@@ -168,7 +168,7 @@ BT.community = (() => {
         id:post.id, remoteId:post.id, authorId:user && post.author_id === user.id ? 'me' : post.author_id,
         authorName:post.author_name, initials:post.author_initials, type:post.activity_type,
         bookTitle:post.book_title, text:post.body, visibility:post.visibility,
-        readingKind:post.reading_kind, readingSourceId:post.reading_source_id, readingContent:post.reading_kind==='citation'?post.reading_content:null,
+        readingKind:post.reading_kind, readingSourceId:post.reading_source_id, readingContent:post.reading_content,
         photoPath:post.photo_path, photoUrl:await signedPhotoUrl(post.photo_path), date:post.created_at,
         encouraged:encouragement.mine, encouragements:encouragement.count,
         comments:nestComments(post.community_comments || []), isRemote:true
@@ -202,6 +202,19 @@ BT.community = (() => {
       throw friendly(result.error, 'La Trace ne peut pas être enregistrée.');
     }
     return (await listPosts()).find(post => post.id === postId);
+  }
+
+  async function updatePost({id,text,bookTitle,type,visibility,expectedUserId=optionalUser()?.id}) {
+    await window.BT.auth.ready();
+    const user=currentUser();
+    if(!expectedUserId||user.id!==expectedUserId)throw new Error('Votre compte a changé. Rouvrez la publication.');
+    const body=String(text||'').trim();
+    if(!body||body.length>1200)throw new Error('Le texte doit contenir entre 1 et 1 200 caractères.');
+    if(!['trace','debut','fin','goal'].includes(type)||!['me','friends','club','public'].includes(visibility))throw new Error('Vérifiez le type et la visibilité.');
+    const {data,error}=await client().from('community_posts').update({body,book_title:String(bookTitle||'').slice(0,500),activity_type:type,visibility}).eq('id',id).eq('author_id',user.id).is('reading_kind',null).select('id').single();
+    if(error||!data)throw friendly(error,'Cette publication ne peut pas être modifiée.');
+    if(optionalUser()?.id!==expectedUserId)throw new Error('Votre compte a changé.');
+    return data;
   }
 
   async function createComment(postId, text, parentId = null) {
@@ -666,7 +679,7 @@ BT.community = (() => {
 
   return {
     getReadingPublication, getOwnReadingPublication, publishReading, withdrawReading, getReaderLibrary, listReaderPublications,
-    listPosts, createPost, createComment, toggleEncouragement,
+    listPosts, createPost, updatePost, createComment, toggleEncouragement,
     createClub, listClubs, updateClub, toggleClubMembership, addClubMember, removeClubMember,
     getClubSpace, addClubBook, updateClubBook, createClubPost, createClubComment, toggleClubPostEncouragement,
     listSalons, createSalon, updateSalon, toggleSalonMembership, updateSalonPresence, createSalonMessage,

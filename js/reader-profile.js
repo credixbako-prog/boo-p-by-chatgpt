@@ -20,10 +20,7 @@ BT.readerProfile=(()=>{
     const label=el('label','Où souhaitez-vous le garder ?','field'),select=el('select');for(const [value,text] of [['library','Ma bibliothèque · À lire'],['wishlist','Ma liste d’envies']]){const o=el('option',text);o.value=value;select.append(o);}label.append(select);body.append(label);
     const account=who(),save=button('Ajouter à mon espace',()=>{if(account!==who())return;BT.store.addBook({title:book.title,authors:[...(book.authors||[])],isbn:book.isbn||'',coverUrl:book.coverUrl||'',mediaType:book.mediaType||'print',status:'a-lire',libraryState:select.value});save.disabled=true;p.textContent='Livre ajouté. Vous pourrez compléter sa fiche dans votre bibliothèque.';},'button button--primary');body.append(save,p);p.textContent='';
   }
-  function bookCard(book,userId,compact=false){const card=el('article',null,'reader-book-card'+(compact?' reader-book-card--compact':'')),info=el('div',null,'reader-book-info');
-    const open=button(book.title,()=>openBook(userId,book.id),'reader-book-title');info.append(open,el('p',(book.authors||[]).join(', '),'small muted'),el('span',statuses[book.status]||'À lire','status-chip'));
-    card.append(cover(book),info);const actions=el('div',null,'reader-card-actions');actions.append(button('Découvrir ce livre',()=>openBook(userId,book.id),'text-link'),button('＋ À ma bibliothèque',()=>addBook(book),'text-link'));card.append(actions);return card;
-  }
+  function bookCard(book,userId,compact=false){const card=el('article',null,'reader-book-card reader-book-tile'+(compact?' reader-book-card--compact':''));const open=button('',()=>openBook(userId,book.id),'reader-cover-button');open.setAttribute('aria-label','Découvrir '+book.title);open.title=book.title;open.append(cover(book));card.append(open);return card;}
   const finishes=[['terracotta','Terracotta'],['blue','Bleu'],['sage','Sauge'],['red','Rouge'],['black','Noir'],['white','Blanc']];
   function furniture(finish){const box=el('div',null,'bookcase reader-bookcase bookcase--'+finish);box.setAttribute('aria-label','Bibliothèque du lecteur présentée en meuble');box.append(el('div',null,'bookcase__top'),el('p','Glissez un rayon. Touchez un livre pour le sélectionner, puis à nouveau pour ouvrir sa fiche.','bookcase__instruction'));return box;}
   function appendFurniture(box,books,userId){for(const book of books){
@@ -46,19 +43,17 @@ BT.readerProfile=(()=>{
     }catch(e){p.textContent=e.message;if(!p.isConnected)body.append(message(e.message));}
   }
   function postCard(post){const card=el('article',null,'reader-post-card'),kind=labels[post.reading_kind]||({debut:'Début de lecture',fin:'Livre terminé'})[post.activity_type]||'Une Trace';
-    const top=el('div',null,'reader-post-meta');top.append(el('span',kind,'eyebrow'),el('time',new Date(post.created_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}),'small muted'));card.append(top);
+    const top=el('div',null,'reader-post-meta');top.append(el('span',kind,'eyebrow'),el('time',new Date(post.created_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}),'small muted'));if(who()===post.author_id)top.append(BT.sharing.editButton(()=>BT.sharing.editRemotePost(post)));card.append(top);
     if(post.book_title){const heading=el('div',null,'reader-post-book'),slot=el('div');slot.append(cover({title:post.book_title}));heading.append(slot,el('h3',post.book_title));card.append(heading);
       if(who()&&['notebook','debut','fin'].includes(post.reading_kind)){const account=who();api().books(post.author_id,'all','',post.reading_source_id).then(data=>{if(slot.isConnected&&who()===account&&data.available&&data.books[0])slot.replaceChildren(cover(data.books[0]));}).catch(()=>{});}
-    }if(post.reading_kind==='citation'&&post.reading_content){const quote=el('div');quote.innerHTML=BT.sharing.quoteHTML(post.reading_content,post.body);card.append(quote);}else card.append(el('p',post.body,'reader-post-excerpt'));
-    card.append(button(post.reading_kind==='notebook'?'Lire le carnet':'Lire la publication',()=>openPublication(post.id),'text-link'));
+    }const content=el('div');content.innerHTML=BT.sharing.publicationHTML(post.reading_kind,post.reading_content,post.body);card.append(content);
     const actions=el('section');card.append(actions);mountInteractions(actions,{post:post.id},post.reading_kind==='notebook'?'Cette réflexion me parle':'Encourager');return card;
   }
   async function openPublication(id,focus=false){const {d,body}=modal('Une lecture en partage'),account=who(),p=message();body.append(p);
     try{const post=await api().publication(id);if(!d.isConnected||account!==who())return;body.replaceChildren();if(!post){body.append(message('Cette publication a été retirée ou n’est plus accessible.'));return;}
-      body.append(el('p',post.author_name,'eyebrow'),el('h2',post.book_title||labels[post.reading_kind]||'Une Trace'),el('p',post.body,'sharing-content'),el('div',post.reading_content||'','sharing-content'));
-      if(post.reading_kind==='citation'){body.querySelectorAll('.sharing-content').forEach(n=>n.remove());const quote=el('div');quote.innerHTML=BT.sharing.quoteHTML(post.reading_content,post.body);body.append(quote);}
+      body.append(el('p',post.author_name,'eyebrow'),el('h2',post.book_title||labels[post.reading_kind]||'Une Trace'));const content=el('div');content.innerHTML=BT.sharing.publicationHTML(post.reading_kind,post.reading_content,post.body);body.append(content);
       const host=el('section');body.append(host);mountInteractions(host,{post:id},post.reading_kind==='notebook'?'Cette réflexion me parle':'Encourager',focus);
-      if(account===post.author_id&&post.reading_kind)body.append(button('Modifier ou retirer',()=>{d.close();BT.sharing.open(post.reading_kind,post.reading_source_id,'',true);},'text-link'));
+      if(account===post.author_id)body.append(BT.sharing.editButton(()=>{d.close();BT.sharing.editRemotePost(post);}));
     }catch(e){p.textContent=e.message;}
   }
   function mountInteractions(host,target,likeLabel='Encourager',expanded=false){

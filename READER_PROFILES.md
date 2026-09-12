@@ -55,3 +55,8 @@ Communauté regroupe Clubs & salons. Les profils gardent le nom ou pseudonyme sa
 La précédente version des profils et badges a été publiée dans 484618f. Cette nouvelle évolution passe 99 tests Node et les parcours navigateur locaux. La migration reading_cards est préparée mais non appliquée ; la vérification SQL des droits et la publication restent à effectuer. Le geste tactile doit aussi être essayé sur iPhone physique.
 
 Activation autorisée : la migration 20260911204712_reading_cards.sql est appliquée. Les tests SQL de confidentialité, publication et retrait passent, avec annulation des données fictives. Aucun nouveau signalement des conseillers de sécurité Supabase. La publication de l’interface sur GitHub main est autorisée.
+
+
+## Carnet et profil — évolution du 12 septembre 2026
+
+La bio suit la visibilité du profil ; livres lus, temps et série sont regroupés dans l’en-tête avec les trois badges les plus récents. Les autres statistiques restent repliables. Les profils visités présentent les couvertures en mosaïque dans la vue Couvertures ; les lectures en cours gardent les deux interactions alignées. Les publications sont affichées en entier avec un crayon pour leur auteur. Les cartes mensuelles restent horizontales, avec points de pagination. Voir [NOTEBOOK_EXPERIENCE.md](NOTEBOOK_EXPERIENCE.md) pour les détails et vérifications.

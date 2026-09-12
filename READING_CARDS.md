@@ -4,7 +4,7 @@
 
 ## Cartes de lecture
 
-Bibliothèque → Carnet distingue **Réflexions** et **Cartes de lecture**. Le carrousel commence par « Créer ma carte du mois », puis présente les cartes enregistrées, avec balayage horizontal et boutons précédent/suivant. Le générateur reste également accessible en bas de l’accueil. Après génération, « Enregistrer dans mon carnet » conserve la carte ; le téléchargement et le partage natif existants restent disponibles.
+Bibliothèque → Carnet distingue **Réflexions** et **Cartes de lecture**. Dans le carnet, une grille à défilement vertical commence par « Créer ma carte du mois », puis présente les cartes enregistrées. Sur l’accueil et les profils, les cartes restent en carrousel horizontal, avec des points de pagination pleins/vides à la place des flèches. L’accueil affiche seulement l’image des cartes enregistrées ; elle ouvre leur détail et les actions de gestion. Après génération, « Enregistrer dans mon carnet » conserve la carte ; le téléchargement et le partage natif existants restent disponibles.
 
 Une carte enregistrée est une image JPEG figée, accompagnée du mois, d’un titre et d’une légende. Le JSON source du bilan, les notes et les conversations IA ne sont pas joints. L’utilisateur doit vérifier les informations visibles dans l’image avant de la partager. Le téléchargement direct du générateur reste en PNG ; une carte conservée se télécharge en JPEG.
 
@@ -43,3 +43,6 @@ Les nouvelles citations utilisent une enveloppe JSON `boop-citation-v1` dans le 
 Les parcours existants de lecture, de partage, de profils et de badges passent également. Les captures de contrôle sont dans `.tmp/cards-review/`. Le geste de rangement doit encore être essayé sur un iPhone physique ; l’émulation tactile Chrome ne vérifie pas Safari iOS.
 
 Évolution préparée le 12 septembre : le carrousel des cartes rejoint aussi la dernière section de l’accueil, avec création en première position. Voir [UI_POLISH.md](UI_POLISH.md).
+
+
+Évolution du 12 septembre 2026 : voir [NOTEBOOK_EXPERIENCE.md](NOTEBOOK_EXPERIENCE.md) pour les dispositions par écran et les nouvelles vérifications.

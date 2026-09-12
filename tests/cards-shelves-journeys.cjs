@@ -14,7 +14,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  await page.getByRole('button',{name:'Créer ma carte du mois',exact:true}).click();await page.locator('[data-form=monthly-report] button[type=submit]').click();await page.locator('[data-action=save-monthly-card]').click();await page.getByText('Enregistrée dans le carnet',{exact:true}).waitFor();await page.getByRole('link',{name:'Voir mes cartes',exact:true}).click();
  await page.locator('.saved-card-preview').waitFor();assert.equal(await page.locator('.saved-card-create').count(),1);assert.equal(await page.locator('.saved-card-preview').count(),1);
  await page.reload();await page.locator('.saved-card-preview').waitFor();assert.equal(await page.locator('.saved-card-preview').count(),1);await page.screenshot({path:'.tmp/cards-review/carnet-cards.png'});
- await page.locator('[aria-label="Carte suivante"]').click();await page.waitForFunction(()=>document.querySelector('.saved-card-carousel').scrollLeft>100);
+ assert.equal(await page.locator('.saved-card-list').count(),1);assert.equal(await page.locator('.saved-card-carousel,.saved-card-dots').count(),0);
  await route('#community?tab=clubs');assert.equal(await page.getByRole('link',{name:'Clubs & salons',exact:true}).count(),1);await page.getByRole('heading',{name:'Salons de lecture',exact:true}).waitFor();assert.equal(await page.locator('.clubs-and-salons').count(),1);
  await route('#profile');assert.equal(await page.locator('.profile-hero').innerText().then(t=>t.includes('@')),false);
  assert.equal(await page.locator('.badge-art>circle').first().getAttribute('fill'),'#142438');

@@ -41,7 +41,7 @@ BT.readingCards=(()=>{
       card={...card,caption:input.value.trim(),visibility:select.value,synced:true};await cache(card);status.textContent=select.value==='private'?'Carte conservée en privé.':'Carte publiée sur votre profil.';changed();
     }catch(e){status.textContent=e.message;}finally{submit.disabled=false;}};
   }
-  function mount(host,{owner=scope(),creation=false,published=false}={}){
+  function mount(host,{owner=scope(),creation=false,published=false,layout='carousel',compact=false}={}){
     for(const refresh of views)if(!refresh.host?.isConnected)refresh();
     const account=scope();let generation=0,offset=0,rows=[],more=false;const current=()=>host.isConnected&&scope()===account;
     async function load(next=false){const token=++generation;const status=el('p','Chargement des cartes…','small muted');status.setAttribute('role','status');if(!next)host.replaceChildren(status);else host.append(status);
@@ -59,13 +59,17 @@ BT.readingCards=(()=>{
         else if(!next)host.replaceChildren();status.textContent=error.message;host.append(status,button('Réessayer',()=>load(next),'text-link'));
       }
     }
-    function paint(){host.replaceChildren();const heading=el('div',null,'section-heading'),title=el('h3',creation?'Mes cartes de lecture':'Cartes partagées'),controls=el('div',null,'saved-card-controls'),rail=el('div',null,'saved-card-carousel');rail.tabIndex=0;rail.setAttribute('role','region');rail.setAttribute('aria-label','Cartes de lecture à faire défiler horizontalement');
-      const move=direction=>rail.scrollBy({left:direction*rail.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});controls.append(button('←',()=>move(-1),'icon-button'),button('→',()=>move(1),'icon-button'));controls.firstChild.setAttribute('aria-label','Carte précédente');controls.lastChild.setAttribute('aria-label','Carte suivante');heading.append(title,controls);host.append(heading,rail);
+    function paint(){host.replaceChildren();const heading=el('div',null,'section-heading'),title=el('h3',creation?'Mes cartes de lecture':'Cartes partagées'),controls=el('div',null,'saved-card-dots'),rail=el('div',null,layout==='list'?'saved-card-list':'saved-card-carousel saved-card-carousel--paged');rail.setAttribute('role','region');rail.setAttribute('aria-label',layout==='list'?'Mes cartes de lecture':'Cartes de lecture à faire défiler horizontalement');if(layout!=='list')rail.tabIndex=0;
+      controls.setAttribute('role','group');controls.setAttribute('aria-label','Choisir une carte');heading.append(title);host.append(heading,rail);
       if(creation){const add=el('article',null,'saved-card-slide saved-card-create');add.append(el('span','＋','saved-card-plus'),el('h3','Un mois, une carte'),button('Créer ma carte du mois',()=>document.dispatchEvent(new CustomEvent('boop:create-reading-card')),'button button--primary'));rail.append(add);}
-      for(const card of rows){const slide=el('article',null,'saved-card-slide'),preview=button('',()=>open(card,!published),'saved-card-preview');preview.setAttribute('aria-label','Ouvrir '+card.title);preview.append(image(card));slide.append(preview,el('h4',card.title));if(!published)slide.append(el('p',card.visibility==='private'?'Privée · dans mon carnet':card.visibility==='friends'?'Publiée · amis':'Publiée · communauté','small muted'));if(card.caption)slide.append(el('p',card.caption,'saved-card-caption'));if(!published)slide.append(button(card.visibility==='private'?'Publier':'Gérer la publication',()=>editPublication(card),'text-link'));rail.append(slide);}
+      for(const card of rows){const slide=el('article',null,'saved-card-slide'+(compact?' saved-card-slide--image':'')),preview=button('',()=>open(card,!published),'saved-card-preview');preview.setAttribute('aria-label','Ouvrir '+card.title);preview.append(image(card));slide.append(preview);if(!compact){slide.append(el('h4',card.title));if(!published)slide.append(el('p',card.visibility==='private'?'Privée · dans mon carnet':card.visibility==='friends'?'Publiée · amis':'Publiée · communauté','small muted'));if(card.caption)slide.append(el('p',card.caption,'saved-card-caption'));if(!published)slide.append(button(card.visibility==='private'?'Publier':'Gérer la publication',()=>editPublication(card),'text-link'));}rail.append(slide);}
       if(more){const last=el('article',null,'saved-card-slide saved-card-more');last.append(button('Charger les cartes suivantes',()=>load(true)));rail.append(last);}
       if(!rows.length&&!creation)rail.append(el('p','Les cartes publiées apparaîtront ici.','small muted'));
-      controls.hidden=rail.children.length<2;host.append(el('p','Balayez pour parcourir.','ui-help'));
+      if(layout!=='list'&&rail.children.length>1){
+        const slides=[...rail.children],dots=slides.map((slide,i)=>{const dot=button('',()=>rail.scrollTo({left:slide.offsetLeft-slides[0].offsetLeft,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'}),'saved-card-dot');dot.setAttribute('aria-label','Carte '+(i+1)+' sur '+slides.length);dot.setAttribute('aria-current',i===0?'true':'false');dot.append(el('span'));controls.append(dot);return dot;});
+        const update=()=>{let index=0,distance=Infinity;slides.forEach((slide,i)=>{const d=Math.abs(slide.offsetLeft-slides[0].offsetLeft-rail.scrollLeft);if(d<distance){distance=d;index=i;}});dots.forEach((dot,i)=>dot.setAttribute('aria-current',String(i===index)));};
+        rail.addEventListener('scroll',update,{passive:true});host.append(controls);
+      }
     }
     const refresh=()=>{if(current())load();else{if(host.isConnected&&scope()!==account)host.replaceChildren();views.delete(refresh);window.removeEventListener('boop:reading-cards-changed',refresh);}};refresh.account=account;refresh.host=host;views.add(refresh);window.addEventListener('boop:reading-cards-changed',refresh);load();return ()=>{views.delete(refresh);window.removeEventListener('boop:reading-cards-changed',refresh);generation++;};
   }

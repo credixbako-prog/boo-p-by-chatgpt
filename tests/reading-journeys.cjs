@@ -67,7 +67,7 @@ const out = path.resolve('.tmp/ux-updated');
 
     await action('capture-memory').click();
     await page.locator('[data-action="capture-kind"][data-kind="thought"]').click();
-    await page.locator('#trace-dialog-text').fill('Une pensée privée à retrouver après fermeture.');
+    await page.locator('[data-form=trace] .thought-writing').fill('Une pensée privée à retrouver après fermeture.');
     await close();
     await page.reload({waitUntil:'domcontentloaded'});
     await action('capture-memory').click();

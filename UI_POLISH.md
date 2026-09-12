@@ -1,6 +1,6 @@
 # BOO-P — cadrages et commandes communes
 
-Évolution préparée le 12 septembre 2026, non publiée.
+Évolution publiée le 12 septembre 2026 dans le commit 977a681. Les nouveaux retours sur le carnet et les profils sont décrits dans [NOTEBOOK_EXPERIENCE.md](NOTEBOOK_EXPERIENCE.md).
 
 ## ISBN
 

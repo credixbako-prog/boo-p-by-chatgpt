@@ -212,7 +212,7 @@ test('bibliothèque: sentier arborescent et carnet filtrable', async () => {
   assert.match(css, /\.trail-genre-node/);
   assert.match(css, /data:image\/svg\+xml/);
   assert.match(css, /\.lexicon-filter-fab/);
-  assert.match(app, /class="notebook-text"/);
+  assert.match(app, /class="notebook-text thought-content"/);
   assert.match(css, /\.lexicon-filter-fab__menu \{ position: absolute; top:/);
 });
 
@@ -893,7 +893,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v54/);
+  assert.match(worker, /boo-p-webapp-v55/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);
