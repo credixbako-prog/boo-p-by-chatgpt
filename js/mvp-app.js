@@ -9,7 +9,7 @@
     libraryQuery: '', libraryStatus: 'tous', notificationFilter: 'all',
     openComments: new Set(), friendQuery: '', lexiconQuery: '', timer: null, heartbeat: null,
     lastFocus: null, pendingCover: '', pendingCoverKind: '', pendingISBNPhoto: '', pendingISBNPhotoFile: null, bookSuggestions: [],
-    pendingPostPhotoUrl: '', pendingProfilePhotoUrl: '', pendingProfilePhotoFile: null, removeProfilePhoto:false, searchQuery: '', communityLoaded: false,
+    pendingPostPhotoUrl: '', pendingPostPhotoFile:null, postPhotoBusy:false, pendingProfilePhotoUrl: '', pendingProfilePhotoFile: null, removeProfilePhoto:false, searchQuery: '', communityLoaded: false,
     friendResults: [], friendSearchBusy: false, friendSearchTimer: null,
     catalogRecommendations: [], recommendationsBusy: false, currentRecommendations: [],
     monthlyReportCanvas: null, monthlyReportData: null, notificationUnsubscribe: null, renderedRoute: null,
@@ -311,7 +311,7 @@
         view.innerHTML = `<section class="empty-state" role="alert"><h1>Un passage s’est refermé trop vite</h1><p>Vos données locales sont intactes. Vous pouvez revenir à l’Accueil et réessayer.</p><a class="button button--primary" href="#home">Revenir à l’Accueil</a></section>`;
       }
       BT.reflection?.decorate(view);
-      const cardHost=view.querySelector('[data-saved-cards]');if(cardHost)BT.readingCards.mount(cardHost,{creation:true});
+      view.querySelectorAll('[data-saved-cards]').forEach(host=>BT.readingCards.mount(host,{creation:true}));
       const publishedCards=view.querySelector('[data-profile-cards]');if(publishedCards&&BT.auth.getCurrentUser()?.id&&!isGuestMode())BT.readingCards.mount(publishedCards,{owner:BT.auth.getCurrentUser().id,published:true});
       BT.push?.renderControls?.();
       ui.renderedRoute = ui.route; ui.renderedHash = location.hash;
@@ -551,7 +551,7 @@
       <section class="card week-overview" aria-labelledby="week-overview-title"><div><p class="eyebrow">À votre rythme</p><h2 id="week-overview-title">Votre semaine</h2><p>${goals.week.value} jour${goals.week.value > 1 ? 's' : ''} de lecture sur ${goals.week.target} souhaité${goals.week.target > 1 ? 's' : ''}</p></div><a class="text-link" href="#profile?section=goals">Voir mes objectifs →</a><div class="day-rings">${goals.week.days.map(day => `<button class="day-ring ${day.today ? 'is-today' : ''} ${day.reached ? 'is-reached' : ''}" type="button" data-action="show-day" data-day="${day.key}" style="--progress:${Math.min(360, pct(day.minutes, day.target) * 3.6)}deg" aria-label="${day.label}, ${day.minutes} minutes sur ${day.target}${day.today ? ', aujourd’hui' : ''}"><span>${day.label}</span></button>`).join('')}</div></section>
       <details class="memory-disclosure section-block" ${ui.memoryExpanded || ui.quizStarted ? 'open' : ''}><summary><span><span class="eyebrow">Ce qui reste des livres</span><strong>Retrouver mes souvenirs</strong><span class="small muted">Mots, citations et jeux de mémoire</span></span><span aria-hidden="true">＋</span></summary><div>
       <section class="section-block memory-section" aria-labelledby="memory-title">
-        <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} disponible${memory.length > 1 ? 's' : ''}</p><h2 id="memory-title">Mémoire active</h2><p class="small muted">Cherchez la réponse, touchez une carte pour la retourner ou balayez pour en choisir une autre.</p></div><div class="section-heading__actions"><a class="text-link" href="#path?tab=lexicon">Mon lexique</a>${surfaceColorPicker('memory-card-color', memoryColor, 'Personnaliser la couleur des cartes devinettes', 'memory-color-picker')}</div></div>
+        <div class="section-heading"><div><p class="eyebrow">${memory.length} carte${memory.length > 1 ? 's' : ''} disponible${memory.length > 1 ? 's' : ''}</p><h2 id="memory-title">Mémoire active</h2><p class="ui-help">Touchez pour retourner · balayez pour changer.</p></div><div class="section-heading__actions"><a class="text-link" href="#path?tab=lexicon">Mon lexique</a>${surfaceColorPicker('memory-card-color', memoryColor, 'Personnaliser la couleur des cartes devinettes', 'memory-color-picker')}</div></div>
         <div class="memory-list memory-list--${memoryColor}" aria-label="Cartes de la mémoire active">${memory.length ? `<div class="memory-carousel" data-memory-carousel tabindex="0" aria-label="Balayez horizontalement entre les cartes">${memory.map((item, index) => renderMemoryQuiz(item, index + 1, memory.length)).join('')}</div><div class="memory-carousel-dots" aria-hidden="true">${memory.map((_, index) => `<span class="${index === Math.min(ui.memoryCursor, memory.length - 1) ? 'is-current' : ''}"></span>`).join('')}</div>` : renderMemoryComplete()}</div>
         <p class="memory-reminder small muted">Les cartes sont réservées aux mots nouveaux · une nouvelle entrée arrive automatiquement après « Retrouvé ».</p>
       </section>
@@ -565,7 +565,7 @@
       ${renderMonthlyReportCTA()}`;
   }
 
-  function renderMonthlyReportCTA() { return `<section class="card monthly-report-cta section-block" aria-labelledby="monthly-report-title"><div><p class="eyebrow">Votre mois en images</p><h2 id="monthly-report-title">Ma carte de lecture</h2><p class="small muted">Vos livres et vos moments de lecture, réunis dans une carte BOO-P à partager.</p></div><button class="button button--primary" type="button" data-action="open-monthly-report">Créer ma carte du mois</button></section>`; }
+  function renderMonthlyReportCTA() { return '<section class="section-block home-reading-cards" data-saved-cards></section>'; }
 
   function goalMini(label, value, progress) {
     const mixed = typeof progress === 'object';
@@ -784,7 +784,7 @@
       ['public','Fil'], ['clubs','Clubs & salons'], ['friends','Amis']
     ];
     const bodies = { public: renderPublicFeed, clubs: renderClubsAndSalons, salons: renderClubsAndSalons, friends: renderFriends };
-    return `<section class="page-head"><div><p class="eyebrow">Des échanges sans classement</p><h1>Communauté</h1><p>Découvrez des lectures partagées et choisissez toujours ce qui devient visible.</p></div><span class="simulated-badge">Exemples fictifs · contributions Supabase</span></section>
+    return `<section class="page-head"><div><h1>Communauté</h1></div></section>
       <nav class="tabs" aria-label="Sections de la Communauté">${tabs.map(([id,label]) => `<a class="tab" href="#community?tab=${id}" aria-current="${(ui.communityTab === id || id === 'clubs' && ui.communityTab === 'salons') ? 'page' : 'false'}">${label}</a>`).join('')}</nav>
       ${bodies[ui.communityTab]()}`;
   }
@@ -793,7 +793,7 @@
 
   function renderPublicFeed() {
     const posts = store.getCommunity().posts.slice().sort((a,b) => new Date(b.date) - new Date(a.date));
-    return `<div class="section-heading"><div><h2>Fil des lecteurs</h2><p class="small muted">Publications de la communauté et de vos amis, selon l’audience choisie. Les exemples sont fictifs.</p></div><button class="button button--primary button--small" type="button" data-action="create-post">Laisser une Trace</button></div>
+    return `<div class="section-heading"><div><h2>Fil des lecteurs</h2></div><button class="button button--primary button--small" type="button" data-action="create-post">Laisser une Trace</button></div>
       <div class="public-feed" tabindex="0" aria-label="Fil de Traces, faire défiler pour voir toutes les publications">${posts.map(post => renderPost(post)).join('')}</div>`;
   }
 
@@ -955,8 +955,8 @@
     });
     const view = ['shelf','list'].includes(settings.libraryView) ? settings.libraryView : 'grid';
     return `<div class="library-search-row"><label class="search-field" for="library-search"><span aria-hidden="true">⌕</span><input id="library-search" data-input="library-search" type="search" value="${attr(ui.libraryQuery)}" placeholder="Titre, auteur ou rayon…"></label>${addBookButton()}</div>
-      <div class="filter-chips" role="group" aria-label="Lectures à afficher">${[['tous','Tous'],['en-cours','En cours'],['a-lire','À lire'],['lu','Lus'],['wishlist','Envies']].map(([value,label]) => `<button type="button" data-action="library-filter" data-status="${value}" aria-pressed="${ui.libraryStatus === value}">${label}</button>`).join('')}</div>
-      <div class="library-tools"><p class="small muted" role="status">${books.length} livre${books.length > 1 ? 's' : ''}</p><details class="library-options"><summary>Filtres et affichage</summary><div class="form-grid"><label class="field">Statut<select id="library-status" data-change="library-status"><option value="tous" ${ui.libraryStatus === 'tous' ? 'selected' : ''}>Tous mes livres</option><option value="wishlist" ${ui.libraryStatus === 'wishlist' ? 'selected' : ''}>Mes envies</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.libraryStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Trier<select id="library-sort" data-change="library-sort">${[['author','Par auteur'],['title','Par titre'],['recent','Ajouts récents'],['status','Par statut']].map(([value,label]) => `<option value="${value}" ${sort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><div class="view-toggle" role="group" aria-label="Affichage de la bibliothèque">${[['grid','Grille'],['list','Liste'],['shelf','Étagère']].map(([value,label]) => `<button class="button button--secondary button--small" type="button" data-action="library-view" data-view="${value}" aria-pressed="${view === value}">${label}</button>`).join('')}</div></div></details></div>
+
+      <div class="library-tools"><p class="small muted" role="status">${books.length} livre${books.length > 1 ? 's' : ''}</p><details class="notebook-filters library-filters"><summary>Filtres${ui.libraryStatus!=='tous'?' · actifs':''}</summary><div class="library-filter-panel"><label class="field">Statut<select id="library-status" data-change="library-status"><option value="tous" ${ui.libraryStatus === 'tous' ? 'selected' : ''}>Tous mes livres</option><option value="wishlist" ${ui.libraryStatus === 'wishlist' ? 'selected' : ''}>Mes envies</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.libraryStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Trier<select id="library-sort" data-change="library-sort">${[['author','Par auteur'],['title','Par titre'],['recent','Ajouts récents'],['status','Par statut']].map(([value,label]) => `<option value="${value}" ${sort === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><div class="view-toggle" role="group" aria-label="Affichage de la bibliothèque">${[['grid','Grille'],['list','Liste'],['shelf','Étagère']].map(([value,label]) => `<button class="button button--secondary button--small" type="button" data-action="library-view" data-view="${value}" aria-pressed="${view === value}">${label}</button>`).join('')}</div></div></details>${view==='shelf'?surfaceColorPicker('library-finish',settings.libraryFinish || 'terracotta','Couleur de la bibliothèque'):''}</div>
       ${books.length ? renderLibraryBooks(books, view) : `<div class="empty-state"><h3>${ui.libraryStatus === 'wishlist' ? 'Votre wishlist est prête à accueillir des envies' : 'Aucun livre ne correspond'}</h3><p>${ui.libraryStatus === 'wishlist' ? 'Ajoutez une suggestion ou un livre manuellement.' : 'Modifiez le filtre ou ajoutez un ouvrage manuellement.'}</p><button class="button button--primary" type="button" data-action="add-book">Ajouter un livre</button></div>`}
       ${renderRecommendations()}`;
   }
@@ -977,7 +977,7 @@
       const isOpen = ui.libraryQuery || !collapsed.has(genreKey);
       return `<details class="genre-shelf" data-library-genre="${attr(genreKey)}" data-drop-genre="${attr(genre)}" ${isOpen ? 'open' : ''}><summary><span>${esc(genre)}</span><small>${items.length} livre${items.length > 1 ? 's' : ''} · glissez horizontalement</small></summary><div class="physical-shelf" role="group" tabindex="0" aria-label="Rayon ${attr(genre)}, défilement horizontal">${items.map((book,index) => renderBookSpine(book,index)).join('')}</div></details>`;
     }).join('');
-    return `<details class="shelf-appearance"><summary>Apparence de l’étagère</summary><div class="bookcase-finish-picker" role="group" aria-label="Couleur du meuble">${SURFACE_COLORS.map(([key,label]) => `<button type="button" class="bookcase-finish-swatch bookcase-finish-swatch--${key}" data-action="library-finish" data-finish="${key}" aria-label="${label}" title="${label}" aria-pressed="${finish === key}"><span aria-hidden="true"></span></button>`).join('')}</div></details><div class="bookcase bookcase--${finish}" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction"><span aria-hidden="true">↔</span> Glissez pour parcourir. Maintenez un livre pour le déplacer vers un autre rayon. Deux touches ouvrent sa fiche.</p>${shelves}</div>`;
+    return `<div class="bookcase bookcase--${finish}" aria-label="Bibliothèque physique organisée par rayons"><div class="bookcase__top"></div><p class="bookcase__instruction ui-help">Appui long pour ranger · deux touches pour ouvrir.</p>${shelves}</div>`;
   }
 
   function renderBookSpine(book, index) {
@@ -1127,7 +1127,7 @@
       }).join('') : '';
       return `<div class="trail-canvas-book-wrap trail-canvas-book-wrap--${node.side} ${expanded ? 'is-expanded' : ''}" style="--x:${node.x}px;--y:${node.y}px;--trail-branch-color:${attr(node.color)}"><button class="trail-canvas-book trail-canvas-book--${attr(book.status)}" type="button" data-action="toggle-trail-book" data-id="${attr(book.id)}" aria-expanded="${expanded}" aria-label="${expanded ? 'Replier' : 'Déployer'} les détails de ${attr(book.title)}"><span class="trail-canvas-book__status">${esc(STATUS_LABELS[book.status])}</span><strong>${esc(book.title)}</strong><small>${esc(book.authors.join(', '))}</small><time datetime="${attr(date)}">${dateLabel} · ${formatDate(date)}</time><span class="trail-canvas-book__toggle" aria-hidden="true">${expanded ? '−' : '+'}</span></button>${expanded ? `<a class="trail-canvas-book__open" href="#book?id=${encodeURIComponent(book.id)}">Ouvrir la fiche →</a>` : ''}</div>${satellites}`;
     }).join('');
-    const filters = `<div class="trail-toolbar"><div><label for="trail-year">Année</label><select id="trail-year" data-change="trail-year"><option value="all" ${ui.trailYear === 'all' ? 'selected' : ''}>Toutes</option>${years.map(year => `<option value="${year}" ${String(year) === ui.trailYear ? 'selected' : ''}>${year}</option>`).join('')}</select></div><div><label for="trail-status">Statut</label><select id="trail-status" data-change="trail-status"><option value="all" ${ui.trailStatus === 'all' ? 'selected' : ''}>Tous les livres</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.trailStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div><span>${books.length} livre${books.length > 1 ? 's' : ''} affiché${books.length > 1 ? 's' : ''}</span></div>`;
+    const filters = `<details class="notebook-filters"><summary>Filtres${ui.trailYear!=='all'||ui.trailStatus!=='all'?' · actifs':''}</summary><div class="trail-toolbar"><div><label for="trail-year">Année</label><select id="trail-year" data-change="trail-year"><option value="all" ${ui.trailYear === 'all' ? 'selected' : ''}>Toutes</option>${years.map(year => `<option value="${year}" ${String(year) === ui.trailYear ? 'selected' : ''}>${year}</option>`).join('')}</select></div><div><label for="trail-status">Statut</label><select id="trail-status" data-change="trail-status"><option value="all" ${ui.trailStatus === 'all' ? 'selected' : ''}>Tous les livres</option>${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${ui.trailStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div><span>${books.length} livre${books.length > 1 ? 's' : ''} affiché${books.length > 1 ? 's' : ''}</span></div></details>`;
     const modes = `<div class="trail-view-modes"><div class="filter-chips" role="group" aria-label="Présentation du Sentier"><button type="button" data-action="trail-mode" data-mode="map" aria-pressed="${ui.trailMode === 'map'}">Carte</button><button type="button" data-action="trail-mode" data-mode="timeline" aria-pressed="${ui.trailMode === 'timeline'}">Chronologie</button></div><button class="button button--secondary button--small" type="button" data-action="trail-immersive" aria-pressed="${ui.trailImmersive}">${ui.trailImmersive ? 'Réduire le Sentier' : 'Agrandir le Sentier'}</button></div>`;
     if (ui.trailMode === 'timeline') return `${modes}${filters}<ol class="trail-chronology">${books.map(book => `<li><time datetime="${attr(activityDate(book))}">${formatDate(activityDate(book))}</time><a class="card" href="#book?id=${encodeURIComponent(book.id)}">${cover(book,'small')}<span><strong>${esc(book.title)}</strong><span class="small muted">${esc(book.authors.join(', '))}</span><span class="status-chip">${STATUS_LABELS[book.status]}</span></span><span aria-hidden="true">→</span></a></li>`).join('') || '<li>Aucun livre pour ces filtres.</li>'}</ol>`;
     const profile = store.getProfile(), scaledWidth = Math.round(layout.width * ui.trailScale), scaledHeight = Math.round(layout.height * ui.trailScale);
@@ -1158,7 +1158,7 @@
       ${goalCard('week','Cette semaine',`${progress.week.value}/${progress.week.target} jours`,`Lire ${state.week.dailyMinutes} min par jour`,pct(progress.week.value,progress.week.target),state.week.history)}
       ${goalCard('month','Ce mois',goalStatusText(progress.month),'Chaque livre choisi vaut une part : vert s’il est lu, orange s’il est en cours.',progress.month,state.month.history)}
       ${goalCard('year','Cette année',goalStatusText(progress.year),'Calcul automatique sur toute la bibliothèque : un livre terminé vaut 1, un livre en cours ou en pause vaut 0,5.',progress.year,state.year.history)}
-    </div><p class="small muted section-block">Dépliez un objectif pour voir son détail et les livres qui composent sa progression. L’objectif annuel ne demande plus aucune sélection manuelle.</p>
+    </div>
 `;
   }
 
@@ -1317,7 +1317,7 @@
     const all = store.getNotifications();
     const items = ui.notificationFilter === 'unread' ? all.filter(item => !item.read) : ui.notificationFilter === 'social' ? all.filter(item => ['friend','trace','encouragement'].includes(item.type)) : all;
     const syncNote = isGuestMode() ? 'En mode invité, les notifications de test restent sur cet appareil.' : 'Demandes d’amis, Traces et encouragements sont synchronisés avec votre compte BOO-P.';
-    document.getElementById('notifications-body').innerHTML = `<div class="toolbar"><label class="sr-only" for="notification-filter">Filtrer</label><select id="notification-filter" data-change="notification-filter"><option value="all" ${ui.notificationFilter === 'all' ? 'selected' : ''}>Toutes</option><option value="unread" ${ui.notificationFilter === 'unread' ? 'selected' : ''}>Non lues</option><option value="social" ${ui.notificationFilter === 'social' ? 'selected' : ''}>Communauté</option></select><button class="button button--ghost button--small" type="button" data-action="mark-all-notifications">Tout marquer comme lu</button></div><p class="small muted">${syncNote}</p>${items.length ? items.map(item => `<article class="notification-item ${item.read ? '' : 'is-unread'}">${item.read ? '<span class="notification-dot" style="opacity:.2"></span>' : '<span class="notification-dot"></span>'}<div class="card-content"><strong>${esc(item.title)}</strong><p class="small">${esc(item.text)}</p><span class="micro muted">${relativeDate(item.date)}</span><div class="card-actions"><button class="text-link small" type="button" data-action="open-notification" data-id="${attr(item.id)}" data-route="${attr(item.route)}">Ouvrir</button>${!item.read ? `<button class="text-link small" type="button" data-action="mark-notification" data-id="${attr(item.id)}">Marquer comme lue</button>` : ''}</div></div></article>`).join('') : `<div class="empty-state notification-empty"><div class="notification-sleeper" aria-hidden="true"><span class="notification-sleeper__pillow"></span><span class="notification-sleeper__head"></span><span class="notification-sleeper__body"></span><span class="notification-sleeper__blanket"></span><i>Z</i><i>Z</i><i>Z</i></div><h3>Tout est calme</h3><p>Aucune notification dans ce filtre.</p></div>`}`;
+    document.getElementById('notifications-body').innerHTML = `<div class="toolbar"><details class="notebook-filters"><summary>Filtres${ui.notificationFilter!=='all'?' · actifs':''}</summary><label class="sr-only" for="notification-filter">Filtrer</label><select id="notification-filter" data-change="notification-filter"><option value="all" ${ui.notificationFilter === 'all' ? 'selected' : ''}>Toutes</option><option value="unread" ${ui.notificationFilter === 'unread' ? 'selected' : ''}>Non lues</option><option value="social" ${ui.notificationFilter === 'social' ? 'selected' : ''}>Communauté</option></select></details><button class="button button--ghost button--small" type="button" data-action="mark-all-notifications">Tout marquer comme lu</button></div><p class="small muted">${syncNote}</p>${items.length ? items.map(item => `<article class="notification-item ${item.read ? '' : 'is-unread'}">${item.read ? '<span class="notification-dot" style="opacity:.2"></span>' : '<span class="notification-dot"></span>'}<div class="card-content"><strong>${esc(item.title)}</strong><p class="small">${esc(item.text)}</p><span class="micro muted">${relativeDate(item.date)}</span><div class="card-actions"><button class="text-link small" type="button" data-action="open-notification" data-id="${attr(item.id)}" data-route="${attr(item.route)}">Ouvrir</button>${!item.read ? `<button class="text-link small" type="button" data-action="mark-notification" data-id="${attr(item.id)}">Marquer comme lue</button>` : ''}</div></div></article>`).join('') : `<div class="empty-state notification-empty"><div class="notification-sleeper" aria-hidden="true"><span class="notification-sleeper__pillow"></span><span class="notification-sleeper__head"></span><span class="notification-sleeper__body"></span><span class="notification-sleeper__blanket"></span><i>Z</i><i>Z</i><i>Z</i></div><h3>Tout est calme</h3><p>Aucune notification dans ce filtre.</p></div>`}`;
   }
 
   function openTraceDialog(bookId = null) {
@@ -1345,19 +1345,19 @@
     openDialog({ title: editing ? 'Modifier le livre' : 'Ajouter un livre', eyebrow: editing ? 'Métadonnées modifiables' : 'ISBN ou saisie manuelle', wide: true, body: `
       <section class="book-import-panel" aria-labelledby="book-isbn-photo-title">
         <div class="book-import-grid">
-          <label class="camera-dropzone" for="isbn-photo-file"><img class="isbn-photo-preview" id="book-isbn-photo-preview" alt="Aperçu du code-barres ISBN" hidden><span class="isbn-scan-frame" aria-hidden="true"><i></i></span><span id="book-isbn-photo-prompt"><strong>Photographier le code-barres ISBN</strong><br><span class="small muted">Placez le code-barres et ses chiffres dans le cadre horizontal</span></span><input class="sr-only" id="isbn-photo-file" type="file" accept="image/*,.heic,.heif" capture="environment" data-change="isbn-photo-file"></label>
+          <div class="isbn-photo-actions"><button class="button button--primary" type="button" data-action="open-isbn-camera">Ouvrir la caméra</button><label class="button button--secondary" for="isbn-photo-file">Importer une photo<input class="sr-only" id="isbn-photo-file" type="file" accept="image/*,.heic,.heif" data-change="isbn-photo-file"></label></div><div class="camera-dropzone" id="isbn-photo-frame" hidden><img class="isbn-photo-preview" id="book-isbn-photo-preview" alt="Zone ISBN qui sera analysée" hidden></div>
           <div class="book-import-copy"><h3 id="book-isbn-photo-title">Lire le code ISBN</h3><p class="small muted">BOO-P analyse uniquement le code-barres ou le numéro ISBN visible sur la photo. La photo reste sur cet appareil et n’est pas enregistrée comme couverture.</p><button class="button button--sage" id="scan-book-isbn" type="button" data-action="scan-book-isbn" disabled>Lire l’ISBN</button></div>
         </div>
         <div class="book-analysis-status small" id="book-analysis-status" role="status" aria-live="polite"><span id="book-analysis-message">Vous pouvez photographier le code ou saisir l’ISBN ci-dessous.</span><progress id="book-analysis-progress" max="1" value="0" hidden></progress></div>
       </section>
-      <section class="isbn-lookup-card section-block" aria-labelledby="isbn-lookup-title"><h3 id="isbn-lookup-title">Rechercher avec le code ISBN</h3><p class="small muted">Le numéro se trouve généralement près du code-barres au dos du livre.</p><form class="isbn-lookup-form" data-form="isbn-lookup"><label class="field" for="book-isbn-lookup"><span class="sr-only">ISBN-10 ou ISBN-13</span><input id="book-isbn-lookup" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="Ex. 9782070360024" value="${attr(book?.isbn || '')}" required></label><button class="button button--secondary" type="submit">Rechercher l’ISBN</button></form></section>
+      <section class="isbn-lookup-card section-block" aria-labelledby="isbn-lookup-title"><h3 id="isbn-lookup-title">Rechercher avec le code ISBN</h3><form class="isbn-lookup-form" data-form="isbn-lookup"><label class="field" for="book-isbn-lookup"><span class="sr-only">ISBN-10 ou ISBN-13</span><input id="book-isbn-lookup" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="Ex. 9782070360024" value="${attr(book?.isbn || '')}" required></label><button class="button button--secondary" type="submit">Rechercher l’ISBN</button></form></section>
       <div id="book-lookup-results" aria-live="polite"></div>
       <hr class="section-block"><p class="eyebrow">Saisie manuelle ou correction</p>
-      <form class="form-grid" data-form="book"><input type="hidden" name="id" value="${attr(book?.id || '')}"><input type="hidden" name="coverUrl" id="book-cover-value" value="${attr(book?.coverUrl || '')}"><input type="hidden" name="coverSource" id="book-cover-source" value="${attr(ui.pendingCoverKind)}"><div class="field-row"><label class="field">Destination<select name="libraryState"><option value="library" ${book?.libraryState !== 'wishlist' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${book?.libraryState === 'wishlist' ? 'selected' : ''}>Ma wishlist</option></select></label><label class="field">Support<select name="mediaType" data-change="book-media"><option value="print" ${book?.mediaType !== 'ebook' && book?.mediaType !== 'audio' ? 'selected' : ''}>Livre papier</option><option value="ebook" ${book?.mediaType === 'ebook' ? 'selected' : ''}>Livre numérique</option><option value="audio" ${book?.mediaType === 'audio' ? 'selected' : ''}>Livre audio</option></select></label></div><div class="field-row"><label class="field">Titre<input id="book-title-field" name="title" required value="${attr(book?.title || '')}" placeholder="Titre du livre"></label><label class="field">Auteur(s)<input id="book-authors-field" name="authors" required value="${attr(book?.authors.join(', ') || '')}" placeholder="Prénom Nom, autre auteur"></label></div>${BT.shelves.field(book?.genre || '')}<div class="field-row"><label class="field">ISBN<input id="book-isbn-field" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" value="${attr(book?.isbn || '')}" placeholder="ISBN-10 ou ISBN-13"></label><label class="field">Date de publication<input id="book-published-field" name="publishedDate" value="${attr(book?.publishedDate || '')}" placeholder="Ex. 2024"></label></div><div class="field-row"><label class="field">Éditeur<input id="book-publisher-field" name="publisher" value="${attr(book?.publisher || '')}"></label><label class="field">Édition<input id="book-edition-field" name="edition" value="${attr(book?.edition || '')}"></label></div><div class="field-row" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}><label class="field">Format<input id="book-format-field" name="format" value="${attr(book?.format || 'Broché')}"></label><label class="field">Nombre de pages<input id="book-pages-field" type="number" min="0" name="totalPages" value="${book?.totalPages || ''}"></label></div><fieldset class="audio-book-fields" data-audio-fields ${book?.mediaType === 'audio' ? '' : 'hidden'}><legend>Informations du livre audio</legend><div class="field-row"><label class="field">Durée totale (minutes)<input type="number" min="0" name="durationMinutes" value="${book?.durationMinutes || ''}"></label><label class="field">Minute atteinte<input type="number" min="0" name="currentMinute" value="${book?.currentMinute || 0}"></label></div><div class="field-row"><label class="field">Narrateur ou narratrice<input name="narrator" value="${attr(book?.narrator || '')}"></label><label class="field">Plateforme ou source<input name="audioPlatform" value="${attr(book?.audioPlatform || '')}" placeholder="Audible, CD, bibliothèque…"></label></div></fieldset><label class="field">Résumé<textarea id="book-description-field" name="description">${esc(book?.description || '')}</textarea></label><div class="field-row"><label class="field">Statut<select name="status">${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${book?.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Situation<select name="situation">${Object.entries(SITUATION_LABELS).map(([value,label]) => `<option value="${value}" ${book?.situation === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><div class="field-row"><label class="field" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}>Page atteinte<input type="number" min="0" name="currentPage" value="${book?.currentPage || 0}"></label><label class="checkbox-row"><input type="checkbox" name="historicalBeforeJoin" ${book?.historicalBeforeJoin ? 'checked' : ''}> Lu avant mon inscription</label></div><p class="small muted">Vous pouvez toujours compléter ou corriger les informations avant l’ajout.</p><button class="button button--primary" type="submit">${editing ? 'Enregistrer le livre' : 'Ajouter à BOO-P'}</button></form>` });
+      <form class="form-grid" data-form="book"><input type="hidden" name="id" value="${attr(book?.id || '')}"><input type="hidden" name="coverUrl" id="book-cover-value" value="${attr(book?.coverUrl || '')}"><input type="hidden" name="coverSource" id="book-cover-source" value="${attr(ui.pendingCoverKind)}"><div class="field-row"><label class="field">Destination<select name="libraryState"><option value="library" ${book?.libraryState !== 'wishlist' ? 'selected' : ''}>Ma bibliothèque</option><option value="wishlist" ${book?.libraryState === 'wishlist' ? 'selected' : ''}>Ma wishlist</option></select></label><label class="field">Support<select name="mediaType" data-change="book-media"><option value="print" ${book?.mediaType !== 'ebook' && book?.mediaType !== 'audio' ? 'selected' : ''}>Livre papier</option><option value="ebook" ${book?.mediaType === 'ebook' ? 'selected' : ''}>Livre numérique</option><option value="audio" ${book?.mediaType === 'audio' ? 'selected' : ''}>Livre audio</option></select></label></div><div class="field-row"><label class="field">Titre<input id="book-title-field" name="title" required value="${attr(book?.title || '')}" placeholder="Titre du livre"></label><label class="field">Auteur(s)<input id="book-authors-field" name="authors" required value="${attr(book?.authors.join(', ') || '')}" placeholder="Prénom Nom, autre auteur"></label></div>${BT.shelves.field(book?.genre || '')}<div class="field-row"><label class="field">ISBN<input id="book-isbn-field" name="isbn" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" value="${attr(book?.isbn || '')}" placeholder="ISBN-10 ou ISBN-13"></label><label class="field">Date de publication<input id="book-published-field" name="publishedDate" value="${attr(book?.publishedDate || '')}" placeholder="Ex. 2024"></label></div><div class="field-row"><label class="field">Éditeur<input id="book-publisher-field" name="publisher" value="${attr(book?.publisher || '')}"></label><label class="field">Édition<input id="book-edition-field" name="edition" value="${attr(book?.edition || '')}"></label></div><div class="field-row" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}><label class="field">Format<input id="book-format-field" name="format" value="${attr(book?.format || 'Broché')}"></label><label class="field">Nombre de pages<input id="book-pages-field" type="number" min="0" name="totalPages" value="${book?.totalPages || ''}"></label></div><fieldset class="audio-book-fields" data-audio-fields ${book?.mediaType === 'audio' ? '' : 'hidden'}><legend>Informations du livre audio</legend><div class="field-row"><label class="field">Durée totale (minutes)<input type="number" min="0" name="durationMinutes" value="${book?.durationMinutes || ''}"></label><label class="field">Minute atteinte<input type="number" min="0" name="currentMinute" value="${book?.currentMinute || 0}"></label></div><div class="field-row"><label class="field">Narrateur ou narratrice<input name="narrator" value="${attr(book?.narrator || '')}"></label><label class="field">Plateforme ou source<input name="audioPlatform" value="${attr(book?.audioPlatform || '')}" placeholder="Audible, CD, bibliothèque…"></label></div></fieldset><label class="field">Résumé<textarea id="book-description-field" name="description">${esc(book?.description || '')}</textarea></label><div class="field-row"><label class="field">Statut<select name="status">${Object.entries(STATUS_LABELS).map(([value,label]) => `<option value="${value}" ${book?.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label class="field">Situation<select name="situation">${Object.entries(SITUATION_LABELS).map(([value,label]) => `<option value="${value}" ${book?.situation === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label></div><div class="field-row"><label class="field" data-page-fields ${book?.mediaType === 'audio' ? 'hidden' : ''}>Page atteinte<input type="number" min="0" name="currentPage" value="${book?.currentPage || 0}"></label><label class="checkbox-row"><input type="checkbox" name="historicalBeforeJoin" ${book?.historicalBeforeJoin ? 'checked' : ''}> Lu avant mon inscription</label></div><button class="button button--primary" type="submit">${editing ? 'Enregistrer le livre' : 'Ajouter à BOO-P'}</button></form>` });
     const bookForm = document.querySelector('form[data-form="book"]');
-    const formHint = bookForm?.querySelector(':scope > p.small.muted');
+    const formHint = bookForm?.querySelector(':scope > button[type=submit]');
     if (bookForm && formHint) {
-      formHint.insertAdjacentHTML('beforebegin', `<div class="field-row reading-date-fields"><label class="field">Date de début de lecture<input type="date" name="startedAt" value="${attr(dateInputValue(book?.startedAt))}"></label><label class="field">Date de fin de lecture<input type="date" name="completedAt" value="${attr(dateInputValue(book?.completedAt))}"><span class="field-help">Cette date classe le livre dans le Sentier et le fait compter dans les objectifs du mois et de l’année correspondants.</span></label></div><p class="small muted">Pour une lecture antérieure à votre inscription, indiquez la date de fin si vous la connaissez. Sans date, le livre reste dans votre bibliothèque mais ne compte dans aucun objectif daté.</p><fieldset class="book-rating-field"><legend>Note du livre</legend>${ratingPicker(book?.rating, 'book-rating')}<input type="hidden" name="rating" id="book-rating" value="${book?.rating || ''}"><p class="small muted" id="book-rating-description">${book?.rating ? `${book.rating} étoile${book.rating > 1 ? 's' : ''} sur 5.` : 'Notation facultative de 1 à 5 étoiles.'}</p></fieldset>`);
+      formHint.insertAdjacentHTML('beforebegin', `<div class="field-row reading-date-fields"><label class="field">Date de début de lecture<input type="date" name="startedAt" value="${attr(dateInputValue(book?.startedAt))}"></label><label class="field">Date de fin de lecture<input type="date" name="completedAt" value="${attr(dateInputValue(book?.completedAt))}"><span class="ui-help">Utilisée pour le Sentier et les objectifs.</span></label></div><p class="ui-help">Sans date de fin, une lecture ancienne ne compte pas dans les objectifs datés.</p><fieldset class="book-rating-field"><legend>Note du livre</legend>${ratingPicker(book?.rating, 'book-rating')}<input type="hidden" name="rating" id="book-rating" value="${book?.rating || ''}"><p class="small muted" id="book-rating-description">${book?.rating ? `${book.rating} étoile${book.rating > 1 ? 's' : ''} sur 5.` : 'Notation facultative de 1 à 5 étoiles.'}</p></fieldset>`);
     }
     prepareBookDialog(editing);
     setBookEntryMode(editing ? 'manual' : 'search');
@@ -1373,7 +1373,7 @@
     document.getElementById('dialog-eyebrow').textContent = editing ? 'Votre édition' : 'Un livre, plusieurs façons de le trouver';
     const search = document.createElement('section');
     search.dataset.bookEntry = 'search';
-    search.innerHTML = `<form class="form-grid" data-form="catalog-search"><label class="field" for="catalog-query">Titre, auteur ou ISBN<input id="catalog-query" name="query" type="search" required minlength="2" maxlength="240" placeholder="Ex. L’Étranger, Albert Camus…" autocomplete="off"></label><button class="button button--primary" type="submit">Rechercher un livre</button><p class="small muted">Recherche dans Google Books et Open Library.</p></form>`;
+    search.innerHTML = `<form class="form-grid" data-form="catalog-search"><label class="field" for="catalog-query">Titre, auteur ou ISBN<input id="catalog-query" name="query" type="search" required minlength="2" maxlength="240" placeholder="Ex. L’Étranger, Albert Camus…" autocomplete="off"></label><button class="button button--primary" type="submit">Rechercher un livre</button><p class="ui-help">Google Books · Open Library</p></form>`;
     body.prepend(search);
     const modes = document.createElement('div'); modes.className = 'entry-modes'; modes.setAttribute('role','group'); modes.setAttribute('aria-label','Méthode d’ajout');
     modes.innerHTML = [['search','Rechercher'],['scan','Scanner un ISBN'],['manual','Saisie manuelle']].map(([value,label]) => `<button type="button" data-action="book-entry-mode" data-mode="${value}" aria-pressed="false">${label}</button>`).join('');
@@ -1411,7 +1411,7 @@
       if (title && !title.value) title.value = document.getElementById('catalog-query')?.value || '';
       if (userAction) title?.focus();
     } else if (mode === 'search' && userAction) document.getElementById('catalog-query')?.focus();
-    if (mode === 'scan' && userAction) document.getElementById('isbn-photo-file')?.click();
+    if (mode === 'scan' && userAction) document.querySelector('[data-action=open-isbn-camera]')?.click();
   }
 
   async function submitCatalogSearch(form, data) {
@@ -1576,7 +1576,7 @@
 
   function openMonthlyReportDialog(monthKey = window.BT.monthlyReport.normalizeMonthKey()) {
     const includeNotes = Boolean(ui.monthlyReportData?.includePersonalNotes);
-    openDialog({ title:'Rapport mensuel', eyebrow:'Image privée créée sur cet appareil', wide:true, body:`<form class="form-grid" data-form="monthly-report"><label class="field">Mois du rapport<select name="monthKey">${monthlyReportOptions(monthKey)}</select></label><fieldset><legend>Notes personnelles</legend><label class="checkbox-row"><input type="checkbox" name="includePersonalNotes" ${includeNotes ? 'checked' : ''}> Inclure un court extrait de mes Traces et notes de session</label><p class="small muted">Si cette option reste décochée, seules les statistiques, les livres et les entrées du lexique apparaissent. Aucune donnée n’est envoyée : l’image est générée localement.</p></fieldset><div class="report-format-note"><span aria-hidden="true">▣</span><div><strong>Format portrait 4:5</strong><p class="small muted">1080 × 1350 px, adapté au fil Instagram et au partage depuis un téléphone.</p></div></div><button class="button button--primary" type="submit">Générer mon image</button></form>` });
+    openDialog({ title:'Rapport mensuel', eyebrow:'Image privée créée sur cet appareil', wide:true, body:`<form class="form-grid" data-form="monthly-report"><label class="field">Mois du rapport<select name="monthKey">${monthlyReportOptions(monthKey)}</select></label><fieldset><legend>Notes personnelles</legend><label class="checkbox-row"><input type="checkbox" name="includePersonalNotes" ${includeNotes ? 'checked' : ''}> Inclure un court extrait de mes Traces et notes de session</label><p class="small muted">Si cette option reste décochée, seules les statistiques, les livres et les entrées du lexique apparaissent. Aucune donnée n’est envoyée : l’image est générée localement.</p></fieldset><div class="report-format-note"><span aria-hidden="true">▣</span><div><strong>Format portrait 4:5</strong><p class="ui-help">1080 × 1350 px</p></div></div><button class="button button--primary" type="submit">Générer mon image</button></form>` });
   }
 
   async function submitMonthlyReport(form, data) {
@@ -1591,7 +1591,7 @@
       ui.monthlyReportCanvas.setAttribute('role', 'img');
       ui.monthlyReportCanvas.setAttribute('aria-label', `Rapport de lecture de ${ui.monthlyReportData.label}`);
       const body = document.getElementById('dialog-body');
-      body.innerHTML = `<div class="report-preview-wrap" id="monthly-report-preview-host"></div><p class="small muted">Relisez l’image avant de la publier. Le bouton Partager ouvre la feuille de partage de votre téléphone lorsque le navigateur le permet.</p><div class="button-row report-actions"><button class="button button--primary" type="button" data-action="save-monthly-card">Enregistrer dans mon carnet</button><button class="button button--primary" type="button" data-action="share-monthly-report">Partager l’image</button><button class="button button--secondary" type="button" data-action="download-monthly-report">Télécharger le PNG</button><button class="button button--ghost" type="button" data-action="edit-monthly-report">Modifier les options</button></div>`;
+      body.innerHTML = `<div class="report-preview-wrap" id="monthly-report-preview-host"></div><p class="ui-help">Relisez la carte avant de la partager.</p><div class="button-row report-actions"><button class="button button--primary" type="button" data-action="save-monthly-card">Enregistrer dans mon carnet</button><button class="button button--primary" type="button" data-action="share-monthly-report">Partager l’image</button><button class="button button--secondary" type="button" data-action="download-monthly-report">Télécharger le PNG</button><button class="button button--ghost" type="button" data-action="edit-monthly-report">Modifier les options</button></div>`;
       document.getElementById('monthly-report-preview-host').appendChild(ui.monthlyReportCanvas);
       showToast('Rapport mensuel prêt à être publié');
     } catch (error) { submit.disabled = false; submit.textContent = 'Générer mon image'; showToast(error.message || 'Le rapport ne peut pas être créé sur cet appareil'); }
@@ -1716,7 +1716,7 @@
       case 'trail-mode': rememberTrailViewport(); ui.trailMode = trigger.dataset.mode; render(); break;
       case 'trail-immersive': rememberTrailViewport(); ui.trailImmersive = !ui.trailImmersive; render(); requestAnimationFrame(() => document.querySelector('[data-action="trail-immersive"]')?.focus()); break;
       case 'library-view': ui.selectedLibraryBookId = null; store.saveSettings({ libraryView: trigger.dataset.view }); render(); break;
-      case 'library-finish': store.saveSettings({ libraryFinish:trigger.dataset.finish }); render(); break;
+      case 'library-finish': store.saveSettings({ libraryFinish:trigger.dataset.color }); render(); break;
       case 'toggle-trail-book': rememberTrailViewport(); ui.expandedTrailBooks.has(id) ? ui.expandedTrailBooks.delete(id) : ui.expandedTrailBooks.add(id); render(); break;
       case 'trail-zoom-in': rememberTrailViewport(); setTrailZoom(ui.trailScale + .15); break;
       case 'trail-zoom-out': rememberTrailViewport(); setTrailZoom(ui.trailScale - .15); break;
@@ -1727,6 +1727,7 @@
       case 'move-to-library': store.updateBook(id, { libraryState:'library' }); showToast('Livre ajouté à votre bibliothèque'); render(); break;
       case 'edit-book': openBookDialog(store.getBookById(id)); break;
       case 'delete-book': confirmDeleteBook(id); break;
+      case 'open-isbn-camera': { const form=document.querySelector('[data-form=book]'),account=BT.auth.getCurrentUser()?.id;const file=await BT.photoFrame.camera();if(file&&form?.isConnected&&account===BT.auth.getCurrentUser()?.id)await readISBNPhoto(file,true);break;}
       case 'scan-book-isbn': await scanBookISBN(trigger); break;
       case 'pick-book-result': pickBookResult(Number(trigger.dataset.index)); break;
       case 'manual-session': openManualSessionDialog(trigger.dataset.bookId || null); break;
@@ -1741,6 +1742,8 @@
       case 'dictionary-choice': chooseDictionaryDefinition(trigger); break;
       case 'lexicon-filter': ui.lexiconKind = trigger.dataset.kind || 'all'; render(); break;
       case 'edit-goal': openGoalDialog(trigger.dataset.period); break;
+      case 'reframe-post-photo': await previewPostPhoto(ui.pendingPostPhotoFile); break;
+      case 'remove-post-photo': {ui.pendingPostPhotoFile=null;if(ui.pendingPostPhotoUrl)URL.revokeObjectURL(ui.pendingPostPhotoUrl);ui.pendingPostPhotoUrl='';const preview=document.getElementById('post-photo-preview');preview.hidden=true;preview.removeAttribute('src');document.querySelector('.post-photo-tools').hidden=true;break;}
       case 'open-monthly-report': openMonthlyReportDialog(); break;
       case 'save-monthly-card': { trigger.disabled=true;try{ui.savedMonthlyCard ||= await BT.readingCards.save(ui.monthlyReportCanvas,ui.monthlyReportData);trigger.textContent='Enregistrée dans le carnet';const go=document.createElement('a');go.href='#path?tab=notebook&section=cards';go.className='text-link';go.textContent='Voir mes cartes';go.onclick=()=>closeDialog();trigger.after(go);showToast(ui.savedMonthlyCard.synced?'Carte enregistrée en privé dans votre carnet':'Carte enregistrée en privé sur cet appareil');}catch(error){trigger.disabled=false;showToast(error.message);} break; }
       case 'download-monthly-report': await downloadMonthlyReport(); break;
@@ -1802,7 +1805,7 @@
       case 'notification-filter': ui.notificationFilter = control.value; renderNotifications(); break;
       case 'session-page': { const value = clamp(control.value, 0, control.max || 99999); control.value = value; updateSessionPageOutput(control, value); store.updateActiveSession({ endPage: value }); break; }
       case 'isbn-photo-file': void readISBNPhoto(control.files?.[0]); break;
-      case 'post-photo': previewPostPhoto(control.files?.[0]); break;
+      case 'post-photo': void previewPostPhoto(control.files?.[0]); break;
       case 'profile-photo': previewProfilePhoto(control.files?.[0]); break;
       case 'salon-pages': void updateSalonSharing(control.dataset.id, control.checked); break;
     }
@@ -2189,14 +2192,18 @@
     if (help) help.textContent = 'La photo actuelle sera retirée après l’enregistrement.';
   }
 
-  function previewPostPhoto(file) {
-    const preview = document.getElementById('post-photo-preview'), help = document.getElementById('post-photo-help');
-    if (!preview || !help) return;
-    if (ui.pendingPostPhotoUrl) URL.revokeObjectURL(ui.pendingPostPhotoUrl);
-    ui.pendingPostPhotoUrl = '';
-    if (!file) { preview.hidden = true; preview.removeAttribute('src'); help.textContent = 'Facultatif · la photo sera redimensionnée et compressée avant envoi.'; return; }
-    ui.pendingPostPhotoUrl = URL.createObjectURL(file); preview.src = ui.pendingPostPhotoUrl; preview.hidden = false;
-    help.textContent = `${file.name} · compression automatique avant l’envoi.`;
+  async function previewPostPhoto(file) {
+    const preview=document.getElementById('post-photo-preview'),form=preview?.closest('form'),account=BT.auth.getCurrentUser()?.id;
+    if(!file||!form||ui.postPhotoBusy)return;
+    ui.postPhotoBusy=true;const submit=form.querySelector('[type=submit]');submit.disabled=true;
+    try {
+      const cropped=await BT.photoFrame.open(file);
+      if(!cropped||!form.isConnected||account!==BT.auth.getCurrentUser()?.id)return;
+      if(ui.pendingPostPhotoUrl)URL.revokeObjectURL(ui.pendingPostPhotoUrl);
+      ui.pendingPostPhotoFile=cropped;ui.pendingPostPhotoUrl=URL.createObjectURL(cropped);preview.src=ui.pendingPostPhotoUrl;preview.hidden=false;
+      form.querySelector('.post-photo-tools').hidden=false;
+    }catch(error){if(form.isConnected)showToast(error.message || 'Photo illisible.');}
+    finally{ui.postPhotoBusy=false;if(form.isConnected){form.querySelector('[name=photo]').value='';submit.disabled=false;}}
   }
 
   async function localPhotoData(file) {
@@ -2251,52 +2258,20 @@
     preview.hidden = false;
   }
 
-  async function cropISBNAnalysisBlob(blob) {
-    if (!blob || typeof createImageBitmap !== 'function') return blob;
-    const bitmap = await createImageBitmap(blob);
+  async function readISBNPhoto(file,framed=false) {
+    if(!file)return;
+    const form=document.querySelector('[data-form=book]'),scanButton=document.getElementById('scan-book-isbn'),account=BT.auth.getCurrentUser()?.id;
+    if(scanButton)scanButton.disabled=true;
     try {
-      const ratio = 1.8;
-      let sourceWidth = bitmap.width, sourceHeight = bitmap.height, sourceX = 0, sourceY = 0;
-      if (sourceWidth / sourceHeight > ratio) {
-        sourceWidth = Math.round(sourceHeight * ratio);
-        sourceX = Math.round((bitmap.width - sourceWidth) / 2);
-      } else {
-        sourceHeight = Math.round(sourceWidth / ratio);
-        sourceY = Math.round((bitmap.height - sourceHeight) / 2);
-      }
-      const scale = Math.min(1, 1600 / sourceWidth);
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(sourceWidth * scale));
-      canvas.height = Math.max(1, Math.round(sourceHeight * scale));
-      const context = canvas.getContext('2d', { alpha:false });
-      context.fillStyle = '#fff';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(bitmap, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
-      return await new Promise(resolve => canvas.toBlob(result => resolve(result || blob), 'image/jpeg', .92));
-    } catch { return blob; }
-    finally { bitmap.close?.(); }
-  }
-
-  async function readISBNPhoto(file) {
-    if (!file) return;
-    const scanButton = document.getElementById('scan-book-isbn');
-    if (scanButton) scanButton.disabled = true;
-    setBookAnalysisStatus('Préparation de la photo du code-barres…', 0.05);
-    try {
-      const prepared = await window.BT.bookLookup.prepareCover(file, update => setBookAnalysisStatus(update.message, update.progress));
-      ui.pendingISBNPhoto = prepared.dataUrl;
-      ui.pendingISBNPhotoFile = await cropISBNAnalysisBlob(prepared.analysisBlob || file);
-      setISBNPhotoPreview(prepared.dataUrl);
-      document.getElementById('book-isbn-photo-prompt')?.classList.add('has-preview');
-      setBookAnalysisStatus('Photo prête. Lancez maintenant la lecture du code ISBN.', null);
-      if (scanButton) scanButton.disabled = false;
-      showToast('Photo prête — elle ne sera pas enregistrée comme couverture');
-    } catch (error) {
-      ui.pendingISBNPhoto = '';
-      ui.pendingISBNPhotoFile = null;
-      setBookAnalysisStatus(error.message || 'Impossible de préparer cette image.', null, true);
-      showToast(error.message || 'Import de l’image impossible');
-    }
+      const cropped=framed?file:await BT.photoFrame.open(file,{isbn:true});
+      if(!cropped||!form?.isConnected||account!==BT.auth.getCurrentUser()?.id)return;
+      const prepared=await BT.bookLookup.prepareCover(cropped,update=>setBookAnalysisStatus(update.message,update.progress));
+      if(!form.isConnected||account!==BT.auth.getCurrentUser()?.id)return;
+      ui.pendingISBNPhoto=prepared.dataUrl;ui.pendingISBNPhotoFile=cropped;
+      setISBNPhotoPreview(prepared.dataUrl);document.getElementById('isbn-photo-frame').hidden=false;
+      setBookAnalysisStatus('Photo prête à analyser.',null);
+    }catch(error){if(form?.isConnected)setBookAnalysisStatus(error.message || 'Photo illisible.',null,true);}
+    finally{if(form?.isConnected){const input=form.querySelector('#isbn-photo-file');if(input)input.value='';if(scanButton)scanButton.disabled=false;}}
   }
 
   async function scanBookISBN(button) {
@@ -2583,17 +2558,18 @@
   }
 
   async function submitPost(form, data) {
+    if(ui.postPhotoBusy)return;
     const visibility = data.get('visibility');
     if (visibility === 'public' && store.getProfile().visibility === 'private' && !confirm('Votre profil est privé. Confirmez-vous cette publication ponctuelle dans le fil public ?')) return;
     const submit = form.querySelector('[type="submit"]'); submit.disabled = true; submit.textContent = 'Compression et enregistrement…';
     try {
       let post;
       if (isGuestMode()) {
-        const file = data.get('photo');
+        const file = ui.pendingPostPhotoFile;
         const photoData = file?.size ? await localPhotoData(file) : null;
         post = { type:data.get('type'), bookTitle:data.get('bookTitle'), text:data.get('text'), visibility, photoData };
       } else {
-        post = await window.BT.community.createPost({ type:data.get('type'), bookTitle:data.get('bookTitle'), text:data.get('text'), visibility, file:data.get('photo') });
+        post = await window.BT.community.createPost({ type:data.get('type'), bookTitle:data.get('bookTitle'), text:data.get('text'), visibility, file:ui.pendingPostPhotoFile });
       }
       if (post) store.addPost(post);
       if (ui.pendingPostPhotoUrl) URL.revokeObjectURL(ui.pendingPostPhotoUrl); ui.pendingPostPhotoUrl = '';
@@ -2806,11 +2782,12 @@
   }
 
   function openPostDialog() {
+    ui.pendingPostPhotoFile=null;if(ui.pendingPostPhotoUrl)URL.revokeObjectURL(ui.pendingPostPhotoUrl);ui.pendingPostPhotoUrl='';
     const settings = store.getSettings();
     const storageNote = isGuestMode()
-      ? 'Mode invité : la Trace et sa photo restent uniquement sur cet appareil et ne sont jamais publiées dans Supabase.'
-      : 'La Trace et sa photo sont enregistrées dans Supabase. Amis uniquement réserve la lecture aux amitiés acceptées. Pour publier dans un club, utilisez son espace dédié ; ici, Club reste privé.';
-    openDialog({ title:'Laisser une Trace', eyebrow:isGuestMode() ? 'Essai local' : 'Enregistrement sécurisé', body:`<form class="form-grid" data-form="post"><label class="field">Type d’activité<select name="type"><option value="trace">Trace ou bilan</option><option value="debut">Début de lecture</option><option value="fin">Fin de lecture</option><option value="goal">Objectif atteint</option></select></label><label class="field">Livre éventuel<select name="bookTitle"><option value="">Sans livre</option>${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Texte<textarea name="text" required maxlength="1200" placeholder="Ce que cette lecture laisse en vous…"></textarea></label><label class="field">Photo facultative<input type="file" name="photo" data-change="post-photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"><span class="field-help" id="post-photo-help">Facultatif · redimensionnement et compression automatiques.</span><img class="post-photo-preview" id="post-photo-preview" alt="Aperçu de la photo choisie" hidden></label><label class="field">Visibilité<select name="visibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="club">Club</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><p class="small muted">${storageNote}</p><button class="button button--primary" type="submit">Enregistrer la Trace</button></form>` });
+      ? 'Mode invité : cette Trace reste sur votre appareil.'
+      : 'Amis uniquement : vos amis acceptés. Pour partager dans un club, utilisez son espace ; ici, Club reste privé.';
+    openDialog({ title:'Laisser une Trace', eyebrow:isGuestMode() ? 'Essai local' : 'Enregistrement sécurisé', body:`<form class="form-grid" data-form="post"><label class="field">Type d’activité<select name="type"><option value="trace">Trace ou bilan</option><option value="debut">Début de lecture</option><option value="fin">Fin de lecture</option><option value="goal">Objectif atteint</option></select></label><label class="field">Livre éventuel<select name="bookTitle"><option value="">Sans livre</option>${store.getBooks().map(book => `<option value="${attr(book.title)}">${esc(book.title)}</option>`).join('')}</select></label><label class="field">Texte<textarea name="text" required maxlength="1200" placeholder="Ce que cette lecture laisse en vous…"></textarea></label><label class="field">Photo facultative<input type="file" name="photo" data-change="post-photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"><span class="ui-help" id="post-photo-help">Choisissez le format et le cadrage.</span><img class="post-photo-preview" id="post-photo-preview" alt="Photo telle qu’elle apparaîtra dans le fil" hidden></label><div class="post-photo-tools" hidden><button class="text-link" type="button" data-action="reframe-post-photo">Recadrer</button><button class="text-link" type="button" data-action="remove-post-photo">Retirer</button></div><label class="field">Visibilité<select name="visibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="club">Club</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><p class="small muted">${storageNote}</p><button class="button button--primary" type="submit">Enregistrer la Trace</button></form>` });
   }
 
   function openReplyDialog(postId, commentId) {

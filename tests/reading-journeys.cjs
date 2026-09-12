@@ -96,7 +96,7 @@ const out = path.resolve('.tmp/ux-updated');
     await route('#path?tab=library');
     await page.locator('.book-grid .book-card').first().waitFor();
     assert.ok((await page.locator('.book-grid .book-card').first().boundingBox()).y < 700);
-    await page.locator('.library-options > summary').click();
+    await page.locator('.library-filters > summary').click();
     await page.locator('[data-action="library-view"][data-view="list"]').click();
     await page.locator('.book-grid--list').waitFor();
     await page.reload({waitUntil:'domcontentloaded'});

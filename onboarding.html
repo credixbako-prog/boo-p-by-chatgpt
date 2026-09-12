@@ -594,7 +594,7 @@
 
       <div class="onboarding-book-tools">
         <button class="button button--secondary button--small onboarding-scan-button" type="button" id="scanOnboardingBook">▥ Scanner un livre</button>
-        <input type="file" id="onboardingBookScan" accept="image/*" capture="environment" hidden>
+        <label class="button button--secondary button--small" for="onboardingBookScan">Importer une photo<input type="file" id="onboardingBookScan" accept="image/*,.heic,.heif" hidden></label>
         <p id="onboardingScanStatus" role="status" aria-live="polite">Photographiez le code-barres ISBN d’un livre que vous avez lu.</p>
       </div>
 
@@ -682,7 +682,9 @@
   <script src="js/store.js?v=20260908-3"></script>
   <script src="js/book-lookup.js?v=20260824-5"></script>
   <script src="js/onboarding-catalog.js?v=20260908-1"></script>
-  <script src="js/onboarding.js?v=20260908-2"></script>
+  <link rel="stylesheet" href="css/ui-polish.css?v=20260912-1">
+  <script src="js/photo-frame.js?v=20260912-1"></script>
+  <script src="js/onboarding.js?v=20260912-1"></script>
   <script src="js/pwa.js?v=20260820-1"></script>
 </body>
 </html>

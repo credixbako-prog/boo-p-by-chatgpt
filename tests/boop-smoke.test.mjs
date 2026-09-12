@@ -33,7 +33,7 @@ test('onboarding: quatre étapes, choix facultatif de cinq livres, objectif et t
   assert.match(script, /Passer cette étape/);
   assert.match(html, /jusqu’à 5 livres/i);
   assert.match(html, /js\/onboarding-catalog\.js/);
-  assert.match(html, /capture="environment"/);
+  assert.match(html, /js\/photo-frame\.js/);
   assert.match(script, /scanPhysicalBook/);
   assert.match(script, /scanISBNFromImage/);
   const catalogContext = { window:{} };
@@ -88,7 +88,7 @@ test('mémoire, communauté et parcours exposent les fonctions demandées', asyn
   assert.match(app, /class="book-spine__peek"/);
   assert.match(app, /data-action="select-book"/);
   assert.match(app, /selectedLibraryBookId/);
-  assert.match(app, /Maintenez un livre pour le déplacer/);
+  assert.match(app, /Appui long pour ranger/);
   assert.match(app, /data-change="library-sort"/);
   assert.match(app, /Suggestions BOO-P · analyse locale/);
   assert.match(store, /post-10/);
@@ -311,7 +311,7 @@ test('objectifs: l’écran montre les livres concernés et leur état daté', a
   assert.match(css, /\.goal-book-list/);
   assert.match(css, /\.goal-books-more/);
   assert.match(css, /\.goal-accordion/);
-  assert.match(app, /L’objectif annuel ne demande plus aucune sélection manuelle/);
+  assert.match(app, /Calcul automatique sur toute la bibliothèque/);
   assert.match(app, /updates\.bookIds = period === 'year' \? \[\]/);
 });
 
@@ -555,7 +555,7 @@ test('ajout de livre: photo du code ISBN et saisie manuelle restent disponibles'
   assert.match(app, /BT.shelves.field/);
   assert.match(await read("js/library-shelves.js"), /Choisissez un rayon existant/);
   assert.match(app, /data-action="scan-book-isbn"/);
-  assert.match(app, /capture="environment"/);
+  assert.match(app, /data-action="open-isbn-camera"/);
   assert.match(app, /La photo reste sur cet appareil et n’est pas enregistrée comme couverture/);
   assert.doesNotMatch(app, /Rechercher par titre ou auteur/);
   assert.doesNotMatch(app, /Reconnaître la couverture/);
@@ -796,7 +796,7 @@ test('objectifs: le changement de mois et d’année archive la période puis re
 test('rapport mensuel: image Instagram et notes personnelles sur consentement', async () => {
   const [html, app, report, css, coverProxy] = await Promise.all([read('app.html'), read('js/mvp-app.js'), read('js/monthly-report.js'), read('css/mvp-v5.css'), read('supabase/functions/cover-image-proxy/index.ts')]);
   assert.match(html, /js\/monthly-report\.js/);
-  assert.match(app, /data-action="open-monthly-report"/);
+  assert.match(app, /class="section-block home-reading-cards" data-saved-cards/);
   assert.match(app, /name="includePersonalNotes"/);
   assert.match(app, /data-action="share-monthly-report"/);
   assert.match(report, /const WIDTH = 1080/);
@@ -853,8 +853,8 @@ test('ajout: la caméra reste réservée au choix explicite Scanner', async () =
   assert.match(app, /data-form="catalog-search"/);
   assert.match(app, /case 'add-book': openBookDialog\(\)/);
   assert.match(app, /mode === 'scan' && userAction/);
-  assert.match(app, /function cropISBNAnalysisBlob/);
-  assert.match(app, /const ratio = 1\.8/);
+  assert.match(app, /BT.photoFrame.open/);
+  assert.match(await read('js/photo-frame.js'), /cameraRect/);
   assert.match(css, /\.barcode-add-icon/);
   assert.match(css, /\.isbn-scan-frame/);
   assert.match(css, /aspect-ratio: 1\.8 \/ 1/);
@@ -893,7 +893,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v53/);
+  assert.match(worker, /boo-p-webapp-v54/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

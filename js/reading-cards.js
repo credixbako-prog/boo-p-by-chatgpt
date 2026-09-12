@@ -42,6 +42,7 @@ BT.readingCards=(()=>{
     }catch(e){status.textContent=e.message;}finally{submit.disabled=false;}};
   }
   function mount(host,{owner=scope(),creation=false,published=false}={}){
+    for(const refresh of views)if(!refresh.host?.isConnected)refresh();
     const account=scope();let generation=0,offset=0,rows=[],more=false;const current=()=>host.isConnected&&scope()===account;
     async function load(next=false){const token=++generation;const status=el('p','Chargement des cartes…','small muted');status.setAttribute('role','status');if(!next)host.replaceChildren(status);else host.append(status);
       try{
@@ -60,13 +61,13 @@ BT.readingCards=(()=>{
     }
     function paint(){host.replaceChildren();const heading=el('div',null,'section-heading'),title=el('h3',creation?'Mes cartes de lecture':'Cartes partagées'),controls=el('div',null,'saved-card-controls'),rail=el('div',null,'saved-card-carousel');rail.tabIndex=0;rail.setAttribute('role','region');rail.setAttribute('aria-label','Cartes de lecture à faire défiler horizontalement');
       const move=direction=>rail.scrollBy({left:direction*rail.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});controls.append(button('←',()=>move(-1),'icon-button'),button('→',()=>move(1),'icon-button'));controls.firstChild.setAttribute('aria-label','Carte précédente');controls.lastChild.setAttribute('aria-label','Carte suivante');heading.append(title,controls);host.append(heading,rail);
-      if(creation){const add=el('article',null,'saved-card-slide saved-card-create');add.append(el('span','＋','saved-card-plus'),el('h3','Un mois, une carte'),el('p','Gardez une image de vos lectures. Vous déciderez ensuite de la partager.'),button('Créer ma carte du mois',()=>document.dispatchEvent(new CustomEvent('boop:create-reading-card')),'button button--primary'));rail.append(add);}
+      if(creation){const add=el('article',null,'saved-card-slide saved-card-create');add.append(el('span','＋','saved-card-plus'),el('h3','Un mois, une carte'),button('Créer ma carte du mois',()=>document.dispatchEvent(new CustomEvent('boop:create-reading-card')),'button button--primary'));rail.append(add);}
       for(const card of rows){const slide=el('article',null,'saved-card-slide'),preview=button('',()=>open(card,!published),'saved-card-preview');preview.setAttribute('aria-label','Ouvrir '+card.title);preview.append(image(card));slide.append(preview,el('h4',card.title));if(!published)slide.append(el('p',card.visibility==='private'?'Privée · dans mon carnet':card.visibility==='friends'?'Publiée · amis':'Publiée · communauté','small muted'));if(card.caption)slide.append(el('p',card.caption,'saved-card-caption'));if(!published)slide.append(button(card.visibility==='private'?'Publier':'Gérer la publication',()=>editPublication(card),'text-link'));rail.append(slide);}
       if(more){const last=el('article',null,'saved-card-slide saved-card-more');last.append(button('Charger les cartes suivantes',()=>load(true)));rail.append(last);}
       if(!rows.length&&!creation)rail.append(el('p','Les cartes publiées apparaîtront ici.','small muted'));
-      controls.hidden=rail.children.length<2;host.append(el('p','Balayez pour parcourir les cartes.','small muted'));
+      controls.hidden=rail.children.length<2;host.append(el('p','Balayez pour parcourir.','ui-help'));
     }
-    const refresh=()=>{if(current())load();else{if(host.isConnected&&scope()!==account)host.replaceChildren();views.delete(refresh);window.removeEventListener('boop:reading-cards-changed',refresh);}};refresh.account=account;views.add(refresh);window.addEventListener('boop:reading-cards-changed',refresh);load();return ()=>{views.delete(refresh);window.removeEventListener('boop:reading-cards-changed',refresh);generation++;};
+    const refresh=()=>{if(current())load();else{if(host.isConnected&&scope()!==account)host.replaceChildren();views.delete(refresh);window.removeEventListener('boop:reading-cards-changed',refresh);}};refresh.account=account;refresh.host=host;views.add(refresh);window.addEventListener('boop:reading-cards-changed',refresh);load();return ()=>{views.delete(refresh);window.removeEventListener('boop:reading-cards-changed',refresh);generation++;};
   }
   window.addEventListener('online',()=>{for(const refresh of views)refresh();});
   document.addEventListener('DOMContentLoaded',()=>BT.store.subscribe(()=>{for(const [d,account] of dialogs)if(scope()!==account)d.close();for(const refresh of views)if(scope()!==refresh.account)refresh();}));

@@ -41,3 +41,5 @@ Les nouvelles citations utilisent une enveloppe JSON `boop-citation-v1` dans le 
 99 tests Node passent. Le parcours `tests/cards-shelves-journeys.cjs` vérifie l’enregistrement et le rechargement local, plusieurs cartes, le carrousel, la publication et son retrait avec API simulée, l’échec réseau sans perte de légende, le profil, les menus de lecture, le rangement à la souris et par événements tactiles Chrome, les rayons normalisés, les citations, l’export et l’isolation des comptes.
 
 Les parcours existants de lecture, de partage, de profils et de badges passent également. Les captures de contrôle sont dans `.tmp/cards-review/`. Le geste de rangement doit encore être essayé sur un iPhone physique ; l’émulation tactile Chrome ne vérifie pas Safari iOS.
+
+Évolution préparée le 12 septembre : le carrousel des cartes rejoint aussi la dernière section de l’accueil, avec création en première position. Voir [UI_POLISH.md](UI_POLISH.md).

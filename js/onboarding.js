@@ -48,12 +48,13 @@
     }).join('') || '<p class="text-body-md text-center text-muted" style="grid-column:1/-1">Aucun résultat. Essayez un titre plus court.</p>';
   }
 
-  async function scanPhysicalBook(file) {
+  async function scanPhysicalBook(file,framed=false) {
     if (!file || !BT.bookLookup) return;
     scanButton.disabled = true;
     scanButton.setAttribute('aria-busy','true');
     try {
-      const prepared = await BT.bookLookup.prepareCover(file, update => { scanStatus.textContent = update.message || 'Préparation de la photo…'; });
+      const cropped=framed?file:await BT.photoFrame.open(file,{isbn:true});if(!cropped)return;
+      const prepared = await BT.bookLookup.prepareCover(cropped, update => { scanStatus.textContent = update.message || 'Préparation de la photo…'; });
       const analysis = await BT.bookLookup.scanISBNFromImage(prepared.analysisBlob, update => { scanStatus.textContent = update.message || 'Recherche du livre…'; });
       const result = analysis.results?.[0];
       if (!result) throw new Error(analysis.isbn ? `L’ISBN ${analysis.isbn} a été détecté, mais aucun livre correspondant n’a été trouvé.` : 'Aucun ISBN lisible. Cadrez uniquement le code-barres et réessayez.');
@@ -104,7 +105,7 @@
     if (field) initialTraces.set(field.dataset.sparkBookId, field.value.slice(0, 240));
   });
   bookSearch.addEventListener('input', () => renderBooks(bookSearch.value));
-  scanButton.addEventListener('click', () => scanInput.click());
+  scanButton.addEventListener('click', async () => {const file=await BT.photoFrame.camera();if(file)await scanPhysicalBook(file,true);});
   scanInput.addEventListener('change', () => scanPhysicalBook(scanInput.files?.[0]));
 
   function updateControls() {
