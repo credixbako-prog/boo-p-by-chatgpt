@@ -5,7 +5,7 @@ insert into auth.users(id,email) values
  ('b97b3fa0-3210-4134-9d03-000000000003','profile-stranger@example.invalid');
 insert into public.user_books(user_id,local_id,payload) values
  ('b97b3fa0-3210-4134-9d03-000000000001','book','{"title":"Mon livre","authors":["Autrice"],"status":"en-cours","libraryState":"library","coverUrl":"https://covers.openlibrary.org/b/isbn/123-L.jpg","reflection":"SECRET"}'),
- ('b97b3fa0-3210-4134-9d03-000000000001','photo','{"title":"Photo privée","status":"lu","libraryState":"library","customCover":true,"coverUrl":"https://covers.openlibrary.org/b/isbn/private.jpg"}');
+ ('b97b3fa0-3210-4134-9d03-000000000001','photo','{"title":"Couverture personnalisée","status":"lu","libraryState":"library","customCover":true,"coverUrl":"data:image/jpeg;base64,AAAA"}');
 insert into public.friendships(id,requester_id,addressee_id,status) values('b97b3fa0-3210-4134-9d03-000000000004','b97b3fa0-3210-4134-9d03-000000000001','b97b3fa0-3210-4134-9d03-000000000002','accepted');
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"b97b3fa0-3210-4134-9d03-000000000001","role":"authenticated"}',true);
@@ -23,7 +23,7 @@ select set_config('request.jwt.claims','{"sub":"b97b3fa0-3210-4134-9d03-00000000
 do $$ declare p jsonb;begin
  if (select welcome from public.reader_preferences where user_id='b97b3fa0-3210-4134-9d03-000000000001') is distinct from 'Bienvenue' then raise exception 'Friend cannot read welcome';end if;
  p:=public.get_reader_profile_books('b97b3fa0-3210-4134-9d03-000000000001');
- if p::text like '%SECRET%' or p::text like '%private.jpg%' or (p->>'finished')::integer<>1 then raise exception 'Unsafe book projection';end if;
+ if p::text like '%SECRET%' or p::text not like '%data:image/jpeg;base64,AAAA%' or (p->>'finished')::integer<>1 then raise exception 'Unsafe book projection';end if;
  if jsonb_array_length(public.get_reader_profile_books('b97b3fa0-3210-4134-9d03-000000000001','current')->'books')<>0 then raise exception 'Hidden current section';end if;
  if jsonb_array_length(public.get_reader_profile_books('b97b3fa0-3210-4134-9d03-000000000001','featured')->'books')<>1 then raise exception 'Featured selection';end if;
 end $$;

@@ -1,5 +1,5 @@
 importScripts('./js/push-worker.js');
-const CACHE_VERSION = 'boo-p-webapp-v55';
+const CACHE_VERSION = 'boo-p-webapp-v56';
 const APP_SHELL = [
   './',
   './index.html',
@@ -42,6 +42,10 @@ const APP_SHELL = [
   './js/monthly-report.js',
   './js/mvp-app.js',
   './js/thought-editor.js',
+  './js/reading-experience.js',
+  './js/publication-actions.js',
+  './js/annual-reports.js',
+  './css/reading-experience.css',
   './css/notebook-experience.css',
   './js/onboarding-catalog.js',
   './js/onboarding.js',

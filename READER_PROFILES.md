@@ -10,7 +10,7 @@ Le profil visité devient un espace de lecture, organisé en **Son parcours**, *
 - **Fiche d’un livre visité** : détails bibliographiques limités, échanges et publications de début/fin/carnet directement associées à son identifiant. Les mots et pensées restent dans le parcours ; ils ne sont pas rattachés à cette fiche par une simple ressemblance de titre.
 - **Ajouter à ma bibliothèque** : confirmation avec choix Bibliothèque/À lire ou liste d’envies. Seules les métadonnées partagées sont copiées, sans notes, progression ni état terminé du lecteur source. Les doublons sont détectés par ISBN ou titre.
 
-Seules les couvertures de catalogue autorisées (Open Library et domaines Google Books explicitement listés) sont exposées. Les couvertures personnalisées et les autres URL restent privées ; un livre dessiné avec son titre les remplace. Masquer la section « En ce moment » ne retire pas les livres de la bibliothèque accessible aux amis ; cette distinction est indiquée dans les réglages.
+La migration préparée le 13 septembre permet aussi les couvertures personnalisées raster bornées (JPEG, PNG, WebP) et les sources BOO-P autorisées, en plus des catalogues Open Library et Google Books. L’accès à la bibliothèque reste limité au propriétaire et aux amis acceptés ; les URL arbitraires et SVG sont exclus. Masquer la section « En ce moment » ne retire pas les livres de la bibliothèque accessible aux amis ; cette distinction est indiquée dans les réglages.
 
 ## Encouragements et Traces
 
@@ -36,7 +36,7 @@ Le blocage existant reste un masquage local. Le retrait d’amitié révoque ré
 
 93 tests Node réussis, dont les nouveaux contrôles de changement de compte, d’accès invité et de longueur des Traces. Les parcours Playwright isolés vérifient le profil sur mobile/ordinateur, encouragements, Traces, réponses, erreur réseau, ajout de livre, rayons, carnet publié, préférences et révocation. La suite de partage précédente passe également. Aucun message n’a été envoyé à un compte réel pendant ces tests.
 
-`tests/reader-profile-access.sql` a été exécuté après migration avec annulation transactionnelle : projection sûre, couverture personnelle exclue, préférences, accès amis/étranger, unicité des encouragements, réponses entre livres interdites, modération, notifications et révocation. Les avis de sécurité Supabase ne signalent rien de nouveau ; l’avertissement préexistant de [protection des mots de passe compromis](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) reste distinct de cette évolution.
+`tests/reader-profile-access.sql` a été exécuté après migration avec annulation transactionnelle : projection sûre selon les règles alors en vigueur, préférences, accès amis/étranger, unicité des encouragements, réponses entre livres interdites, modération, notifications et révocation. Les avis de sécurité Supabase ne signalent rien de nouveau ; l’avertissement préexistant de [protection des mots de passe compromis](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) reste distinct de cette évolution.
 
 Les échanges avec deux comptes réels sur deux appareils, et la réception push correspondante, restent à essayer après publication de l’interface.
 
@@ -59,4 +59,9 @@ Activation autorisée : la migration 20260911204712_reading_cards.sql est appliq
 
 ## Carnet et profil — évolution du 12 septembre 2026
 
-La bio suit la visibilité du profil ; livres lus, temps et série sont regroupés dans l’en-tête avec les trois badges les plus récents. Les autres statistiques restent repliables. Les profils visités présentent les couvertures en mosaïque dans la vue Couvertures ; les lectures en cours gardent les deux interactions alignées. Les publications sont affichées en entier avec un crayon pour leur auteur. Les cartes mensuelles restent horizontales, avec points de pagination. Voir [NOTEBOOK_EXPERIENCE.md](NOTEBOOK_EXPERIENCE.md) pour les détails et vérifications.
+La bio suit la visibilité du profil ; livres lus, temps et série sont regroupés dans l’en-tête avec les trois badges les plus récents. Les autres statistiques restent repliables. Les profils visités présentent les couvertures en mosaïque dans la vue Couvertures ; les lectures en cours gardent les deux interactions alignées. Les longues publications se déplient avec Plus/Moins et leurs actions passent par un menu •••. Le crayon du profil personnel est placé à gauche des réglages ; les options des profils visités sont regroupées à droite du nom. Une bio vide affiche « bio… ». Les cartes mensuelles restent horizontales, avec points de pagination. Voir [NOTEBOOK_EXPERIENCE.md](NOTEBOOK_EXPERIENCE.md) pour les détails et vérifications.
+
+
+## Vérification du 13 septembre
+
+Voir [READING_EXPERIENCE_20260913.md](READING_EXPERIENCE_20260913.md) pour les tests PostgreSQL isolés de la nouvelle projection des couvertures et de la modération. La migration du 13 septembre est préparée, pas encore appliquée en ligne.

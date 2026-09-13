@@ -10,8 +10,8 @@ BT.readerProfile=(()=>{
   function modal(title){const d=el('dialog',null,'app-dialog reader-dialog'),h=el('div',null,'dialog-head'),heading=el('h2',title);heading.id='reader-'+crypto.randomUUID();d.setAttribute('aria-labelledby',heading.id);h.append(heading,button('×',()=>d.close(),'icon-button'));h.lastChild.setAttribute('aria-label','Fermer');const body=el('div',null,'dialog-body');d.append(h,body);document.body.append(d);windows.set(d,who());d.addEventListener('close',()=>{windows.delete(d);d.remove();},{once:true});d.showModal();return {d,body};}
   function message(text='Chargement…'){const p=el('p',text,'small muted');p.setAttribute('role','status');return p;}
   function cover(book){const c=el('div',null,'reader-cover');c.append(el('span',book.title));
-    try{const url=new URL(book.coverUrl);if(url.protocol==='https:'&&['covers.openlibrary.org','books.google.com','books.google.fr','books.googleusercontent.com'].includes(url.hostname)){
-      const img=el('img');img.src=url.href;img.alt='Couverture de '+book.title;img.loading='lazy';img.referrerPolicy='no-referrer';img.onerror=()=>img.remove();c.append(img);
+    try{const source=BT.readingExperience.safeCover(book.coverUrl);if(source){
+      const img=el('img');img.src=source;img.alt='Couverture de '+book.title;img.loading='lazy';img.referrerPolicy='no-referrer';img.onerror=()=>img.remove();c.append(img);
     }}catch{}return c;
   }
   function addBook(book){const {body}=modal('Garder ce livre');const p=message();body.append(el('h3',book.title),el('p',(book.authors||[]).join(', '),'muted'));
@@ -43,17 +43,17 @@ BT.readerProfile=(()=>{
     }catch(e){p.textContent=e.message;if(!p.isConnected)body.append(message(e.message));}
   }
   function postCard(post){const card=el('article',null,'reader-post-card'),kind=labels[post.reading_kind]||({debut:'Début de lecture',fin:'Livre terminé'})[post.activity_type]||'Une Trace';
-    const top=el('div',null,'reader-post-meta');top.append(el('span',kind,'eyebrow'),el('time',new Date(post.created_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}),'small muted'));if(who()===post.author_id)top.append(BT.sharing.editButton(()=>BT.sharing.editRemotePost(post)));card.append(top);
+    const top=el('div',null,'reader-post-meta');top.append(el('span',kind,'eyebrow'),el('time',new Date(post.created_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}),'small muted'));top.append(BT.publications.menu(post));card.append(top);
     if(post.book_title){const heading=el('div',null,'reader-post-book'),slot=el('div');slot.append(cover({title:post.book_title}));heading.append(slot,el('h3',post.book_title));card.append(heading);
       if(who()&&['notebook','debut','fin'].includes(post.reading_kind)){const account=who();api().books(post.author_id,'all','',post.reading_source_id).then(data=>{if(slot.isConnected&&who()===account&&data.available&&data.books[0])slot.replaceChildren(cover(data.books[0]));}).catch(()=>{});}
-    }const content=el('div');content.innerHTML=BT.sharing.publicationHTML(post.reading_kind,post.reading_content,post.body);card.append(content);
+    }const content=el('div');content.innerHTML=BT.publications.previewHTML(BT.sharing.publicationHTML(post.reading_kind,post.reading_content,post.body),post.id);card.append(content);
     const actions=el('section');card.append(actions);mountInteractions(actions,{post:post.id},post.reading_kind==='notebook'?'Cette réflexion me parle':'Encourager');return card;
   }
   async function openPublication(id,focus=false){const {d,body}=modal('Une lecture en partage'),account=who(),p=message();body.append(p);
     try{const post=await api().publication(id);if(!d.isConnected||account!==who())return;body.replaceChildren();if(!post){body.append(message('Cette publication a été retirée ou n’est plus accessible.'));return;}
       body.append(el('p',post.author_name,'eyebrow'),el('h2',post.book_title||labels[post.reading_kind]||'Une Trace'));const content=el('div');content.innerHTML=BT.sharing.publicationHTML(post.reading_kind,post.reading_content,post.body);body.append(content);
       const host=el('section');body.append(host);mountInteractions(host,{post:id},post.reading_kind==='notebook'?'Cette réflexion me parle':'Encourager',focus);
-      if(account===post.author_id)body.append(BT.sharing.editButton(()=>{d.close();BT.sharing.editRemotePost(post);}));
+      body.prepend(BT.publications.menu(post));
     }catch(e){p.textContent=e.message;}
   }
   function mountInteractions(host,target,likeLabel='Encourager',expanded=false){

@@ -487,6 +487,15 @@
     return await detectNativeBarcode(imageBlob) || await detectZXingBarcode(imageBlob);
   }
 
+  async function createLiveISBNDecoder() {
+    const valid=raw=>{const value=normalizeISBN(raw);return /^(978|979)\d{10}$/.test(value)&&isValidISBN(value)?value:'';};
+    let native;
+    try {if(window.BarcodeDetector&&(!BarcodeDetector.getSupportedFormats||(await BarcodeDetector.getSupportedFormats()).includes('ean_13')))native=new BarcodeDetector({formats:['ean_13']});}catch{}
+    let reader;
+    if(!native){const zxing=await loadZXing();reader=new zxing.BrowserMultiFormatReader();}
+    return {async decode(canvas){try {if(native){const codes=await native.detect(canvas);return codes.map(c=>valid(c.rawValue)).find(Boolean)||'';}const result=reader.decodeFromCanvas(canvas);return valid(result?.getText?.()||'');}catch{return '';}},close(){reader?.reset?.();}};
+  }
+
   function loadTesseract() {
     if (window.Tesseract?.recognize) return Promise.resolve(window.Tesseract);
     if (tesseractPromise) return tesseractPromise;
@@ -537,7 +546,7 @@
 
   window.BT = window.BT || {};
   window.BT.bookLookup = {
-    isbnVariants, isValidISBN, lookupISBN, normalizeISBN, prepareCover, scanISBNFromImage, searchBooks,
+    isbnVariants, isValidISBN, lookupISBN, normalizeISBN, prepareCover, scanISBNFromImage, searchBooks, createLiveISBNDecoder,
     constants: { GOOGLE_BOOKS_ENDPOINT, OPEN_LIBRARY_ENDPOINT, OPEN_LIBRARY_SEARCH_ENDPOINT, ISBN_FALLBACK_FUNCTION, TESSERACT_CDN, ZXING_CDN, ANALYSIS_MAX_EDGE }
   };
 })();

@@ -31,6 +31,7 @@ BT.reflection = (() => {
   function decorate(view) {
     if(view.querySelector('[data-reflection-entry]'))return;
     const params=new URLSearchParams(location.hash.split('?')[1]);
+    if(params.get('tab')==='notebook'&&params.get('section')==='citations')return;
     const fromNotebook=params.get('tab')==='notebook',label=fromNotebook?'Ouvrir mon carnet':'Ouvrir la réflexion',initial=fromNotebook?'notebook':'chat';
     let id=null,row=view.querySelector('.book-detail-copy > .button-row:last-child');
     if(row)id=params.get('id');

@@ -19,16 +19,17 @@
 
   function normalizeMonthKey(value) {
     const clean = String(value || '');
-    return /^\d{4}-(0[1-9]|1[0-2])$/.test(clean) ? clean : localMonthKey();
+    return /^\d{4}(-(0[1-9]|1[0-2]))?$/.test(clean) ? clean : localMonthKey();
   }
 
   function monthLabel(monthKey) {
+    if(/^\d{4}$/.test(String(monthKey)))return String(monthKey);
     const [year, month] = normalizeMonthKey(monthKey).split('-').map(Number);
     const label = new Intl.DateTimeFormat('fr-FR', { month:'long', year:'numeric' }).format(new Date(year, month - 1, 1));
     return label.charAt(0).toUpperCase() + label.slice(1);
   }
 
-  function inMonth(value, monthKey) { return Boolean(value) && localMonthKey(value) === monthKey; }
+  function inMonth(value, monthKey) { return Boolean(value) && (monthKey.length===4 ? localMonthKey(value).slice(0,4)===monthKey : localMonthKey(value) === monthKey); }
   function cleanText(value) { return String(value || '').replace(/\s+/g, ' ').trim(); }
 
   const REPORT_STATUSES = ['lu', 'en-cours', 'en-pause', 'abandonne'];
@@ -42,7 +43,7 @@
     const statusBookIds = new Set((state.timeline || [])
       .filter(event => String(event.type || '').startsWith('status-') && inMonth(event.date, monthKey))
       .map(event => event.bookId).filter(Boolean));
-    const isCurrentMonth = monthKey === localMonthKey();
+    const isCurrentMonth = monthKey === localMonthKey() || monthKey === localMonthKey().slice(0,4);
 
     return (state.books || []).filter(book => {
       if (book.libraryState !== 'library' || !REPORT_STATUSES.includes(book.status)) return false;
@@ -59,7 +60,13 @@
   function buildData(state, monthKey, includePersonalNotes = false) {
     const key = normalizeMonthKey(monthKey);
     const sessions = (state.sessions || []).filter(session => inMonth(session.startedAt, key));
-    const books = reportBooks(state, key, sessions);
+    const books = reportBooks(state, key, sessions).map(book=>{
+      if(key.length!==4||Number(key)>=new Date().getFullYear())return book;
+      const end=new Date(Number(key)+1,0,1).getTime();
+      const events=(state.timeline||[]).filter(e=>e.bookId===book.id&&REPORT_STATUSES.includes(String(e.type).replace('status-',''))&&new Date(e.date).getTime()<end).sort((a,b)=>new Date(b.date)-new Date(a.date));
+      const status=events[0]?.type.replace('status-','')||(book.completedAt&&new Date(book.completedAt).getTime()>=end?'en-cours':book.status);
+      return {...book,status};
+    });
     const entries = (state.lexicon || []).filter(entry => inMonth(entry.createdAt || entry.updatedAt, key));
     const traces = (state.traces || []).filter(trace => inMonth(trace.createdAt || trace.updatedAt, key));
     const words = entries.filter(entry => (entry.kind || 'word') === 'word');
@@ -79,7 +86,7 @@
       statusCounts.abandonne && `${statusCounts.abandonne} abandonné${statusCounts.abandonne > 1 ? 's' : ''}`
     ].filter(Boolean).join(' · ');
     return {
-      monthKey:key, label:monthLabel(key), profileName, handle, includePersonalNotes, statusCounts, statusSummary,
+      monthKey:key, period:key.length===4?'year':'month', label:monthLabel(key), profileName, handle, includePersonalNotes, statusCounts, statusSummary,
       books:books.map(book => ({
         title:cleanText(book.title), authors:(book.authors || []).map(cleanText).filter(Boolean), rating:Number(book.rating) || 0,
         coverUrl:cleanText(book.coverUrl), coverColor:cleanText(book.coverColor), status:book.status, statusLabel:STATUS_LABELS[book.status]
@@ -88,7 +95,7 @@
       discoveries:entries.slice(0, 4).map(entry => ({ kind:entry.kind || 'word', text:cleanText(entry.word), definition:cleanText(entry.definition) })),
       notes,
       summary:books.length
-        ? `${books.length} lecture${books.length > 1 ? 's' : ''} suivie${books.length > 1 ? 's' : ''} ce mois${statusSummary ? ` : ${statusSummary}` : ''}.`
+        ? `${books.length} lecture${books.length > 1 ? 's' : ''} suivie${books.length > 1 ? 's' : ''} ${key.length===4?'cette année':'ce mois'}${statusSummary ? ` : ${statusSummary}` : ''}.`
         : `${minutes} minutes de lecture et ${entries.length} découverte${entries.length > 1 ? 's' : ''} consignées sur le sentier.`
     };
   }
@@ -310,7 +317,7 @@
     roundedRect(ctx, 48, 34, 142, 48, 24); ctx.fillStyle = COLORS.ink; ctx.fill();
     if (brandReverse) ctx.drawImage(brandReverse, 59, 40, 120, 36);
     else { ctx.fillStyle = COLORS.white; ctx.font = '700 20px Poppins, Arial, sans-serif'; ctx.fillText('BOO-P', 82, 66); }
-    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 14px Poppins, Arial, sans-serif'; ctx.fillText('MON SENTIER · RAPPORT MENSUEL', 48, 112);
+    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 14px Poppins, Arial, sans-serif'; ctx.fillText(data.period==='year'?'MON SENTIER · BILAN ANNUEL':'MON SENTIER · RAPPORT MENSUEL', 48, 112);
     ctx.fillStyle = COLORS.ink; ctx.font = '600 55px "Playfair Display", Georgia, serif'; ctx.fillText(data.label, 48, 173);
     ctx.fillStyle = COLORS.muted; ctx.font = '500 17px Poppins, Arial, sans-serif'; ctx.fillText(truncate(data.handle || data.profileName, 36), 50, 207);
     ctx.fillStyle = COLORS.sageDark; ctx.font = '600 16px Poppins, Arial, sans-serif'; ctx.fillText(truncate(data.statusSummary || 'Le sentier continue', 92), 50, 242);
@@ -322,7 +329,7 @@
     ctx.fillStyle = COLORS.paper; ctx.fillRect(0, COVER_ZONE_HEIGHT, WIDTH, HEIGHT - COVER_ZONE_HEIGHT);
     ctx.fillStyle = COLORS.sageDark; ctx.fillRect(0, COVER_ZONE_HEIGHT, WIDTH, 8);
     const duration = data.minutes >= 60 ? `${Math.floor(data.minutes / 60)} h ${String(data.minutes % 60).padStart(2, '0')}` : `${data.minutes} min`;
-    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 12px Poppins, Arial, sans-serif'; ctx.fillText('MON MOIS EN QUELQUES MOTS', 50, 1053);
+    ctx.fillStyle = COLORS.sageDark; ctx.font = '600 12px Poppins, Arial, sans-serif'; ctx.fillText(data.period==='year'?'MON ANNÉE EN QUELQUES MOTS':'MON MOIS EN QUELQUES MOTS', 50, 1053);
     ctx.textAlign = 'right'; ctx.fillStyle = COLORS.muted; ctx.fillText(truncate(data.handle || data.profileName, 30), 1028, 1053); ctx.textAlign = 'left';
     drawCompactMetric(ctx, 50, 1100, duration, 'lecture', COLORS.ochre);
     drawCompactMetric(ctx, 274, 1100, data.sessions, 'sessions', COLORS.sageDark);
@@ -358,7 +365,7 @@
   async function share(canvas, data) {
     const blob = await canvasBlob(canvas), file = new File([blob], filename(data), { type:'image/png' });
     if (!navigator.share || !navigator.canShare?.({ files:[file] })) return false;
-    await navigator.share({ title:`Mon mois de lecture · ${data.label}`, text:`${data.summary} Mon sentier de lecture avec BOO-P.`, files:[file] });
+    await navigator.share({ title:`${data.period==='year'?'Mon année':'Mon mois'} de lecture · ${data.label}`, text:`${data.summary} Mon sentier de lecture avec BOO-P.`, files:[file] });
     return true;
   }
 

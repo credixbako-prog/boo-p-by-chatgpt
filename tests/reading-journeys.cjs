@@ -77,9 +77,12 @@ const out = path.resolve('.tmp/ux-updated');
     assert.equal(await page.evaluate(() => BT.store.getTraces().find(t => t.text.startsWith('Une pensée privée')).privacy),'private');
     await route(`#path?tab=notebook&book=${book.id}`);
     assert.match(await page.locator('#main-view').innerText(),/Une pensée privée/);
+    assert.doesNotMatch(await page.locator('#main-view').innerText(),/Une citation conservée/);
+    await route(`#path?tab=notebook&section=citations&book=${book.id}`);
     assert.match(await page.locator('#main-view').innerText(),/Une citation conservée/);
+    await route(`#path?tab=notebook&book=${book.id}`);
     await shot('notebook-mobile');
-    check('Carnet : brouillon retrouvé après rechargement et pensée privée avec sa citation');
+    check('Carnet : brouillon retrouvé après rechargement et pensée privée et citation dans leurs sections');
 
     await action('capture-memory').click();
     await page.locator('[data-action="capture-kind"][data-kind="word"]').click();
@@ -133,15 +136,15 @@ const out = path.resolve('.tmp/ux-updated');
     check('Catalogue vide et doublon : saisie conservée, livre existant proposé sans duplication');
 
     await route('#path?tab=trail');
-    await page.locator('[data-action="trail-mode"][data-mode="timeline"]').click();
-    await page.locator('.trail-chronology').waitFor();
-    await shot('trail-timeline-mobile');
+    await page.locator('[data-action="trail-mode"][data-mode="cards"]').click();
+    await page.locator('[data-annual-reports]').waitFor();
+    await shot('trail-cards-mobile');
     await page.locator('[data-action="trail-mode"][data-mode="map"]').click();
     await action('trail-immersive').click();
     assert.equal(await page.locator('body').evaluate(e => e.classList.contains('is-trail-immersive')),true);
     await shot('trail-immersive-mobile');
     await action('trail-immersive').click();
-    check('Sentier : chronologie et agrandissement réversibles');
+    check('Sentier : cartes, bilans et agrandissement réversibles');
 
     await route('#profile');
     await page.locator('a[href="#profile?section=settings"]').click();

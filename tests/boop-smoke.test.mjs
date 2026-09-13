@@ -160,7 +160,7 @@ test('lexique: dictionnaire, questions ciblées et répétition espacée', async
   assert.match(app, /data-quality="almost"/);
   assert.match(app, /data-quality="recalled"/);
   assert.match(app, /Sérendipité/);
-  assert.match(app, /items\.slice\(0, 10\)/);
+  assert.match(app, /readingExperience\.deck\('words'/);
   assert.match(app, /data-memory-carousel/);
   assert.match(app, /normalizedQuality === 'recalled'/);
   assert.match(app, /ui\.memoryDeckKeys\.push\(next\.memoryKey\)/);
@@ -893,7 +893,7 @@ test('webapp: manifeste, icônes, cache et publication GitHub Pages sont prêts'
     assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
     assert.match(html, /js\/pwa\.js/);
   }
-  assert.match(worker, /boo-p-webapp-v55/);
+  assert.match(worker, /boo-p-webapp-v56/);
   assert.match(worker, /js\/book-lookup\.js/);
   assert.match(worker, /js\/dictionary\.js/);
   assert.match(worker, /js\/monthly-report\.js/);

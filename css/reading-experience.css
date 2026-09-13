@@ -1,0 +1,47 @@
+/* Page navigation is a band; choices inside a page remain lightweight. */
+#main-view > nav.tabs { background:#142438; padding:8px; border-radius:16px; gap:6px; border:1px solid var(--boo-line); }
+#main-view > nav.tabs > .tab { color:#fffdf8; }
+#main-view > nav.tabs > .tab[aria-current="page"] { background:var(--boo-paper,#fffdf8); color:var(--boo-ink,#14283f); }
+#main-view > nav.tabs.notebook-sections { background:transparent; border:0; padding:4px 0; border-radius:0; border-bottom:1px solid var(--boo-line); }
+#main-view > nav.tabs.notebook-sections > .tab { color:var(--boo-muted); }
+#main-view > nav.tabs.notebook-sections > .tab[aria-current="page"] { background:color-mix(in srgb,var(--boo-sage) 20%,var(--boo-paper)); color:var(--boo-ink); }
+.reflection-entry { padding:20px; border:1px solid var(--boo-line); border-left:4px solid var(--boo-ochre,#cf873d); border-radius:16px; background:var(--boo-paper); }
+.bookcase .bookcase__instruction { font-size:8px; }
+.profile-tools { display:flex; gap:6px; }
+.profile-main { min-width:0; }
+.profile-main > .reader-profile-menu { margin-left:auto; align-self:flex-start; flex:none; }
+.reader-profile-menu .safety-menu__panel { width:min(300px,70vw); padding:16px; z-index:6; }
+.reader-profile-menu .safety-menu__panel details { margin-bottom:12px; }
+.reader-profile-menu .safety-menu__panel summary { font-size:14px; width:auto; height:auto; border:0; border-radius:0; white-space:normal; }
+.trail-map-controls svg,.icon-button svg { width:20px; height:20px; }
+.trail-map-controls .trail-map-controls__fit { min-width:36px; padding:7px; }
+.memory-disclosure > .memory-heading { margin:0; padding:20px; border-bottom:1px solid var(--boo-line); }
+.home-citations { padding:clamp(16px,3vw,28px); min-width:0; }
+.citation-carousel { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; gap:20px; scrollbar-width:thin; }
+.citation-slide { flex:0 0 100%; min-width:0; scroll-snap-align:start; scroll-snap-stop:always; }
+.citation-slide .publication-quote { margin:0; }
+.notebook-citation { padding:clamp(18px,3vw,30px); }
+.notebook-citation .publication-quote { margin:0 0 20px; }
+.quiz-celebration { display:inline-block; color:var(--boo-sage,#6f927c); font-size:48px; animation:quiz-bloom 1.2s ease both; }
+@keyframes quiz-bloom { 0%{transform:scale(.4) rotate(-30deg);opacity:0} 65%{transform:scale(1.15) rotate(10deg)} 100%{transform:scale(1);opacity:1} }
+.quiz-last-result { margin-top:12px; }
+.thought-book-context { padding:12px clamp(16px,4vw,48px); border-bottom:1px solid var(--boo-line); }
+.thought-book-context p { margin:2px 0 8px; color:var(--boo-muted); font-size:14px; }
+.thought-book-context .field { display:flex; align-items:center; gap:12px; }
+.thought-book-context input { flex:1; min-width:0; }
+.reading-sheet-fields { display:grid; gap:20px; margin-top:16px; }
+.reading-sheet-preview { white-space:pre-wrap; padding:20px; background:var(--boo-paper); border:1px solid var(--boo-line); border-radius:12px; }
+.reading-sheet-dialog .dialog-body { overflow:auto; }
+.publication-preview.is-collapsed { max-height:260px; overflow:hidden; }
+.publication-preview.is-collapsed:has(+ .publication-more:not([hidden])) { mask-image:linear-gradient(#000 80%,transparent); }
+.publication-more { margin:6px 0 16px; font-size:14px; }
+.saved-card-carousel--paged .saved-card-preview img { aspect-ratio:4/5; }
+.publication-menu { margin-left:auto; position:relative; }
+.publication-menu summary { list-style:none; cursor:pointer; }
+.publication-menu summary::-webkit-details-marker { display:none; }
+.publication-menu-panel { position:absolute; right:0; top:100%; width:210px; z-index:12; padding:8px; border:1px solid var(--boo-line); border-radius:14px; background:var(--boo-paper,#fffdf8); box-shadow:0 8px 28px #0002; }
+.publication-menu-panel button { width:100%; text-align:left; padding:11px 12px; background:none; border:0; border-radius:8px; color:inherit; cursor:pointer; font:inherit; }
+.publication-menu-panel button:hover,.publication-menu-panel button:focus-visible { background:color-mix(in srgb,var(--boo-sage) 20%,var(--boo-paper)); }
+.publication-menu-panel button[data-publication-command="delete"] { color:var(--boo-danger,#a63730); }
+@media(prefers-reduced-motion:reduce){.quiz-celebration{animation:none}}
+@media(max-width:600px){.profile-hero .profile-main{padding-right:86px}.thought-book-context{padding:10px 16px}.trail-map-controls{gap:2px}.trail-map-controls button{min-width:32px}}
