@@ -1,6 +1,6 @@
 # BOO-P — carnet, écriture et profils
 
-La version du 12 septembre 2026 a été publiée dans `06275e0`. Les évolutions du 13 septembre ci-dessous sont préparées localement ; leur publication et leur migration restent à autoriser. Voir [READING_EXPERIENCE_20260913.md](READING_EXPERIENCE_20260913.md).
+La version du 12 septembre 2026 a été publiée dans `06275e0`. Les évolutions du 13 septembre ci-dessous sont validées et leur publication est autorisée ; les migrations et les contrôles de droits en production passent. Voir [READING_EXPERIENCE_20260913.md](READING_EXPERIENCE_20260913.md).
 
 ## Carnet et pensées
 

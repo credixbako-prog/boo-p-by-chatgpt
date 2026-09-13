@@ -1,6 +1,6 @@
 # BOO-P — Carnet, Sentier et souvenirs
 
-Version du 13 septembre 2026, préparée localement après validation des 24 annotations. La publication de l’interface et l’application de la migration Supabase restent à autoriser. La version précédente `06275e0` est publiée.
+Version du 13 septembre 2026, validée après les 24 annotations. Publication autorisée par le propriétaire pour le commit `33e1200`, complété par la restriction des droits de modification des publications de club. Les migrations sont appliquées en production et les vérifications transactionnelles passent.
 
 ## Parcours retenus
 
@@ -30,7 +30,9 @@ Le générateur 4:5 réutilise les livres, sessions et souvenirs de l’année, 
 
 ## Publications et migration
 
-Migration préparée : `supabase/migrations/20260913122256_reading_experience_reports_covers.sql`.
+Migrations appliquées : `supabase/migrations/20260913130552_reading_experience_reports_covers.sql` et `supabase/migrations/20260913130954_restrict_club_publication_updates.sql`. Les noms reprennent les versions enregistrées par le serveur.
+
+Le contrôle en production a détecté un droit UPDATE global hérité des permissions initiales de Supabase. La seconde migration le retire et n’accorde que UPDATE(body), avec les politiques auteur/membre actif ; les droits inutiles TRUNCATE, REFERENCES et TRIGGER sont également retirés sur cette table. Le test PostgreSQL isolé reproduit désormais ces permissions initiales.
 
 - Les signalements sont enregistrés dans `publication_reports`, pour une publication accessible, avec un seul signalement par lecteur et cible. L’identité, la date et le statut ne peuvent pas être usurpés depuis le formulaire.
 - Un auteur peut modifier sa publication ; les textes des clubs disposent d’une politique de modification par auteur membre actif. Les suppressions sont contrôlées en base. Une confirmation indique ce qui sera retiré.
@@ -38,7 +40,7 @@ Migration préparée : `supabase/migrations/20260913122256_reading_experience_re
 - Le partage utilise la feuille native si disponible, sinon copie de texte ou téléchargement de l’image. Seules les publications publiques du fil proposent une adresse directe ; les autres audiences partagent le texte choisi sans modifier leurs permissions.
 - La projection de couverture conserve la restriction propriétaire/ami accepté. Elle accepte seulement des images raster bornées et les hôtes explicitement autorisés, sans SVG ni URL arbitraire.
 
-Les conseillers Supabase consultés avant mise en service retrouvent les constats existants : quatre tables techniques fermées sans politique client et la [protection des mots de passe compromis](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) désactivée. La nouvelle migration a été testée dans un PostgreSQL isolé ; les vérifications serveur seront reprises lors de sa mise en service.
+Les conseillers Supabase consultés avant mise en service retrouvent les constats existants : quatre tables techniques fermées sans politique client et la [protection des mots de passe compromis](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) désactivée. Les migrations ont été testées dans un PostgreSQL isolé puis sur le serveur avec des données de test annulées par ROLLBACK. Aucun utilisateur de test ne subsiste. Le conseiller de sécurité ne signale aucun nouveau constat.
 
 ## Scanner
 
@@ -49,6 +51,7 @@ Les capacités de mise au point suivent l’API [MediaStream Image Capture](http
 ## Vérification et reproduction
 
 - `node --test tests/*.test.mjs` : 112 tests, dont parcours de toute la collection, synchronisation des fiches, sujet échappé, couvertures, période annuelle et identité des bilans.
+- `tests/reading-experience-access.sql` et `tests/reader-profile-access.sql` : droits vérifiés en production, avec rollback intégral des fixtures ; signalements, usurpation, doublons, modération, originaux privés, projection des couvertures et révocation de l’amitié.
 - `tests/reading-experience-rls.cjs` : migration exécutée dans PostgreSQL via PGlite **0.5.8**, puis droits auteur, ami, étranger, modérateur et anonyme ; signalements, absence de fuite des fiches et périodes invalides. Installer le moteur de test avec `npm install --prefix .tmp/pg-test --save-exact @electric-sql/pglite@0.5.8`, puis `node tests/reading-experience-rls.cjs`.
 - `tests/reading-experience-journeys.cjs` : nouveaux parcours sur 390, 769 et 1294 px, persistance, quiz, menus, modification/suppression de discussion de club, cartes, arrêt automatique de la caméra.
 - `tests/isbn-live-journeys.cjs` : véritable décodage ZXing d’un code généré, rejet d’un autre EAN et d’un ISBN invalide, sélection du détecteur natif. `ZXING_FIXTURE` peut désigner une copie du fichier UMD officiel 0.2.1 pour les tests isolés.

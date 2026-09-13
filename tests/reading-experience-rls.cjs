@@ -13,7 +13,7 @@ const {PGlite}=require(process.env.PGLITE_MODULE||'../.tmp/pg-test/node_modules/
  create table public.community_posts(id uuid primary key,author_id uuid references auth.users(id),body text,visibility text);
  create table public.reading_club_posts(id uuid primary key,club_id uuid,author_id uuid references auth.users(id),body text);
  alter table community_posts enable row level security;alter table reading_club_posts enable row level security;
- grant select,insert,delete on community_posts,reading_club_posts to authenticated;
+ grant select,insert,delete on community_posts to authenticated;grant all on reading_club_posts to authenticated;
  create policy community_read on community_posts for select to authenticated using(author_id=auth.uid() or visibility='public' or (visibility='friends' and private.is_accepted_reader_friend(author_id)));
  create policy community_delete on community_posts for delete to authenticated using(author_id=auth.uid());
  create policy club_read on reading_club_posts for select to authenticated using(private.is_active_club_member(club_id));
@@ -23,7 +23,8 @@ const {PGlite}=require(process.env.PGLITE_MODULE||'../.tmp/pg-test/node_modules/
  `);
  const profile=fs.readFileSync('supabase/migrations/20260911185935_reader_profile_experience.sql','utf8');await db.exec(profile.slice(0,profile.indexOf('create table public.reader_book_interactions')));
  await db.exec(fs.readFileSync('supabase/migrations/20260911204712_reading_cards.sql','utf8'));
- await db.exec(fs.readFileSync('supabase/migrations/20260913122256_reading_experience_reports_covers.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20260913130552_reading_experience_reports_covers.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20260913130954_restrict_club_publication_updates.sql','utf8'));
  const owner='00000000-0000-0000-0000-000000000001',friend='00000000-0000-0000-0000-000000000002',stranger='00000000-0000-0000-0000-000000000003';
  const post='10000000-0000-0000-0000-000000000001',privatePost='10000000-0000-0000-0000-000000000002',club='20000000-0000-0000-0000-000000000001',card='30000000-0000-0000-0000-000000000001';
  await db.query('insert into auth.users values ($1),($2),($3)',[owner,friend,stranger]);await db.query("insert into community_posts values ($1,$3,'pub','public'),($2,$3,'private','me')",[post,privatePost,owner]);await db.query("insert into reading_club_posts values ($1,$1,$2,'texte original')",[club,owner]);await db.query("insert into reading_cards values ($1,$2,'2026-09','Carte','','public','data:image/jpeg;base64,AAAA',now())",[card,owner]);

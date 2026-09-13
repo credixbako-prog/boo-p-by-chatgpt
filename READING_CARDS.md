@@ -4,7 +4,7 @@
 
 ## Cartes de lecture
 
-Bibliothèque → Sentier → **Cartes et bilans** présente les cartes enregistrées puis « Créer ma carte du mois ». Carnet distingue désormais **Réflexions** et **Citations**. Les bilans annuels disposent de leur propre section dans le Sentier. Sur l’accueil et les profils, les cartes restent en carrousel horizontal avec points pleins/vides ; la création vient en dernier sur l’accueil. Après génération, « Enregistrer dans mon Sentier » conserve la carte. Le menu ••• ouvre les actions de gestion. Voir [READING_EXPERIENCE_20260913.md](READING_EXPERIENCE_20260913.md) pour les évolutions préparées et leur mise en service.
+Bibliothèque → Sentier → **Cartes et bilans** présente les cartes enregistrées puis « Créer ma carte du mois ». Carnet distingue désormais **Réflexions** et **Citations**. Les bilans annuels disposent de leur propre section dans le Sentier. Sur l’accueil et les profils, les cartes restent en carrousel horizontal avec points pleins/vides ; la création vient en dernier sur l’accueil. Après génération, « Enregistrer dans mon Sentier » conserve la carte. Le menu ••• ouvre les actions de gestion. Voir [READING_EXPERIENCE_20260913.md](READING_EXPERIENCE_20260913.md) pour les évolutions et leur vérification en production.
 
 Une carte enregistrée est une image JPEG figée, accompagnée du mois ou de l’année, d’un titre et d’une légende. Le JSON source du bilan, les notes et les conversations IA ne sont pas joints. L’utilisateur doit vérifier les informations visibles dans l’image avant de la partager. Le téléchargement direct du générateur reste en PNG ; une carte conservée se télécharge en JPEG.
 

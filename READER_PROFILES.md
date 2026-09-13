@@ -10,7 +10,7 @@ Le profil visité devient un espace de lecture, organisé en **Son parcours**, *
 - **Fiche d’un livre visité** : détails bibliographiques limités, échanges et publications de début/fin/carnet directement associées à son identifiant. Les mots et pensées restent dans le parcours ; ils ne sont pas rattachés à cette fiche par une simple ressemblance de titre.
 - **Ajouter à ma bibliothèque** : confirmation avec choix Bibliothèque/À lire ou liste d’envies. Seules les métadonnées partagées sont copiées, sans notes, progression ni état terminé du lecteur source. Les doublons sont détectés par ISBN ou titre.
 
-La migration préparée le 13 septembre permet aussi les couvertures personnalisées raster bornées (JPEG, PNG, WebP) et les sources BOO-P autorisées, en plus des catalogues Open Library et Google Books. L’accès à la bibliothèque reste limité au propriétaire et aux amis acceptés ; les URL arbitraires et SVG sont exclus. Masquer la section « En ce moment » ne retire pas les livres de la bibliothèque accessible aux amis ; cette distinction est indiquée dans les réglages.
+La migration appliquée le 13 septembre permet aussi les couvertures personnalisées raster bornées (JPEG, PNG, WebP) et les sources BOO-P autorisées, en plus des catalogues Open Library et Google Books. L’accès à la bibliothèque reste limité au propriétaire et aux amis acceptés ; les URL arbitraires et SVG sont exclus. Masquer la section « En ce moment » ne retire pas les livres de la bibliothèque accessible aux amis ; cette distinction est indiquée dans les réglages.
 
 ## Encouragements et Traces
 
@@ -64,4 +64,4 @@ La bio suit la visibilité du profil ; livres lus, temps et série sont regroup�
 
 ## Vérification du 13 septembre
 
-Voir [READING_EXPERIENCE_20260913.md](READING_EXPERIENCE_20260913.md) pour les tests PostgreSQL isolés de la nouvelle projection des couvertures et de la modération. La migration du 13 septembre est préparée, pas encore appliquée en ligne.
+Voir [READING_EXPERIENCE_20260913.md](READING_EXPERIENCE_20260913.md) pour les tests PostgreSQL isolés de la nouvelle projection des couvertures et de la modération. Les migrations du 13 septembre sont appliquées en production ; la projection des couvertures et les droits passent aussi les essais transactionnels sur le serveur.
