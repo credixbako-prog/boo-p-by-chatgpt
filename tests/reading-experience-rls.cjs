@@ -25,7 +25,7 @@ const {PGlite}=require(process.env.PGLITE_MODULE||'../.tmp/pg-test/node_modules/
  await db.exec(fs.readFileSync('supabase/migrations/20260911204712_reading_cards.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20260913130552_reading_experience_reports_covers.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20260913130954_restrict_club_publication_updates.sql','utf8'));
- await db.exec(fs.readFileSync('supabase/migrations/20260914134919_reader_catalog_cover_sources.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20260914141454_reader_catalog_cover_sources.sql','utf8'));
  for(const host of ['images.chasse-aux-livres.fr','img.chasse-aux-livres.fr']){const url='https://'+host+'/test.jpg?width=240';assert.equal((await db.query("select private.reader_book_card('test',$1)->>'coverUrl' as url",[JSON.stringify({coverUrl:url,readingSheet:{answers:{summary:'private'}}})])).rows[0].url,url);}
  assert.equal((await db.query("select private.reader_book_card('test',$1)->>'coverUrl' as url",[JSON.stringify({coverUrl:'https://images.chasse-aux-livres.fr.evil.test/a.jpg'})])).rows[0].url,'');
  const owner='00000000-0000-0000-0000-000000000001',friend='00000000-0000-0000-0000-000000000002',stranger='00000000-0000-0000-0000-000000000003';

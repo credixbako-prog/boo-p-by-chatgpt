@@ -1,6 +1,6 @@
 # BOO-P — Carrousels, citations et Lexique
 
-Version préparée le 14 septembre 2026 à partir des six annotations de suivi et des deux annotations sur la mémoire et le Lexique. Modifications validées localement ; publication et migration de production en attente.
+Version préparée le 14 septembre 2026 à partir des six annotations de suivi et des deux annotations sur la mémoire et le Lexique. Modifications validées localement et publication autorisée pour le commit `5f359ca`. La migration de production est appliquée et vérifiée. Le nom du fichier reprend la version attribuée par le serveur Supabase.
 
 ## Comportements
 
@@ -17,9 +17,9 @@ Version préparée le 14 septembre 2026 à partir des six annotations de suivi e
 
 Les livres signalés possèdent bien une couverture dans la bibliothèque. Leurs URL proviennent de `images.chasse-aux-livres.fr` et `img.chasse-aux-livres.fr`, absents de la liste des sources autorisées dans `private.reader_book_card` et dans le client. La projection retournait donc une chaîne vide.
 
-La migration `20260914134919_reader_catalog_cover_sources.sql` ajoute uniquement ces deux hôtes précis. La restriction propriétaire/ami accepté et la sélection des champs visibles restent en place. Les fiches de lecture, réflexions et autres notes privées ne sont pas exposées. Les domaines trompeurs restent rejetés. Aucune réimportation des livres n’est nécessaire.
+La migration `20260914141454_reader_catalog_cover_sources.sql` ajoute uniquement ces deux hôtes précis. La restriction propriétaire/ami accepté et la sélection des champs visibles restent en place. Les fiches de lecture, réflexions et autres notes privées ne sont pas exposées. Les domaines trompeurs restent rejetés. Aucune réimportation des livres n’est nécessaire.
 
-Les trois URL réelles des couvertures signalées ont été chargées et décodées dans Chrome. Les réponses de profil du test navigateur sont simulées, mais les images sont effectivement téléchargées depuis leur source. La projection serveur a été vérifiée sur PostgreSQL isolé ; la nouvelle migration n’a pas encore été appliquée en production.
+Les trois URL réelles des couvertures signalées ont été chargées et décodées dans Chrome. Les réponses de profil du test navigateur sont simulées, mais les images sont effectivement téléchargées depuis leur source. La projection serveur a été vérifiée sur PostgreSQL isolé ; la migration est désormais appliquée en production. Les quatre fiches concernées conservent maintenant leur URL de couverture. Les hôtes trompeurs sont refusés et les champs privés restent exclus de la projection.
 
 ## Conservation des citations
 
@@ -32,6 +32,7 @@ Les trois URL réelles des couvertures signalées ont été chargées et décod�
 - `tests/lexicon-memory-journeys.cjs` : deux sens de rappel, retournement accessible, stabilité après révision, remplacement d’un mot retrouvé, ouverture/fermeture au clavier, modification, recherche, filtres et liste responsive.
 - Régressions : `reading-experience-journeys`, `reader-profile-journeys` et `notebook-experience-journeys` réussis.
 - `tests/reading-experience-rls.cjs` : migration exécutée sur PostgreSQL via PGlite 0.5.8 ; contrôles d’accès existants et rejet des hôtes trompeurs réussis.
+- `tests/reader-profile-access.sql` : contrôle réussi en production des couvertures de catalogue, de la projection privée et des accès propriétaire/ami/étranger/anonyme, avec rollback intégral et aucun utilisateur de test restant. Aucun nouveau constat du conseiller de sécurité.
 - Cache PWA v57 : rechargement hors connexion et conservation du brouillon vérifiés.
 
 Les tests navigateur utilisent Chrome et des données isolées. Aucune publication ni bibliothèque d’un lecteur réel n’a été modifiée.
