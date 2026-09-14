@@ -25,6 +25,9 @@ const {PGlite}=require(process.env.PGLITE_MODULE||'../.tmp/pg-test/node_modules/
  await db.exec(fs.readFileSync('supabase/migrations/20260911204712_reading_cards.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20260913130552_reading_experience_reports_covers.sql','utf8'));
  await db.exec(fs.readFileSync('supabase/migrations/20260913130954_restrict_club_publication_updates.sql','utf8'));
+ await db.exec(fs.readFileSync('supabase/migrations/20260914134919_reader_catalog_cover_sources.sql','utf8'));
+ for(const host of ['images.chasse-aux-livres.fr','img.chasse-aux-livres.fr']){const url='https://'+host+'/test.jpg?width=240';assert.equal((await db.query("select private.reader_book_card('test',$1)->>'coverUrl' as url",[JSON.stringify({coverUrl:url,readingSheet:{answers:{summary:'private'}}})])).rows[0].url,url);}
+ assert.equal((await db.query("select private.reader_book_card('test',$1)->>'coverUrl' as url",[JSON.stringify({coverUrl:'https://images.chasse-aux-livres.fr.evil.test/a.jpg'})])).rows[0].url,'');
  const owner='00000000-0000-0000-0000-000000000001',friend='00000000-0000-0000-0000-000000000002',stranger='00000000-0000-0000-0000-000000000003';
  const post='10000000-0000-0000-0000-000000000001',privatePost='10000000-0000-0000-0000-000000000002',club='20000000-0000-0000-0000-000000000001',card='30000000-0000-0000-0000-000000000001';
  await db.query('insert into auth.users values ($1),($2),($3)',[owner,friend,stranger]);await db.query("insert into community_posts values ($1,$3,'pub','public'),($2,$3,'private','me')",[post,privatePost,owner]);await db.query("insert into reading_club_posts values ($1,$1,$2,'texte original')",[club,owner]);await db.query("insert into reading_cards values ($1,$2,'2026-09','Carte','','public','data:image/jpeg;base64,AAAA',now())",[card,owner]);

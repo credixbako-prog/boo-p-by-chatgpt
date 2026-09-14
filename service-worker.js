@@ -1,5 +1,5 @@
 importScripts('./js/push-worker.js');
-const CACHE_VERSION = 'boo-p-webapp-v56';
+const CACHE_VERSION = 'boo-p-webapp-v57';
 const APP_SHELL = [
   './',
   './index.html',

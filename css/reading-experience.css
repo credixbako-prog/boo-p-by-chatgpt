@@ -45,3 +45,43 @@
 .publication-menu-panel button[data-publication-command="delete"] { color:var(--boo-danger,#a63730); }
 @media(prefers-reduced-motion:reduce){.quiz-celebration{animation:none}}
 @media(max-width:600px){.profile-hero .profile-main{padding-right:86px}.thought-book-context{padding:10px 16px}.trail-map-controls{gap:2px}.trail-map-controls button{min-width:32px}}
+
+/* Keep the same visual pagination as the word cards, with real keyboard buttons. */
+.saved-card-dots { gap:0; padding-top:10px; margin:0; flex-wrap:wrap; max-width:100%; }
+.saved-card-dot { flex:0 0 11px; width:11px; min-width:0; height:28px; color:var(--boo-sage); }
+.saved-card-dot span { width:6px; height:6px; border:0; border-radius:99px; background:var(--boo-line); transition:width .2s ease,background .2s ease; }
+.saved-card-dot[aria-current=true] { flex-basis:25px; width:25px; }
+.saved-card-dot[aria-current=true] span { width:20px; background:var(--boo-sage); }
+.saved-card-dot:focus-visible { outline:2px solid var(--boo-ochre); outline-offset:2px; border-radius:8px; }
+.saved-card-carousel--paged,.citation-carousel,.reader-current-shelf,.reader-featured-shelf { scrollbar-width:none; overscroll-behavior-inline:contain; -webkit-overflow-scrolling:touch; }
+.saved-card-carousel--paged::-webkit-scrollbar,.citation-carousel::-webkit-scrollbar,.reader-current-shelf::-webkit-scrollbar,.reader-featured-shelf::-webkit-scrollbar { display:none; }
+.home-citations { padding:0; }
+.citation-carousel { width:min(100%,680px); margin-inline:auto; }
+.citation-slide .publication-quote { height:330px; display:flex; flex-direction:column; position:relative; box-sizing:border-box; padding-top:40px; }
+.citation-slide .publication-quote blockquote { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; overflow:hidden; }
+.citation-slide .publication-quote blockquote::before,.citation-slide .publication-quote blockquote::after { flex:none; font-size:32px; margin-block:8px; }
+.citation-slide .publication-quote blockquote p { flex:none; }
+.citation-slide .publication-quote figcaption { flex:none; max-height:100px; overflow:hidden; }
+.citation-slide .publication-quote cite { margin-top:8px; }
+.citation-slide .publication-quote .publication-quote-caption { margin-top:8px; padding-top:8px; }
+.citation-slide .publication-quote blockquote.citation-overflow { justify-content:flex-start; mask-image:linear-gradient(#000 85%,transparent); }
+.citation-read-full { position:absolute; top:8px; right:12px; font-size:12px; background:var(--boo-paper); padding:3px 6px; border-radius:6px; }
+.citation-full-dialog { padding:20px; }
+.citation-full-dialog > .icon-button { margin-left:auto; }
+.reader-current-shelf,.reader-featured-shelf { display:flex; gap:20px; width:100%; overflow-x:auto; scroll-snap-type:x mandatory; align-items:flex-start; }
+.reader-current-shelf > .reader-book-tile,.reader-featured-shelf > .reader-book-tile { flex:0 0 100%; min-width:0; scroll-snap-align:start; scroll-snap-stop:always; }
+.reader-current-shelf .reader-interactions { width:min(100%,320px); margin-inline:auto; }
+.reader-current-shelf .reader-cover-button,.reader-featured-shelf .reader-cover-button { max-width:220px; }
+.reading-sheet-fields textarea[readonly] { background:var(--boo-paper-2); }
+@media(max-width:400px){.citation-slide .publication-quote{height:350px}.reader-current-shelf .reader-cover-button,.reader-featured-shelf .reader-cover-button{max-width:180px}}
+@media(prefers-reduced-motion:reduce){.saved-card-dot span{transition:none}}
+.memory-flip-card .memory-flip-card__answer--definition { font-size:var(--boo-text-section); line-height:1.5; }
+.lexicon-grid.lexicon-list { grid-template-columns:minmax(0,1fr); gap:8px; }
+.lexicon-entry { padding:0; box-shadow:none; }
+.lexicon-entry > summary { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 22px; list-style:none; cursor:pointer; color:var(--boo-ink); font:600 var(--boo-text-section)/1.4 var(--boo-display); overflow-wrap:anywhere; }
+.lexicon-entry > summary::-webkit-details-marker { display:none; }
+.lexicon-entry > summary::after { content:""; flex:0 0 8px; width:8px; height:8px; border-right:1.5px solid var(--boo-sage); border-bottom:1.5px solid var(--boo-sage); transform:rotate(45deg); margin-right:4px; }
+.lexicon-entry[open] > summary::after { transform:rotate(225deg); }
+.lexicon-entry > summary:focus-visible { outline:2px solid var(--boo-sage); outline-offset:-4px; border-radius:var(--boo-radius); }
+.lexicon-entry-details { padding:0 22px 20px; }
+.lexicon-entry-details .lexicon-definition,.lexicon-entry-details .lexicon-note { white-space:pre-wrap; overflow-wrap:anywhere; margin-top:12px; }

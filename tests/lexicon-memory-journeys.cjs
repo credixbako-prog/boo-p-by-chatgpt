@@ -1,0 +1,111 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+
+(async () => {
+  const browser = await chromium.launch({ headless:true, ...(process.env.CHROME_PATH ? { executablePath:process.env.CHROME_PATH } : {}) });
+  try {
+    const context = await browser.newContext({ viewport:{ width:390, height:844 }, serviceWorkers:'block' });
+    await context.route('**/*.supabase.co/**', route => route.fulfill({ status:200, contentType:'application/json', body:'[]' }));
+    const page = await context.newPage(), errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.setDefaultTimeout(10000);
+    await page.emulateMedia({ reducedMotion:'reduce' });
+    await page.addLocatorHandler(page.locator('.badge-celebration[open]'), () => page.locator('.badge-celebration-close').click());
+    await page.goto('http://127.0.0.1:8766/app.html?guest=1#home');
+    await page.locator('[data-action=start-session]').waitFor();
+    const seeded = await page.evaluate(() => {
+      BT.store.getLexicon().forEach(item => BT.store.deleteLexiconWord(item.id));
+      const book = BT.store.getCurrentBook();
+      const words = Array.from({ length:12 }, (_, i) => BT.store.addLexiconWord({ kind:'word', word:'Mot personnel '+i, definition:'Sens à apprendre numéro '+i, bookId:book.id, page:23, note:'Mon contexte personnel' }));
+      const expression = BT.store.addLexiconWord({ kind:'expression', word:'Tourner la page', definition:'Passer à autre chose', bookId:book.id });
+      BT.store.addLexiconWord({ kind:'citation', word:'Ma citation reste dans le Carnet.', bookId:book.id });
+      return { book:book.id, words, expression:expression.id };
+    });
+    await page.reload();
+    const cards = page.locator('[data-memory-carousel] .memory-card-shell');
+    await cards.first().waitFor();
+    const modes = await cards.evaluateAll(items => items.map(item => item.dataset.memoryDirection));
+    assert.equal(modes.length, 10);
+    assert.deepEqual(modes, Array.from({ length:10 }, (_, i) => i % 2 ? 'definition' : 'word'));
+    fs.mkdirSync('.tmp/carousel-review', { recursive:true });
+    const history = await page.evaluate(() => JSON.stringify(BT.store.getLexicon()));
+    for (const direction of ['word', 'definition']) {
+      const card = cards.filter({ has:page.locator('.status-chip', { hasText:direction === 'word' ? 'Mot à retrouver' : 'Définition à retrouver' }) }).first();
+      const key = await card.getAttribute('data-memory-key');
+      const word = seeded.words.find(item => 'lexicon:'+item.id === key);
+      const front = await card.locator('.memory-flip-card__front').textContent();
+      assert.ok(front.includes(direction === 'word' ? word.definition : word.word));
+      assert.ok(!front.includes(direction === 'word' ? word.word : word.definition));
+      if (direction === 'definition') await card.locator('.memory-flip-card').screenshot({ path:'.tmp/carousel-review/memory-definition-front.png' });
+      await card.locator('.memory-flip-card').click();
+      if (direction === 'definition') await card.locator('.memory-flip-card').screenshot({ path:'.tmp/carousel-review/memory-definition-back.png' });
+      assert.equal(await card.locator('.memory-flip-card__back').getAttribute('aria-hidden'), 'false');
+      assert.equal(await card.locator('.memory-flip-card__answer').textContent(), direction === 'word' ? word.word : word.definition);
+      await card.locator('.memory-flip-card').click();
+    }
+    assert.equal(await page.evaluate(() => JSON.stringify(BT.store.getLexicon())), history);
+    const retry = cards.nth(1), retryKey = await retry.getAttribute('data-memory-key');
+    const stable = await cards.evaluateAll(items => Object.fromEntries(items.map(item => [item.dataset.memoryKey,item.dataset.memoryDirection])));
+    await retry.locator('.memory-flip-card').click();
+    await retry.locator('[data-quality=retry]').click();
+    const repeated = page.locator(`[data-memory-key="${retryKey}"].memory-card-shell`);
+    await repeated.waitFor();
+    assert.equal(await repeated.getAttribute('data-memory-direction'), 'definition');
+    const after = await cards.evaluateAll(items => items.map(item => [item.dataset.memoryKey,item.dataset.memoryDirection]));
+    after.forEach(([key,direction]) => assert.equal(direction,stable[key]));
+    await repeated.locator('.memory-flip-card').click();
+    await repeated.locator('[data-quality=recalled]').click();
+    await repeated.waitFor({ state:'detached' });
+    assert.equal(await cards.count(), 10, 'A new word replaces the recalled card');
+
+    await page.evaluate(() => location.hash = '#path?tab=lexicon');
+    const entries = page.locator('.lexicon-entry');
+    await entries.first().waitFor();
+    assert.equal(await entries.count(), 13);
+    assert.equal(await page.locator('.lexicon-entry[open]').count(), 0);
+    assert.equal(await page.locator('.lexicon-entry-details').first().isVisible(), false);
+    const entry = page.locator(`[data-lexicon-id="${seeded.words[0].id}"]`);
+    assert.equal(await entry.innerText(), seeded.words[0].word);
+    await entry.locator('summary').click();
+    assert.ok((await entry.innerText()).includes('Sens à apprendre numéro 0'));
+    assert.ok((await entry.innerText()).includes('p. 23'));
+    assert.ok((await entry.innerText()).includes('Mon contexte personnel'));
+    await entry.locator('summary').click();
+    assert.equal(await entry.locator('.lexicon-entry-details').isVisible(), false);
+    await entry.locator('summary').focus();
+    await page.keyboard.press('Enter');
+    await entry.getByRole('button', { name:'Modifier', exact:true }).click();
+    await page.locator('[data-form=lexicon] [name=definition]').fill('Définition corrigée et conservée');
+    await page.locator('[data-form=lexicon] [type=submit]').click();
+    assert.equal(await entry.locator('summary').innerText(), seeded.words[0].word);
+    await entry.locator('summary').click();
+    assert.ok((await entry.innerText()).includes('Définition corrigée et conservée'));
+    await page.locator('#lexicon-search').fill('corrigée');
+    await page.waitForFunction(() => document.querySelectorAll('.lexicon-entry').length === 1);
+    assert.equal(await entries.first().getAttribute('data-lexicon-id'), seeded.words[0].id);
+    await page.locator('#lexicon-search').fill('');
+    await page.waitForFunction(() => document.querySelectorAll('.lexicon-entry').length === 13);
+    await page.locator('.notebook-filters > summary').click();
+    await page.locator('[data-action=notebook-filter][data-kind=expression]').click();
+    assert.equal(await entries.count(), 1);
+    assert.equal(await entries.first().locator('summary').innerText(), 'Tourner la page');
+    await page.locator('.notebook-filters > summary').click();
+    await page.locator('[data-action=notebook-filter][data-kind=all]').click();
+    fs.mkdirSync('.tmp/carousel-review', { recursive:true });
+    for (const width of [320,1294]) {
+      await page.setViewportSize({ width, height:912 });
+      await entry.locator('summary').click();
+      await page.locator('.lexicon-list').screenshot({ path:'.tmp/carousel-review/lexicon-'+width+'.png' });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      const rows = await entries.evaluateAll(items => items.map(item => item.getBoundingClientRect().left));
+      assert.equal(new Set(rows).size, 1);
+      await entry.locator('summary').click();
+    }
+    await page.evaluate(() => location.hash = '#path?tab=notebook&section=citations');
+    await page.locator('.notebook-citation').waitFor();
+    assert.equal(await entries.count(), 0);
+    assert.deepEqual(errors, []);
+    console.log('PASS: alternating recall directions, accessible flips, stable retry and replacement, collapsible lexicon with keyboard/edit/search/filter, responsive single list, quotations preserved');
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

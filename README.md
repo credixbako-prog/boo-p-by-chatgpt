@@ -22,6 +22,8 @@ Les amis acceptés peuvent consulter leurs bibliothèques. Carnets, mots, expres
 
 ## Développement local
 
+Les ajustements du 14 septembre — carrousels, couvertures des profils, citations liées à la fiche, mémoire dans les deux sens et Lexique dépliable — sont décrits dans le [suivi de cette version](READING_CAROUSELS_20260914.md), avec son état de publication et ses vérifications.
+
 Servez le dossier avec un serveur HTTP local puis ouvrez `index.html`. Les pages servies directement avec le protocole `file://` ne permettent pas l’installation de la webapp ni l’enregistrement du service worker.
 
 ## Phase actuelle
