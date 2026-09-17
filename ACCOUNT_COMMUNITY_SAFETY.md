@@ -1,6 +1,6 @@
 # Comptes et sécurité communautaire — préparation mobile
 
-Cette livraison prépare la première étape de publication mobile : suppression du compte, signalement des utilisateurs et blocage côté serveur. Les deux migrations et les trois fonctions serveur sont activées sur Supabase depuis le 17 septembre 2026. Le client v59 est livré par le workflow GitHub Pages après les tests automatisés.
+Cette livraison prépare la première étape de publication mobile : suppression du compte, signalement des utilisateurs et blocage côté serveur. Les deux migrations et les trois fonctions serveur sont activées sur Supabase depuis le 17 septembre 2026. Le client v59 est publié sur GitHub Pages : [déploiement réussi du commit a5b1c6a](https://github.com/credixbako-prog/boo-p-by-chatgpt/actions/runs/35214305390), avec 146 tests automatisés réussis. Les sept fichiers publics de cette fonctionnalité correspondent au commit vérifié.
 
 ## Suppression du compte
 
@@ -65,7 +65,9 @@ La vérification en transaction SQL valide les règles de base ; elle ne remplac
 
 Après activation sur le projet Supabase `shnyjvinzjvgourpscvh`, les deux suites SQL de sécurité communautaire et de suppression du compte ont également réussi sur la base hébergée, avec annulation des données synthétiques. Versions serveur actives : `delete-account` v1, `reading-voice` v7 et `push-notifications` v3.
 
-Les vérifications HTTP avec deux comptes dédiés sans envoi d'e-mail ont réussi sur Auth, la base et Storage réels : signalement privé, refus d'identité forgée, blocage bilatéral, refus d'accès aux médias et aux interactions après blocage, déblocage, refus de suppression avec mauvais mot de passe, suppression complète d'un compte et de ses fichiers, refus du renouvellement de session et des écritures avec l'ancien jeton. Le second compte, son livre privé et son fichier restent intacts. Un parcours navigateur complète cette vérification avant nettoyage du second compte.
+Les vérifications HTTP avec deux comptes dédiés sans envoi d'e-mail ont réussi sur Auth, la base et Storage réels : signalement privé, refus d'identité forgée, blocage bilatéral, refus d'accès aux médias et aux interactions après blocage, déblocage, refus de suppression avec mauvais mot de passe, suppression complète d'un compte et de ses fichiers, refus du renouvellement de session et des écritures avec l'ancien jeton. La suppression du premier compte a préservé le second compte, son livre privé et son fichier.
+
+Le parcours Chrome sur le site public a ensuite réussi sans simulation : connexion du second compte, synchronisation de son livre, mauvais mot de passe refusé par la fonction hébergée (HTTP 403) sans effacement local, puis suppression confirmée (HTTP 200), retour à l'accueil et effacement du cache personnel et de la session. Aucune exception JavaScript. Le contrôle SQL final confirme l'absence des deux comptes de test et de leurs données dans Auth, les identités, sessions, profils, annuaire, livres, signalements, blocages, Storage et marqueurs de suppression. Les mots de passe synthétiques locaux ont été effacés.
 
 La publication ciblée part du dernier `main` distant et conserve les suggestions de livres existantes. Le commit local préparant de nouvelles recommandations reste séparé ; les 6 tests de cette évolution expliquent la différence entre les 152 tests du dossier de travail et les 146 tests de cette livraison.
 
