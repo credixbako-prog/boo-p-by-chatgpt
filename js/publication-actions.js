@@ -3,7 +3,16 @@ window.BT=window.BT||{};
 BT.publications=(()=>{
   const records=new Map(),expanded=new Set(),dialogs=new Map();let scope='';
   const who=()=>BT.auth?.isAuthenticated?.()&&!BT.auth?.isGuest?.()?BT.auth.getCurrentUser()?.id:null;
-  const moderator=()=>!!who()&&BT.auth.getSession?.()?.user?.app_metadata?.boop_moderator===true;
+  const moderator=()=>!!who()&&BT.staffAccess?.isModerator()===true;
+  window.addEventListener('boop:staff-access-changed',()=>{
+    document.querySelectorAll('[data-publication-menu]').forEach(menu=>{
+      const item=records.get(menu.dataset.publicationMenu);if(!item||item.mine||item.canManage)return;
+      const button=menu.querySelector('[data-publication-command="delete"]');
+      const allowed=item.account===who()&&moderator()&&item.visibility!=='private'&&item.visibility!=='me';
+      if(!allowed){button?.remove();return;}
+      if(!button){const action=document.createElement('button');action.type='button';action.dataset.publicationCommand='delete';action.textContent='Supprimer';menu.querySelector('.publication-menu-panel')?.append(action);}
+    });
+  });
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   function record(post,options={}){const current=who()||'guest';if(current!==scope){records.clear();expanded.clear();scope=current;}const value={...post,...options},table=options.table||'community_posts',id=post.remoteId||post.id,key=table+':'+id;const author=post.author_id||post.user_id||post.authorId;records.set(key,{...value,table,id,account:current,mine:author==='me'||author===(table==='reading_cards'?(who()||'guest'):who()),remote:options.remote??post.isRemote??!!(post.author_id||post.user_id&&post.synced)});return key;}
   function menuHTML(post,options={}){const key=record(post,options),item=records.get(key);return `<details class="publication-menu" data-publication-menu="${escape(key)}"><summary class="icon-button" aria-label="Actions de la publication" title="Actions de la publication">•••</summary><div class="publication-menu-panel">${item.mine?'<button type="button" data-publication-command="edit">Modifier</button>':''}<button type="button" data-publication-command="share">Partager</button>${!item.mine?'<button type="button" data-publication-command="report">Signaler</button>':''}${item.mine||(moderator()&&item.visibility!=='private'&&item.visibility!=='me')||item.canManage?'<button type="button" data-publication-command="delete">Supprimer</button>':''}</div></details>`;}

@@ -42,7 +42,7 @@ async function run(label,sql){
   }
 }
 const tests=process.argv.slice(2).length?process.argv.slice(2):[
-  'tests/community-safety-access.sql','tests/account-deletion-access.sql',
+  'tests/community-safety-access.sql','tests/account-deletion-access.sql','tests/staff-access.sql',
   'tests/reader-profile-access.sql','tests/reader-sharing-access.sql',
   'tests/reading-cards-access.sql','tests/reader-badges-access.sql',
   'tests/reading-experience-access.sql'

@@ -1,5 +1,5 @@
 importScripts('./js/push-worker.js');
-const CACHE_VERSION = 'boo-p-webapp-v59';
+const CACHE_VERSION = 'boo-p-webapp-v60';
 const APP_SHELL = [
   './',
   './index.html',
@@ -32,6 +32,8 @@ const APP_SHELL = [
   './js/book-lookup.js',
   './js/community-api.js',
   './js/community-safety.js',
+  './js/staff-access.js',
+  './css/staff-access.css',
   './js/components/trail-mindmap.js',
   './js/notifications-api.js',
   './js/push-notifications.js',

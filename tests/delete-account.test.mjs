@@ -94,6 +94,18 @@ test('account deletion: processes all file pages without offset skips', async ()
   assert.ok(h.calls.filter(c => c.url.includes('list_boop')).every(c => c.body.p_limit === 500));
 });
 
+test('account deletion: last administrator must transfer access before any cleanup', async () => {
+  const h = setup({ route: url => url.includes('prepare_boop_account_deletion')
+    ? json({ code: 'P0001', message: 'staff_last_admin' }, 400) : null });
+  const response = await h.send();
+  const result = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(result.deletionStarted, false);
+  assert.match(result.error, /autre administrateur/);
+  assert.equal(h.calls.some(call => call.url.includes('/storage/') || call.url.includes('/admin/users/') || call.url.includes('/boop_voice_calls?')), false);
+  assert.equal(h.calls.at(-1).url.endsWith('/logout?scope=local'), true);
+});
+
 test('account deletion: storage error preserves account and signals partial deletion without leaking secrets', async () => {
   const h = setup({ route: url => url.includes('list_boop') ? json([{ bucket_id: 'reading-cards', name: owner + '/a.png' }])
     : url.includes('/storage/') ? json({ error: 'server-only fresh-session-secret' }, 500) : null });

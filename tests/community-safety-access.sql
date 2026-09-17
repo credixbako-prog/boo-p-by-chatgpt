@@ -49,8 +49,10 @@ do $$begin
   insert into public.user_reports(reporter_id,reported_user_id,reason) values('27c2da67-6666-4111-9222-000000000003','27c2da67-6666-4111-9222-000000000002','Autre motif');
   raise exception 'Forged reporter accepted';exception when insufficient_privilege then null;
  end;
- update public.user_reports set status='reviewed' where reporter_id=auth.uid();
- if found then raise exception 'Reporter reviewed report';end if;
+ begin
+  update public.user_reports set status='reviewed' where reporter_id=auth.uid();
+  raise exception 'Reporter reviewed report';exception when insufficient_privilege then null;
+ end;
 end $$;
 insert into public.user_blocks(blocker_id,blocked_id) values(auth.uid(),'27c2da67-6666-4111-9222-000000000002');
 do $$begin
@@ -119,8 +121,15 @@ do $$begin
 end $$;
 select set_config('request.jwt.claims','{"sub":"27c2da67-6666-4111-9222-000000000003","role":"authenticated","app_metadata":{"boop_moderator":true}}',true);
 do $$begin
- update public.user_reports set status='reviewed' where reporter_id='27c2da67-6666-4111-9222-000000000001';
- if not found then raise exception 'Moderator cannot review report';end if;
+ if private.is_publication_moderator() then raise exception 'Cached claims grant moderation';end if;
+end $$;
+reset role;
+update auth.users set email_confirmed_at=now() where id='27c2da67-6666-4111-9222-000000000003';
+insert into private.boop_staff_roles(user_id,is_moderator) values('27c2da67-6666-4111-9222-000000000003',true);
+set local role authenticated;
+do $$begin
+ perform public.review_boop_staff_report('user',id,'reviewed') from public.user_reports where reporter_id='27c2da67-6666-4111-9222-000000000001';
+ if not exists(select 1 from public.user_reports where reporter_id='27c2da67-6666-4111-9222-000000000001' and status='reviewed') then raise exception 'Moderator cannot review report';end if;
 end $$;
 select set_config('request.jwt.claims','{"sub":"27c2da67-6666-4111-9222-000000000001","role":"authenticated"}',true);
 -- A resolved report does not prevent a later incident from being reported.

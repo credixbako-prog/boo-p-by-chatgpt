@@ -1,0 +1,49 @@
+.staff-entry { padding: 20px; border: 1px solid var(--outline-subtle); border-radius: 18px; background: var(--vert-sauge-surface); }
+.staff-entry h3 { margin: 0 0 8px; }
+.staff-entry .button-row { margin-top: 16px; }
+.staff-dialog { width: min(900px, calc(100vw - 32px)); max-width: 900px; color: var(--color-ink); background: var(--surface); }
+.staff-dialog .dialog-head { border-bottom: 1px solid var(--outline-subtle); }
+.staff-dialog .dialog-body { padding: 24px; }
+.staff-intro { margin: 0 0 20px; max-width: 64ch; line-height: 1.65; }
+.staff-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+.staff-tabs button { border: 1px solid var(--outline-variant); border-radius: 999px; padding: 10px 16px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.staff-tabs button[aria-pressed="true"] { background: var(--color-ink); border-color: var(--color-ink); color: white; }
+.staff-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+.staff-toolbar .field { flex: 1 1 240px; margin: 0; }
+.staff-toolbar input, .staff-toolbar select { width: 100%; min-height: 44px; }
+.staff-status { margin: 14px 0; min-height: 1.5em; font-size: .85rem; color: var(--on-surface-variant); }
+.staff-list { display: grid; gap: 16px; }
+.staff-card { border: 1px solid var(--outline-subtle); border-radius: 18px; padding: 20px; background: var(--surface-container-lowest); min-width: 0; }
+.staff-card__heading { display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 12px; }
+.staff-card h3 { font-size: 1.05rem; margin: 0 0 6px; overflow-wrap: anywhere; }
+.staff-email { font-size: .85rem; margin: 0; overflow-wrap: anywhere; }
+.staff-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.staff-badge { display: inline-flex; padding: 5px 9px; font-size: .7rem; line-height: 1.4; font-weight: 600; border-radius: 999px; color: #fff; background: var(--color-ink); }
+.staff-badge--sage { background: #496b58; }
+.staff-badge--plain { background: var(--surface-container); color: var(--color-ink); }
+.staff-facts { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 18px 0; font-size: .8rem; }
+.staff-facts div { min-width: 0; }
+.staff-facts dt { color: var(--on-surface-variant); margin-bottom: 3px; }
+.staff-facts dd { margin: 0; overflow-wrap: anywhere; }
+.staff-role-form fieldset { display: flex; flex-wrap: wrap; gap: 8px 22px; border: 0; padding: 0; margin: 0 0 12px; }
+.staff-role-form legend { font-size: .8rem; font-weight: 600; margin-bottom: 8px; }
+.staff-role-form .checkbox-row { font-size: .85rem; }
+.staff-confirm { margin-top: 15px; background: var(--surface-container); border-left: 3px solid var(--color-vert-sauge); padding: 14px; border-radius: 10px; font-size: .85rem; }
+.staff-confirm p { margin: 0 0 10px; overflow-wrap: anywhere; }
+.staff-report-text { padding: 14px; border-radius: 10px; background: var(--surface-container-low); margin-bottom: 16px; font-size: .85rem; }
+.staff-report-text p, .staff-excerpt p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 0; }
+.staff-excerpt { font-size: .85rem; margin: 0 0 18px; }
+.staff-excerpt summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+.staff-empty { padding: 28px 16px; border: 1px dashed var(--outline-variant); border-radius: 16px; text-align: center; }
+.staff-empty h3 { font-size: 1rem; margin: 0 0 8px; }
+.staff-empty p { font-size: .85rem; margin: 0; }
+.staff-pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 22px; font-size: .8rem; }
+.staff-dialog :focus-visible, .staff-entry :focus-visible { outline: 3px solid var(--color-vert-sauge); outline-offset: 3px; }
+@media (max-width: 560px) {
+  .staff-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 24px); border-radius: 20px; }
+  .staff-dialog .dialog-head, .staff-dialog .dialog-body { padding: 18px; }
+  .staff-card { padding: 16px; }
+  .staff-toolbar .field { flex-basis: 100%; }
+  .staff-card .button-row { align-items: stretch; }
+  .staff-card .button-row .button { white-space: normal; }
+}

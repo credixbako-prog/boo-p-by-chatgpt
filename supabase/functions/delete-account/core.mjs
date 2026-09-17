@@ -42,7 +42,9 @@ export function createHandler({ env, fetchImpl = fetch, now = Date.now }) {
       const response = await http('/rest/v1/rpc/' + name, { method: 'POST', body: JSON.stringify(body) });
       if (!response.ok) {
         const issue = await response.json().catch(() => ({}));
-        throw Object.assign(new Error(issue.message === 'BOOP_VOICE_START_PENDING' ? 'voice_start_pending' : 'database'), { rpcRejected: true });
+        const code = issue.message === 'BOOP_VOICE_START_PENDING' ? 'voice_start_pending'
+          : name === 'prepare_boop_account_deletion' && issue.message === 'staff_last_admin' ? 'staff_last_admin' : 'database';
+        throw Object.assign(new Error(code), { rpcRejected: true });
       }
       return response.status === 204 ? null : response.json();
     };
@@ -147,6 +149,9 @@ export function createHandler({ env, fetchImpl = fetch, now = Date.now }) {
       deleted = true;
       return reply({ deleted: true });
     } catch (error) {
+      if (error.message === 'staff_last_admin') {
+        return reply({ error: 'Désignez un autre administrateur BOO-P avant de supprimer votre compte. Aucune suppression n’a été lancée.', deletionStarted: false }, 409);
+      }
       if (error.message === 'voice_start_pending') {
         return reply({ error: 'Une conversation vocale est en cours de démarrage. Fermez-la puis réessayez dans un instant.', deletionStarted: false }, 409);
       }
