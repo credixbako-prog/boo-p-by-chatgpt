@@ -26,6 +26,7 @@ BT.auth = (function () {
   let client = null;
   let currentSession = null;
   let currentProfile = null;
+  let currentDeletionStarted = false;
   let initializationError = null;
 
   function normalizeEmail(email) {
@@ -261,6 +262,20 @@ BT.auth = (function () {
     return created.data;
   }
 
+  async function restoreAccountProfile(session) {
+    const owner = session?.user?.id;
+    if (!owner) return null;
+    const { data, error } = await client.rpc('get_boop_account_deletion_status');
+    // A rolling deployment may serve this client before the new migration.
+    // Other errors are not ignored: an unknown deletion state must not sync.
+    const unavailable = error && ['PGRST202','42883'].includes(error.code);
+    if (error && !unavailable) throw friendlyError(error, 'L’état de votre compte ne peut pas être vérifié. Réessayez.');
+    if (currentSession?.user?.id !== owner) return null;
+    currentDeletionStarted = data === true;
+    if (currentDeletionStarted) { currentProfile = null; return null; }
+    return ensureProfile(session);
+  }
+
   async function initialize() {
     try {
       if (!config?.url || !config?.publishableKey) throw new Error('Configuration Supabase BOO-P absente.');
@@ -290,14 +305,14 @@ BT.auth = (function () {
           window.dispatchEvent(new Event('boop:password-recovery'));
         }
         if (event === 'SIGNED_OUT' || event === 'SIGNED_IN') sessionStorage.removeItem(RECOVERY_KEY);
-        if (!session) currentProfile = null;
-        if (session && !recoveryRequested && event !== 'PASSWORD_RECOVERY') window.setTimeout(() => ensureProfile(session).catch(console.error), 0);
+        if (!session) { currentProfile = null; currentDeletionStarted = false; }
+        if (session && !recoveryRequested && event !== 'PASSWORD_RECOVERY') window.setTimeout(() => restoreAccountProfile(session).catch(console.error), 0);
       });
 
       const { data, error } = await client.auth.getSession();
       if (error) throw error;
       currentSession = data.session;
-      if (currentSession && !recoveryRequested && !isPasswordRecovery()) await ensureProfile(currentSession);
+      if (currentSession && !recoveryRequested && !isPasswordRecovery()) await restoreAccountProfile(currentSession);
 
       return userFromSession();
     } catch (error) {
@@ -353,7 +368,7 @@ BT.auth = (function () {
     if (error) throw friendlyError(error, 'Création du compte impossible.');
 
     currentSession = data.session;
-    if (data.session) await ensureProfile(data.session);
+    if (data.session) await restoreAccountProfile(data.session);
     return {
       id: data.user?.id,
       name: cleanName,
@@ -372,7 +387,7 @@ BT.auth = (function () {
     const { data, error } = await client.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword });
     if (error) throw friendlyError(error, 'Connexion impossible.');
     currentSession = data.session;
-    await ensureProfile(data.session);
+    await restoreAccountProfile(data.session);
     return userFromSession();
   }
 
@@ -467,8 +482,47 @@ BT.auth = (function () {
     }
     currentSession = null;
     currentProfile = null;
+    currentDeletionStarted = false;
     leaveGuestMode();
     flexibleStorage.removeItem(STORAGE_KEY);
+  }
+
+  async function deleteAccount({ confirmation, password } = {}) {
+    await readyPromise;
+    const owner = currentSession?.user?.id;
+    if (isGuest() || !owner) throw new Error('Connectez-vous au compte que vous souhaitez supprimer.');
+    if (confirmation !== 'SUPPRIMER') throw new Error('Saisissez exactement SUPPRIMER.');
+    if (typeof password !== 'string' || !password) throw new Error('Indiquez votre mot de passe actuel.');
+    const { data, error } = await client.functions.invoke('delete-account', {
+      body: { confirmation, password }
+    });
+    if (error) {
+      let message = 'La suppression n’a pas été confirmée. Vérifiez votre connexion et réessayez.';
+      let deletionStarted = false;
+      try {
+        const response = await error.context?.json?.();
+        if (typeof response?.error === 'string') message = response.error;
+        deletionStarted = response?.deletionStarted === true;
+        if (deletionStarted && currentSession?.user?.id === owner) currentDeletionStarted = true;
+      } catch { /* A transport error has no JSON response. */ }
+      throw Object.assign(new Error(message), { deletionStarted });
+    }
+    if (data?.deleted !== true) throw new Error('La suppression du compte n’a pas été confirmée. Réessayez.');
+    // The server has already removed the account. A failed session cleanup must
+    // not turn a confirmed deletion into an apparent failure or clear a new user.
+    if (currentSession?.user?.id === owner) {
+      try { await client.auth.signOut({ scope:'local' }); } catch { /* Local credentials are removed below. */ }
+      if (!currentSession?.user || currentSession.user.id === owner) {
+        currentSession = null;
+        currentProfile = null;
+        currentDeletionStarted = false;
+        avatarUrlCache.clear();
+        leaveGuestMode();
+        sessionStorage.removeItem(RECOVERY_KEY);
+        flexibleStorage.removeItem(STORAGE_KEY);
+      }
+    }
+    return { deleted:true, userId:owner };
   }
 
   return {
@@ -476,6 +530,7 @@ BT.auth = (function () {
     createAccount,
     signIn,
     signOut,
+    deleteAccount,
     updatePassword,
     requestPasswordReset,
     completePasswordReset,
@@ -495,6 +550,7 @@ BT.auth = (function () {
     enterGuestMode,
     leaveGuestMode,
     isGuest,
+    getDeletionState: () => currentDeletionStarted,
     backend: 'supabase'
   };
 })();

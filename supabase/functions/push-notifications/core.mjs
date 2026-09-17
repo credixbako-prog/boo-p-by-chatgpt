@@ -97,6 +97,12 @@ export function createHandler({env,fetchImpl=fetch,getGoogleToken=googleAccessTo
           // Recheck revocation immediately before sending an already queued alert.
           const active=await db(`push_devices?device_id=eq.${device.device_id}&user_id=eq.${device.user_id}&select=device_id`);
           if(!active.length)continue;
+          // Blocking removes the notification (and queued job). A dispatcher
+          // may already have claimed it: recheck before delivering that alert.
+          if(body.action==='dispatch') {
+            const visible=await db(`notifications?id=eq.${notification.id}&recipient_id=eq.${device.user_id}&read_at=is.null&select=id`);
+            if(!visible.length)continue;
+          }
           const result=await http(`https://fcm.googleapis.com/v1/projects/${PROJECT}/messages:send`,{method:'POST',headers:{Authorization:`Bearer ${cachedToken}`,'Content-Type':'application/json'},body:JSON.stringify({message:{token:device.token,data:{boop:'1',owner:device.user_id,id:String(notification.id),route:notification.route,test:body.action==='test'?'1':'0'},webpush:{headers:{TTL:'3600',Urgency:'normal'}}}})});
           if(result.ok){sent++;continue;}
           failed++;

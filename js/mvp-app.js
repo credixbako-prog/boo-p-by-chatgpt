@@ -17,7 +17,8 @@
     memoryCursor: 0, memoryCompletedKeys: [], lexiconKind: 'all', notebookBook: '', trailMode: 'map', trailImmersive: false, catalogRequest: 0,
     quizSignature: '', quizQuestionIds: [], quizIndex: 0, quizScore: 0, quizAnswered: false, quizSelected: '', quizStarted: false, memoryExpanded: false, quizFinished: false, quizSeed: 0,
     expandedTrailBooks: new Set(), trailYear: 'all', trailStatus: 'all', trailScale: .72, trailViewCenter: null, trailPinch: null, clubSpaces: new Map(), clubSpaceLoading: new Set(), clubSpaceErrors: new Map(),
-    syncReady: false, syncBusy: false, syncPending: false, syncTimer: null, syncUnsubscribe: null, syncBootstrapping: false, syncErrorShown: false
+    syncReady: false, syncBusy: false, syncPending: false, syncTimer: null, syncUnsubscribe: null, syncBootstrapping: false, syncErrorShown: false,
+    accountDeletionBusy: false, accountDeletionStarted: false, blockedUsersRequest: 0, blockedUsersError: ''
   };
 
   const NAV = [
@@ -148,15 +149,18 @@
     window.addEventListener('offline', updateNetworkState);
     updateNetworkState();
     if (!location.hash) location.hash = '#home'; else render();
-    refreshCommunity({ quiet:true });
-    refreshReaders('', { quiet:true });
+    refreshBlockedUsers({ quiet:true }).then(() => {
+      refreshCommunity({ quiet:true });
+      refreshReaders('', { quiet:true });
+    });
+    window.addEventListener('online', () => refreshBlockedUsers({ quiet:true }).then(() => refreshCommunity({ quiet:true })));
     if (user && window.BT.notifications) {
       store.replaceNotifications([]);
       refreshNotifications({ quiet:true }).then(startNotificationSubscription);
     }
     ui.timer = window.setInterval(() => { tickSessionClock(); updateSyncIndicator(); }, 1000);
     ui.heartbeat = window.setInterval(() => store.heartbeatActiveSession(), 10000);
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); refreshNotifications({ quiet:true }); refreshCommunity({quiet:true}); bootstrapUserDataSync({ quiet:true, refresh:true }).finally(() => render()); } });
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { store.recoverActiveSession(); refreshNotifications({ quiet:true }); refreshBlockedUsers({quiet:true}).then(() => refreshCommunity({quiet:true})); bootstrapUserDataSync({ quiet:true, refresh:true }).finally(() => render()); } });
     window.addEventListener('pagehide', () => { ui.notificationUnsubscribe?.(); ui.syncUnsubscribe?.(); clearTimeout(ui.syncTimer); }, { once:true });
   }
 
@@ -260,6 +264,7 @@
     document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => {
       if (event.target === dialog) closeDialog(dialog);
     }));
+    document.getElementById('app-dialog')?.addEventListener('cancel', event => { if (ui.accountDeletionBusy) event.preventDefault(); });
     document.addEventListener('keydown', event => {
       if (event.key === '/' && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) { event.preventDefault(); openSearch(); }
       const clubCard = event.target.closest?.('.club-card[data-action="open-club"]');
@@ -488,7 +493,7 @@
     clearTimeout(showToast.timer); showToast.timer = setTimeout(() => toast.classList.remove('is-visible'), 2800);
   }
 
-  function openDialog({ title, eyebrow = 'BOO-P', body, wide = false }) {
+  function openDialog({ title, eyebrow = 'BOO-P', body, wide = false, safety = false }) {
     const dialog = document.getElementById('app-dialog');
     ui.lastFocus = document.activeElement;
     document.getElementById('dialog-title').textContent = title;
@@ -496,10 +501,11 @@
     document.getElementById('dialog-body').innerHTML = body;
     dialog.classList.remove('thought-form-dialog');
     dialog.classList.toggle('app-dialog--wide', wide);
+    dialog.classList.toggle('safety-dialog', safety);
     if (!dialog.open) dialog.showModal();
-    setTimeout(() => dialog.querySelector('input,textarea,select,button')?.focus(), 40);
+    setTimeout(() => dialog.querySelector(safety ? 'form input:not([type="hidden"]),form textarea,form select,form button' : 'input,textarea,select,button')?.focus(), 40);
   }
-  function closeDialog(dialog = document.getElementById('app-dialog')) { if (dialog?.open) dialog.close(); ui.lastFocus?.focus?.(); }
+  function closeDialog(dialog = document.getElementById('app-dialog')) { if (ui.accountDeletionBusy) return; if (dialog?.open) dialog.close(); ui.lastFocus?.focus?.(); }
 
   function cover(book, size = '') {
     const image = book.coverUrl ? `<img src="${attr(book.coverUrl)}" alt="Couverture de ${attr(book.title)}" loading="lazy" decoding="async" onerror="this.hidden=true">` : '';
@@ -923,7 +929,8 @@
   function salonStatus(status) { return ({ waiting:'en attente', reading:'en lecture', paused:'en pause', finished:'terminé' })[status] || status; }
 
   function renderFriends() {
-    const users = store.getCommunity().users.filter(user => user.isRemote && normalize(`${user.name} ${user.handle || ''}`).includes(normalize(ui.friendQuery)));
+    const blocked = new Set(store.getSettings().blockedUsers);
+    const users = store.getCommunity().users.filter(user => user.isRemote && !blocked.has(user.id) && normalize(`${user.name} ${user.handle || ''}`).includes(normalize(ui.friendQuery)));
     const accessLabel = user => user.profileVisibility === 'public'
       ? 'Profil public · consultable maintenant'
       : user.friendState === 'friend'
@@ -1274,9 +1281,9 @@
         <details class="setting-card"><summary>Informations du compte</summary><div class="setting-card__body"><p><strong>${esc(profile.email)}</strong></p><p class="small muted">Gérez votre mot de passe et les informations de votre compte.</p><button class="button button--secondary button--small" type="button" data-action="simulated-password">Changer le mot de passe</button></div></details>
         <details class="setting-card"><summary>Confidentialité et visibilité</summary><div class="setting-card__body"><form class="form-grid" data-form="privacy"><fieldset><legend>Visibilité du profil</legend><label class="checkbox-row"><input type="radio" name="profileVisibility" value="private" ${profile.visibility === 'private' ? 'checked' : ''}><span><strong>Privé</strong><br><span class="muted">Vos détails sont visibles uniquement par vos amis. Recommandé et sélectionné par défaut.</span></span></label><label class="checkbox-row"><input type="radio" name="profileVisibility" value="public" ${profile.visibility === 'public' ? 'checked' : ''}><span><strong>Public</strong><br><span class="muted">Toute la communauté peut consulter le profil.</span></span></label></fieldset><label class="field">Visibilité par défaut des publications<select name="defaultVisibility"><option value="me" ${settings.defaultPostVisibility === 'me' ? 'selected' : ''}>Moi uniquement</option><option value="friends" ${settings.defaultPostVisibility === 'friends' ? 'selected' : ''}>Amis uniquement</option><option value="public" ${settings.defaultPostVisibility === 'public' ? 'selected' : ''}>Public</option></select></label><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
         <details class="setting-card"><summary>Préférences de notifications</summary><div class="setting-card__body"><form class="form-grid" data-form="notification-settings">${Object.entries({ friends:'Amitiés', encouragements:'Encouragements', traces:'Traces et réponses', clubs:'Clubs', salons:'Salons', goals:'Objectifs' }).map(([key,label]) => `<label class="checkbox-row"><input type="checkbox" name="${key}" ${settings.notifications[key] ? 'checked' : ''}> ${label}</label>`).join('')}<div data-push-controls><h3>Sur cet appareil</h3><p class="small muted" data-push-status role="status" aria-live="polite">Vérification des notifications…</p><div class="button-row"><button class="button button--secondary button--small" type="button" data-push-action="enable">Activer les notifications</button><button class="button button--secondary button--small" type="button" data-push-action="test" hidden>Tester</button><button class="button button--ghost button--small" type="button" data-push-action="disable" hidden>Désactiver</button></div><p class="small muted">Avec votre accord, Google Firebase reçoit un identifiant technique de cet appareil pour livrer les alertes. Aucun contenu de votre carnet n’est affiché.</p></div><button class="button button--primary" type="submit">Enregistrer</button></form></div></details>
-        <details class="setting-card"><summary>Utilisateurs bloqués</summary><div class="setting-card__body">${settings.blockedUsers.length ? settings.blockedUsers.map(id => { const user = store.getCommunity().users.find(item => item.id === id); return `<div class="history-item"><div class="history-item__content"><strong>${esc(user?.name || 'Utilisateur')}</strong></div><button class="text-link small" type="button" data-action="unblock-user" data-id="${attr(id)}">Débloquer</button></div>`; }).join('') : '<p class="small muted">Aucun utilisateur bloqué.</p>'}</div></details>
+        <details class="setting-card"><summary>Utilisateurs bloqués</summary><div class="setting-card__body">${ui.blockedUsersError ? `<p class="small muted" role="status">${esc(ui.blockedUsersError)}</p><button class="text-link" type="button" data-action="refresh-blocked-users">Réessayer</button>` : ''}${settings.blockedUsers.length ? settings.blockedUsers.map(id => { const user = store.getCommunity().users.find(item => item.id === id); return `<div class="history-item"><div class="history-item__content"><strong>${esc(user?.name || 'Utilisateur')}</strong></div><button class="text-link small" type="button" data-action="unblock-user" data-id="${attr(id)}">Débloquer</button></div>`; }).join('') : '<p class="small muted">Aucun utilisateur bloqué.</p>'}</div></details>
         <details class="setting-card"><summary>Données et aide</summary><div class="setting-card__body"><div class="button-row"><button class="button button--secondary button--small" type="button" data-action="export-data">Exporter mes données</button><button class="button button--secondary button--small" type="button" data-action="sync-recover">Reprendre la version synchronisée</button><button class="button button--secondary button--small" type="button" data-action="export-recovery">Exporter les copies de récupération</button><button class="button button--secondary button--small" type="button" data-action="help">Aide et signalement</button></div><p class="small muted">L’export est un fichier JSON local. Aucun rapport PDF premium n’est généré dans cette phase.</p></div></details>
-      </div></section><section class="danger-zone section-block"><h2>Fin de session et compte</h2><div class="button-row"><button class="button button--secondary" type="button" data-action="logout">Se déconnecter</button><button class="button button--danger" type="button" data-action="delete-account">Effacer les données locales</button></div></section>`;
+      </div></section><section class="danger-zone section-block"><h2>Fin de session et compte</h2><div class="button-row"><button class="button button--secondary" type="button" data-action="logout">Se déconnecter</button><button class="button button--secondary" type="button" data-action="erase-local-data">Effacer les données locales</button>${!isGuestMode() && BT.auth.getCurrentUser() ? '<button class="button button--danger" type="button" data-action="delete-account">Supprimer mon compte</button>' : ''}</div><p class="small muted">L’effacement local concerne ce navigateur. La suppression du compte retire aussi vos données en ligne.</p></section>`;
   }
 
   function renderLatestBadge(badges) {
@@ -1735,8 +1742,9 @@
       case 'reply-comment': openReplyDialog(trigger.dataset.postId, id); break;
       case 'report-post': openReportDialog('publication', id); break;
       case 'report-user': openReportDialog('utilisateur', id); break;
-      case 'block-user': confirmBlock(id); break;
-      case 'unblock-user': store.unblockUser(id); showToast('Utilisateur débloqué'); render(); break;
+      case 'block-user': await confirmBlock(id, trigger); break;
+      case 'unblock-user': await unblockReader(id, trigger); break;
+      case 'refresh-blocked-users': await refreshBlockedUsers(); render(); break;
       case 'friend': await updateFriendRelation(id, trigger.dataset.mode); break;
       case 'view-user': await openUserDialog(id); break;
       case 'create-club': openClubDialog(); break;
@@ -1816,6 +1824,7 @@
       case 'help': openHelpDialog(); break;
       case 'logout': if (isGuestMode()) { window.BT.auth.leaveGuestMode(); location.href = 'index.html?reason=guest-ended'; } else { await window.BT.auth.signOut(); location.href = 'index.html?reason=signed-out'; } break;
       case 'delete-account': openDeleteAccountDialog(); break;
+      case 'erase-local-data': openLocalDataErasureDialog(); break;
     }
   }
 
@@ -1900,7 +1909,7 @@
       post: submitPost, club: submitClub, 'club-edit': submitClubEdit, 'club-member': submitClubMember,
       'club-post':submitClubPost, 'club-comment':submitClubComment, 'club-book':submitClubBook,
       'salon-message': submitSalonMessage, reply: submitReply, salon: submitSalon, 'salon-edit': submitSalonEdit,
-      report: submitReport, help: submitHelp, 'change-password': submitChangePassword, 'delete-account': submitDeleteAccount
+      report: submitReport, help: submitHelp, 'change-password': submitChangePassword, 'delete-account': submitDeleteAccount, 'erase-local-data': submitLocalDataErasure
     };
     await handlers[kind]?.(form, data);
   }
@@ -2024,6 +2033,23 @@
   }
 
   function friendToast(mode) { return ({ send:'Demande envoyée localement', cancel:'Demande annulée', accept:'Demande acceptée', refuse:'Demande refusée', remove:'Ami retiré' })[mode] || 'Relation mise à jour'; }
+
+  async function refreshBlockedUsers({ quiet = false } = {}) {
+    if (isGuestMode() || !BT.auth.getCurrentUser()?.id || !BT.communitySafety) return;
+    const owner = BT.auth.getCurrentUser().id;
+    const request = ui.blockedUsersRequest = (ui.blockedUsersRequest || 0) + 1;
+    try {
+      const ids = await BT.communitySafety.loadBlockedUsers();
+      if (request !== ui.blockedUsersRequest || owner !== BT.auth.getCurrentUser()?.id || isGuestMode()) return;
+      store.replaceBlockedUsers(ids);
+      ui.blockedUsersError = '';
+      if (ui.route === 'profile' || ui.route === 'community') render();
+    } catch (error) {
+      if (request !== ui.blockedUsersRequest || owner !== BT.auth.getCurrentUser()?.id) return;
+      ui.blockedUsersError = 'La liste des comptes bloqués n’a pas pu être actualisée. Les blocages déjà enregistrés restent actifs.';
+      if (!quiet) showToast(ui.blockedUsersError);
+    }
+  }
 
   let communityRequest=0;
   async function refreshCommunity({ quiet = false } = {}) {
@@ -2800,7 +2826,26 @@
     try { await window.BT.community.createComment(post.remoteId || post.id, data.get('text'), form.dataset.commentId); closeDialog(); ui.openComments.add(post.id); await refreshCommunity({ quiet:true }); showToast('Réponse ajoutée'); }
     catch (error) { showToast(error.message || 'Réponse non envoyée'); }
   }
-  function submitReport(form, data) { showToast('Signalement non envoyé : le service de modération n’est pas encore disponible.'); }
+  function safetyFormStatus(form, message) {
+    const status = form.querySelector('[data-safety-status]');
+    if (status) status.textContent = message;
+  }
+  async function submitReport(form, data) {
+    if (form.dataset.saving) return;
+    if (isGuestMode() || !BT.auth.getCurrentUser()?.id) { safetyFormStatus(form, 'Connectez-vous pour signaler un utilisateur.'); return; }
+    const owner = BT.auth.getCurrentUser().id;
+    const submit = form.querySelector('[type="submit"]');
+    form.dataset.saving = 'true'; submit.disabled = true;
+    form.setAttribute('aria-busy', 'true'); safetyFormStatus(form, 'Envoi du signalement…');
+    try {
+      await BT.communitySafety.reportUser(data.get('targetId'), { reason:data.get('reason'), details:data.get('details') });
+      if (owner !== BT.auth.getCurrentUser()?.id || isGuestMode() || !form.isConnected) return;
+      form.innerHTML = '<p role="status">Votre signalement a été enregistré pour examen. Merci de nous aider à préserver cet espace de lecture.</p><button class="button button--secondary" type="button" data-action="close-dialog">Fermer</button>';
+    } catch (error) {
+      if (owner !== BT.auth.getCurrentUser()?.id || !form.isConnected) return;
+      submit.disabled = false; safetyFormStatus(form, error.message || 'Le signalement n’a pas été envoyé. Réessayez.');
+    } finally { delete form.dataset.saving; form.removeAttribute('aria-busy'); }
+  }
   function submitHelp(form, data) { showToast('Message non envoyé : le service d’aide n’est pas encore disponible.'); }
   async function submitChangePassword(form, data) {
     if (data.get('password') !== data.get('confirm')) { showToast('Les deux mots de passe ne correspondent pas'); return; }
@@ -2812,7 +2857,7 @@
       submit.disabled = false; showToast(error.message || 'Mot de passe non modifié');
     }
   }
-  async function submitDeleteAccount(form, data) {
+  async function submitLocalDataErasure(form, data) {
     if (data.get('confirmation') !== 'SUPPRIMER') { showToast('Saisissez exactement SUPPRIMER'); return; }
     ui.syncStopped = true;
     ui.syncReady = false;
@@ -2833,6 +2878,59 @@
     }
   }
 
+  async function submitDeleteAccount(form, data) {
+    if (ui.accountDeletionBusy) return;
+    const owner = BT.auth.getCurrentUser()?.id;
+    if (isGuestMode() || !owner) { safetyFormStatus(form, 'Connectez-vous au compte que vous souhaitez supprimer.'); return; }
+    if (data.get('confirmation') !== 'SUPPRIMER') { safetyFormStatus(form, 'Saisissez exactement SUPPRIMER.'); return; }
+    if (!data.get('password')) { safetyFormStatus(form, 'Indiquez votre mot de passe actuel.'); return; }
+    const submit = form.querySelector('[type="submit"]');
+    const previousSync = { stopped:ui.syncStopped, ready:ui.syncReady, pending:ui.syncPending };
+    ui.accountDeletionBusy = true;
+    form.closest?.('dialog')?.querySelectorAll('[data-action="close-dialog"]').forEach(button => { button.disabled = true; });
+    ui.syncStopped = true; ui.syncReady = false; ui.syncPending = false;
+    clearTimeout(ui.syncTimer);
+    submit.disabled = true; submit.textContent = 'Suppression en cours…';
+    form.setAttribute('aria-busy', 'true');
+    safetyFormStatus(form, 'Suppression du compte et de ses données en ligne. Gardez cette fenêtre ouverte.');
+    try {
+      const result = await BT.auth.deleteAccount({ confirmation:data.get('confirmation'), password:data.get('password') });
+      if (result?.deleted !== true) throw new Error('La suppression du compte n’a pas été confirmée. Réessayez.');
+    } catch (error) {
+      ui.accountDeletionBusy = false;
+      form.closest?.('dialog')?.querySelectorAll('[data-action="close-dialog"]').forEach(button => { button.disabled = false; });
+      ui.accountDeletionStarted ||= error.deletionStarted === true;
+      if (!ui.accountDeletionStarted) {
+        ui.syncStopped = previousSync.stopped; ui.syncReady = previousSync.ready; ui.syncPending = previousSync.pending;
+      }
+      submit.disabled = false; submit.textContent = 'Supprimer définitivement mon compte';
+      form.removeAttribute('aria-busy');
+      safetyFormStatus(form, error.message || 'La suppression n’a pas été confirmée. Réessayez.');
+      if (!ui.accountDeletionStarted) scheduleUserDataSync();
+      return;
+    }
+    // A different account may have been opened in another tab during the request.
+    if (store.getUserId() !== owner || (BT.auth.getCurrentUser()?.id && BT.auth.getCurrentUser().id !== owner)) {
+      ui.accountDeletionBusy = false;
+      location.href = 'index.html?reason=account-deleted';
+      return;
+    }
+    clearInterval(ui.timer); clearInterval(ui.heartbeat);
+    ui.syncUnsubscribe?.(); ui.syncUnsubscribe = null;
+    ui.notificationUnsubscribe?.();
+    let cleanupFailed = false;
+    try { await BT.readingCards?.clearLocal(owner); } catch { cleanupFailed = true; }
+    try { store.clearAll(); } catch { cleanupFailed = true; }
+    ui.accountDeletionBusy = false;
+    form.closest?.('dialog')?.querySelectorAll('[data-action="close-dialog"]').forEach(button => { button.disabled = false; });
+    form.removeAttribute('aria-busy');
+    if (cleanupFailed) {
+      form.innerHTML = '<p role="status">Votre compte et ses données en ligne ont été supprimés. L’effacement de certaines données de ce navigateur n’a pas pu être terminé. Effacez les données du site dans les réglages du navigateur.</p><a class="button button--secondary" href="index.html?reason=account-deleted">Retour à l’accueil</a>';
+      return;
+    }
+    location.href = 'index.html?reason=account-deleted';
+  }
+
   function openPostDialog() {
     ui.pendingPostPhotoFile=null;if(ui.pendingPostPhotoUrl)URL.revokeObjectURL(ui.pendingPostPhotoUrl);ui.pendingPostPhotoUrl='';
     const settings = store.getSettings();
@@ -2846,11 +2944,46 @@
     openDialog({ title:'Répondre à cette Trace', eyebrow:'Un seul niveau de réponse', body:`<form class="form-grid" data-form="reply" data-post-id="${attr(postId)}" data-comment-id="${attr(commentId)}"><label class="field">Votre réponse<textarea name="text" required maxlength="500"></textarea></label><button class="button button--primary" type="submit">Envoyer</button></form>` });
   }
   function openReportDialog(target, id) {
-    openDialog({ title:`Signaler ${target === 'utilisateur' ? 'cet utilisateur' : 'cette publication'}`, eyebrow:'Modération simulée', body:`<form class="form-grid" data-form="report"><input type="hidden" name="targetId" value="${attr(id)}"><label class="field">Motif<select name="reason"><option>Contenu inapproprié</option><option>Harcèlement</option><option>Spam</option><option>Autre</option></select></label><label class="field">Précision facultative<textarea name="details"></textarea></label><p class="small muted">Le signalement est enregistré localement. Aucun modérateur réel ne le reçoit dans la Phase 1.</p><button class="button button--primary" type="submit">Envoyer le signalement simulé</button></form>` });
+    if (isGuestMode() || !BT.auth.getCurrentUser()?.id) { showToast('Connectez-vous pour envoyer un signalement.'); return; }
+    if (target !== 'utilisateur') {
+      const post = store.getCommunity().posts.find(item => item.id === id);
+      if (post && BT.publications) BT.publications.report({ ...post, id:post.remoteId || post.id, remote:post.isRemote, table:'community_posts' });
+      else showToast('Cette publication n’est plus disponible.');
+      return;
+    }
+    openDialog({ title:'Signaler cet utilisateur', safety:true, eyebrow:'Sécurité de la communauté', body:`<form class="form-grid" data-form="report"><input type="hidden" name="targetId" value="${attr(id)}"><label class="field">Motif<select name="reason"><option>Harcèlement ou propos haineux</option><option>Contenu inapproprié</option><option>Spam ou publicité</option><option>Atteinte à la vie privée</option><option>Autre motif</option></select></label><label class="field">Précisions · facultatives<textarea name="details" maxlength="2000" rows="4"></textarea></label><p class="small muted">Votre signalement sera enregistré pour examen par l’équipe de modération. Vous pouvez aussi bloquer ce compte pour masquer ses publications.</p><p class="safety-form-status" role="status" aria-live="polite" data-safety-status></p><button class="button button--primary" type="submit">Envoyer le signalement</button></form>` });
   }
-  function confirmBlock(userId) {
-    const user = store.getCommunity().users.find(item => item.id === userId); if (!user) return;
-    if (confirm(`Bloquer ${user.name} ? Ses publications seront masquées dans ce prototype local.`)) { store.blockUser(userId); showToast('Utilisateur bloqué'); render(); }
+  async function confirmBlock(userId, trigger) {
+    if (isGuestMode() || !BT.auth.getCurrentUser()?.id) { showToast('Connectez-vous pour bloquer un utilisateur.'); return; }
+    if (trigger?.disabled) return;
+    const user = store.getCommunity().users.find(item => item.id === userId);
+    if (!confirm(`Bloquer ${user?.name || 'ce compte'} ? Ses publications seront masquées et votre éventuel lien d’amitié sera supprimé. Vous pourrez débloquer ce compte dans vos préférences.`)) return;
+    const owner = BT.auth.getCurrentUser().id;
+    if (trigger) trigger.disabled = true;
+    try {
+      await BT.communitySafety.blockUser(userId);
+      if (owner !== BT.auth.getCurrentUser()?.id || isGuestMode()) return;
+      ui.blockedUsersRequest = (ui.blockedUsersRequest || 0) + 1;
+      store.blockUser(userId); ui.clubSpaces.clear();
+      closeDialog(); render(); showToast('Utilisateur bloqué sur votre compte');
+      await Promise.all([refreshCommunity({ quiet:true }), refreshReaders(ui.friendQuery, { quiet:true }), refreshNotifications({ quiet:true })]);
+    } catch (error) { if (owner === BT.auth.getCurrentUser()?.id) showToast(error.message || 'Le blocage n’a pas été enregistré. Réessayez.'); }
+    finally { if (trigger) trigger.disabled = false; }
+  }
+  async function unblockReader(userId, trigger) {
+    if (isGuestMode() || !BT.auth.getCurrentUser()?.id) { showToast('Connectez-vous pour gérer vos blocages.'); return; }
+    if (trigger?.disabled) return;
+    const owner = BT.auth.getCurrentUser().id;
+    if (trigger) trigger.disabled = true;
+    try {
+      await BT.communitySafety.unblockUser(userId);
+      if (owner !== BT.auth.getCurrentUser()?.id || isGuestMode()) return;
+      ui.blockedUsersRequest = (ui.blockedUsersRequest || 0) + 1;
+      store.unblockUser(userId); ui.clubSpaces.clear();
+      render(); showToast('Utilisateur débloqué. L’amitié n’est pas rétablie automatiquement.');
+      await Promise.all([refreshCommunity({ quiet:true }), refreshReaders(ui.friendQuery, { quiet:true })]);
+    } catch (error) { if (owner === BT.auth.getCurrentUser()?.id) showToast(error.message || 'Le déblocage n’a pas été enregistré. Réessayez.'); }
+    finally { if (trigger) trigger.disabled = false; }
   }
   async function openUserDialog(userId) {
     const viewer=BT.auth.getCurrentUser()?.id;
@@ -2865,7 +2998,7 @@
     if(viewer!==BT.auth.getCurrentUser()?.id)return;
     const locked = user.profileVisibility === 'private' && !details;
     const avatarProfile = { ...user, avatarUrl:details?.avatarUrl || user.avatarUrl || '' };
-    openDialog({ title:userId===viewer?'Mon espace de lecture':'Son espace de lecture', wide:true, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2></div><details class="reader-profile-menu safety-menu"><summary aria-label="Options du profil" title="Options du profil">•••</summary><div class="safety-menu__panel"><details><summary>Confidentialité</summary><p class="small muted">La bibliothèque est réservée aux amis acceptés. Les carnets et souvenirs apparaissent selon leur audience de publication. Les notes et conversations IA restent privées.</p></details>${userId===viewer?'':user.friendState==='friend'?`<details><summary>Vous êtes amis · Gérer</summary>${friendAction(user)}</details>`:friendAction(user)}</div></details></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'bio…')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<div data-reader-sharing></div>` });
+    openDialog({ title:userId===viewer?'Mon espace de lecture':'Son espace de lecture', wide:true, eyebrow:locked ? 'Profil privé' : user.profileVisibility === 'private' ? 'Profil privé · ami accepté' : 'Profil public', body:`<div class="profile-main"><span class="profile-avatar">${esc(user.initials)}</span><div><h2>${esc(user.name)}</h2></div><details class="reader-profile-menu safety-menu"><summary aria-label="Options du profil" title="Options du profil">•••</summary><div class="safety-menu__panel"><details><summary>Confidentialité</summary><p class="small muted">La bibliothèque est réservée aux amis acceptés. Les carnets et souvenirs apparaissent selon leur audience de publication. Les notes et conversations IA restent privées.</p></details>${userId===viewer?'':user.friendState==='friend'?`<details><summary>Vous êtes amis · Gérer</summary>${friendAction(user)}</details>`:friendAction(user)}${userId!==viewer && !isGuestMode() ? `<button type="button" data-action="report-user" data-id="${attr(userId)}">Signaler</button><button type="button" data-action="block-user" data-id="${attr(userId)}">Bloquer</button>` : ''}</div></details></div>${locked ? '<div class="empty-state"><h3>Ce profil protège son sentier</h3><p>Envoyez une demande d’amitié. Son contenu deviendra accessible après acceptation.</p></div>' : `<p>${esc(details?.bio || 'bio…')}</p>${details?.interests?.length ? `<div class="interest-list">${details.interests.map(item => `<span>${esc(item)}</span>`).join('')}</div>` : ''}`}<div data-reader-sharing></div>` });
     const profileDialog=document.getElementById('app-dialog');profileDialog.classList.add('reader-profile-dialog');profileDialog.addEventListener('close',()=>profileDialog.classList.remove('reader-profile-dialog'),{once:true});
     const sharingHost=document.querySelector('#app-dialog [data-reader-sharing]');
     if(sharingHost && user.isRemote && !isGuestMode())BT.sharing.mountReader(sharingHost,userId);
@@ -2977,8 +3110,12 @@
   function openChangePasswordDialog() {
     openDialog({ title:'Changer le mot de passe', eyebrow:'Compte Supabase sécurisé', body:`<form class="form-grid" data-form="change-password"><label class="field">Nouveau mot de passe<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label class="field">Confirmer le mot de passe<input name="confirm" type="password" required minlength="8" autocomplete="new-password"></label><p class="small muted">Le nouveau mot de passe doit contenir au moins 8 caractères.</p><button class="button button--primary" type="submit">Enregistrer le nouveau mot de passe</button></form>` });
   }
+  function openLocalDataErasureDialog() {
+    openDialog({ title:'Effacer les données locales', safety:true, eyebrow:'Confirmation renforcée', body:`<div class="danger-zone"><p>Cette action efface les lectures BOO-P de ce navigateur et vous déconnecte. Votre compte, vos lectures synchronisées et vos publications restent conservés en ligne. Cette action ne supprime pas le compte distant. Fermez les autres onglets BOO-P avant de continuer.</p><form class="form-grid" data-form="erase-local-data"><label class="field">Saisissez <strong>SUPPRIMER</strong><input name="confirmation" required autocomplete="off"></label><button class="button button--danger" type="submit">Effacer les données locales</button></form></div>` });
+  }
   function openDeleteAccountDialog() {
-    openDialog({ title:'Effacer les données locales', eyebrow:'Confirmation renforcée', body:`<div class="danger-zone"><p>Cette action efface les lectures BOO-P de ce navigateur et vous déconnecte. Votre compte, vos lectures synchronisées et vos publications restent conservés en ligne. Cette action ne supprime pas le compte distant. Fermez les autres onglets BOO-P avant de continuer.</p><form class="form-grid" data-form="delete-account"><label class="field">Saisissez <strong>SUPPRIMER</strong><input name="confirmation" required autocomplete="off"></label><button class="button button--danger" type="submit">Effacer les données locales</button></form></div>` });
+    if (isGuestMode() || !BT.auth.getCurrentUser()?.id) { showToast('Connectez-vous au compte que vous souhaitez supprimer.'); return; }
+    openDialog({ title:'Supprimer mon compte', safety:true, eyebrow:'Suppression définitive', body:`<div class="danger-zone"><p>Cette action supprime définitivement votre compte BOO-P, votre profil, vos lectures synchronisées, le contenu de vos publications et vos fichiers en ligne. Les clubs, salons et contributions des autres lecteurs sont conservés ; votre identité et vos contenus y sont effacés. Cette action est irréversible.</p><p>Vous pouvez exporter vos données depuis les préférences avant de continuer. Fermez les autres onglets BOO-P.</p><form class="form-grid" data-form="delete-account"><label class="field">Mot de passe actuel<input type="password" name="password" required autocomplete="current-password"></label><label class="field">Saisissez <strong>SUPPRIMER</strong><input name="confirmation" required autocomplete="off" autocapitalize="characters" spellcheck="false" pattern="SUPPRIMER"></label><p class="safety-form-status" role="status" aria-live="polite" data-safety-status></p><div class="button-row"><button class="button button--secondary" type="button" data-action="close-dialog">Annuler</button><button class="button button--danger" type="submit">Supprimer définitivement mon compte</button></div></form></div>` });
   }
   function confirmDeleteBook(id) {
     const book = store.getBookById(id); if (!book) return;
@@ -3042,11 +3179,17 @@
       document.body.dataset.authMode = guest ? 'guest' : (user ? 'account' : 'preview');
       document.documentElement.dataset.authMode = document.body.dataset.authMode;
       document.getElementById('guest-banner').hidden = !guest;
-      const completedRemotely = guest || localPreview || Boolean(user?.profile?.onboarding_completed);
+      ui.accountDeletionStarted = Boolean(user && BT.auth.getDeletionState?.());
+      if (ui.accountDeletionStarted) { ui.syncStopped = true; ui.syncReady = false; }
+      const completedRemotely = guest || localPreview || ui.accountDeletionStarted || Boolean(user?.profile?.onboarding_completed);
       if (completedRemotely && !store.isOnboardingComplete()) store.saveOnboarding({ completed:true, version:5.5, restoredFromProfile:true, completedAt:new Date().toISOString() });
       if (!completedRemotely && !store.isOnboardingComplete()) { location.replace('onboarding.html'); return; }
       if (user) await bootstrapUserDataSync({ quiet:true });
       init();
+      if (ui.accountDeletionStarted) {
+        openDeleteAccountDialog();
+        safetyFormStatus(document.querySelector('#app-dialog form'), 'La suppression de votre compte a déjà commencé. Vos données locales sont conservées tant qu’elle n’est pas terminée. Saisissez votre mot de passe et SUPPRIMER pour reprendre la suppression.');
+      }
       BT.pushInvitation?.schedule();
     } catch (error) {
       console.error('BOO-P authentication gate', error);

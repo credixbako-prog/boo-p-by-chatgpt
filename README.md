@@ -28,6 +28,8 @@ Servez le dossier avec un serveur HTTP local puis ouvrez `index.html`. Les pages
 
 ## Phase actuelle
 
+La [gestion des comptes et de la sécurité communautaire](ACCOUNT_COMMUNITY_SAFETY.md) ajoute une suppression complète du compte avec confirmation, des signalements d'utilisateurs et des blocages contrôlés par le serveur. Les deux migrations, la fonction de suppression et les mises à jour voix/notifications sont activées sur Supabase ; le client v59 est livré par le workflow GitHub Pages.
+
 Prototype web interactif, expérience de lecture v5.7 : bibliothèque et wishlist, livres papier/numériques/audio, sessions multiples avec un seul chronomètre, ajout par ISBN/photo/saisie manuelle, lexique avec dictionnaire et rappels J+1/J+3/J+5/J+30, badges privés et annuaire de lecteurs.
 
 Tous les comptes authentifiés sont trouvables par nom ou pseudonyme. Un profil privé ne révèle que cet aperçu minimal jusqu’à l’acceptation de la demande d’amitié. Les demandes d’amis, réponses aux Traces et encouragements alimentent un centre de notifications privé et synchronisé. Les recommandations éditoriales, les données de démonstration et certaines fonctions communautaires restent explicitement simulées.

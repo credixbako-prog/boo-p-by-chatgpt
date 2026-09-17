@@ -14,6 +14,7 @@ BT.store = (() => {
   let STATE_KEY = LEGACY_STATE_KEY;
   let ONBOARDING_KEY = LEGACY_ONBOARDING_KEY;
   let activeUserId = null;
+  let localErased = false;
   const SCHEMA_VERSION = 13;
   const listeners = new Set();
 
@@ -75,6 +76,7 @@ BT.store = (() => {
   }
 
   function writeJSON(key, value) {
+    if (localErased) return false;
     try { localStorage.setItem(key, JSON.stringify(value)); return true; }
     catch { return false; }
   }
@@ -313,6 +315,7 @@ BT.store = (() => {
     persistState(); emit();
   }
   function getState() { return clone(state); }
+  function getUserId() { return activeUserId; }
   function getSyncedData() {
     return clone({
       books:state.books,
@@ -390,7 +393,8 @@ BT.store = (() => {
   function subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); }
   function useUser(userId) {
     const cleanId = String(userId || '').trim();
-    if (!cleanId || cleanId === activeUserId) return getState();
+    if (!cleanId || (cleanId === activeUserId && !localErased)) return getState();
+    localErased = false;
     activeUserId = cleanId;
     STATE_KEY = `${LEGACY_STATE_KEY}:${cleanId}`;
     ONBOARDING_KEY = `${LEGACY_ONBOARDING_KEY}:${cleanId}`;
@@ -631,12 +635,20 @@ BT.store = (() => {
   function addPost(post) { const record = { id: post.id || uid('post'), remoteId: post.remoteId || null, authorId: post.authorId || 'me', authorName: post.authorName || state.profile.name, initials: post.initials || state.profile.name.split(/\s+/).map(item => item[0]).slice(0, 2).join('').toUpperCase(), type: post.type || 'trace', readingKind:post.readingKind || null, readingSourceId:post.readingSourceId || null, readingContent:typeof post.readingContent==='string'?post.readingContent:null, date: post.date || nowISO(), bookTitle: post.bookTitle || '', text: String(post.text || '').trim(), visibility: post.visibility || state.settings.defaultPostVisibility, photoData: post.photoData || null, photoPath: post.photoPath || null, photoUrl: post.photoUrl || null, isRemote: Boolean(post.isRemote), encouraged: Boolean(post.encouraged), encouragements: Number(post.encouragements) || 0, comments: Array.isArray(post.comments) ? post.comments : [] }; const existing = state.community.posts.findIndex(item => item.id === record.id || (record.remoteId && item.remoteId === record.remoteId)); if (existing >= 0) state.community.posts[existing] = { ...state.community.posts[existing], ...record }; else state.community.posts.unshift(record); commit({ queue: 'community.post' }); return clone(record); }
   function mergeRemotePosts(posts) { if (!Array.isArray(posts)) return getCommunity(); state.community.posts=state.community.posts.filter(p=>!p.isRemote); posts.filter(p=>!state.settings.blockedUsers.includes(p.authorId)).forEach(post => addPost({ ...post, isRemote:true })); commit(); return getCommunity(); }
   function removeCommunityPost(id) {state.community.posts=state.community.posts.filter(p=>p.id!==id && p.remoteId!==id);commit();}
-  function mergeRemoteUsers(users) { if (!Array.isArray(users)) return getCommunity(); users.forEach(user => { const index = state.community.users.findIndex(item => item.id === user.id); const record = { ...user, isRemote:true }; if (index >= 0) state.community.users[index] = { ...state.community.users[index], ...record }; else state.community.users.push(record); }); commit(); return getCommunity(); }
+  function mergeRemoteUsers(users) { if (!Array.isArray(users)) return getCommunity(); users.forEach(user => { const index = state.community.users.findIndex(item => item.id === user.id); const record = { ...user, isRemote:true, ...(state.settings.blockedUsers.includes(user.id) ? { friendState:'blocked' } : {}) }; if (index >= 0) state.community.users[index] = { ...state.community.users[index], ...record }; else state.community.users.push(record); }); commit(); return getCommunity(); }
   function replaceRemoteClubs(clubs) { state.community.clubs = Array.isArray(clubs) ? clubs.map(club => ({ ...club, isRemote:true })) : []; commit(); return getCommunity(); }
   function replaceRemoteSalons(salons) { state.community.salons = Array.isArray(salons) ? salons.map(salon => ({ ...salon, isRemote:true })) : []; commit(); return getCommunity(); }
   function updateFriend(userId, action) { const user = state.community.users.find(item => item.id === userId); if (!user) return null; user.friendState = ({ send: 'sent', cancel: 'none', accept: 'friend', refuse: 'none', remove: 'none' })[action] || user.friendState; commit({ queue: `friend.${action}` }); return clone(user); }
   function blockUser(userId) { if (!state.settings.blockedUsers.includes(userId)) state.settings.blockedUsers.push(userId); state.community.posts = state.community.posts.filter(post => post.authorId !== userId); const user = state.community.users.find(item => item.id === userId); if (user) user.friendState = 'blocked'; commit({ queue: 'user.block' }); }
   function unblockUser(userId) { state.settings.blockedUsers = state.settings.blockedUsers.filter(id => id !== userId); const user = state.community.users.find(item => item.id === userId); if (user?.friendState === 'blocked') user.friendState = 'none'; commit({ queue: 'user.unblock' }); }
+  function replaceBlockedUsers(userIds) {
+    if (!Array.isArray(userIds)) return;
+    state.settings.blockedUsers = [...new Set(userIds.filter(id => typeof id === 'string' && id && id !== activeUserId))];
+    const blocked = new Set(state.settings.blockedUsers);
+    state.community.posts = state.community.posts.filter(post => !blocked.has(post.authorId));
+    state.community.users.forEach(user => { if (blocked.has(user.id)) user.friendState = 'blocked'; else if (user.friendState === 'blocked') user.friendState = 'none'; });
+    commit();
+  }
   function addGroup(group) { const id = group.id || uid('club'), bookTitle = group.bookTitle || ''; const record = { id, remoteId: group.remoteId || null, name: group.name, description: group.description || '', visibility: group.visibility || 'private', access: group.access || 'approval', bookTitle, membersCount: 1, role: 'owner', joined: true, color: group.color || '#6f927c', members:[{ userId:'me', name:state.profile.name, role:'owner', status:'active' }], posts:[], books:bookTitle ? [{ id:uid('club-book'), title:bookTitle, status:'current', updated_at:nowISO() }] : [] }; const existing = state.community.clubs.findIndex(item => item.id === record.id || (record.remoteId && item.remoteId === record.remoteId)); if (existing >= 0) state.community.clubs[existing] = { ...state.community.clubs[existing], ...record }; else state.community.clubs.unshift(record); commit({ queue: 'club.create' }); return clone(record); }
   function getGroups() { return clone(state.community.clubs); }
   function updateGroup(clubId, updates = {}) { const club = state.community.clubs.find(item => item.id === clubId); if (!club) return null; Object.assign(club, updates); if (updates.bookTitle != null) { club.books ||= []; club.books.forEach(book => { if (book.status === 'current') book.status = 'planned'; }); if (updates.bookTitle) { const existing = club.books.find(book => normalizeText(book.title) === normalizeText(updates.bookTitle)); if (existing) { existing.status = 'current'; existing.updated_at = nowISO(); } else club.books.push({ id:uid('club-book'), title:updates.bookTitle, status:'current', updated_at:nowISO() }); } } commit({ queue:'club.update' }); return clone(club); }
@@ -846,6 +858,8 @@ BT.store = (() => {
   function exportData() { return clone(state); }
   function flushOutbox() { if (typeof navigator !== 'undefined' && navigator.onLine && state.outbox.length) { state.outbox = []; commit(); } }
   function clearAll() {
+    // Pending badge/view callbacks must not recreate an erased account cache.
+    localErased = true;
     localStorage.removeItem(STATE_KEY);
     localStorage.removeItem(`${STATE_KEY}:drafts`);
     localStorage.removeItem(ONBOARDING_KEY);
@@ -857,14 +871,14 @@ BT.store = (() => {
   window.addEventListener?.('online', flushOutbox);
 
   return {
-    getState, getSyncedData, getSyncBaseline, replaceSyncedData, getDataSyncStatus, markDataSynced, subscribe, useUser, getOnboarding, saveOnboarding, isOnboardingComplete, getProfile, saveProfile, getSettings, saveSettings,
+    getState, getUserId, getSyncedData, getSyncBaseline, replaceSyncedData, getDataSyncStatus, markDataSynced, subscribe, useUser, getOnboarding, saveOnboarding, isOnboardingComplete, getProfile, saveProfile, getSettings, saveSettings,
     getBooks, getBookById, addBook, updateBook, saveBookReflection, deleteBook, getCurrentBook, setActiveBook, setCurrentBook, clearActiveBook, completeBook,
     getSessions, getSessionsForBook, saveSession, updateSession, deleteSession, getTodaySessions, getTodayReadingTime,
     getActiveSession, getActiveSessions, getActiveSessionForBook, focusActiveSession, startActiveSession, recoverActiveSession, heartbeatActiveSession, activeDuration, updateActiveSession, addActiveSessionCitation, pauseActiveSession, resumeActiveSession, finishActiveSession,
     getTraces, getTracesForBook, saveTrace, deleteTrace, getLexicon, addLexiconWord, reviewLexiconWord, deleteLexiconWord,
     getDraft, saveDraft, clearDraft,
     getGoal, saveGoal, getGoalProgress, updateGoal, markGoalCelebrated, isGoalCelebrated,
-    getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, removeCommunityPost, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, addGroup, getGroups, updateGroup, toggleClub, addGroupMember, removeGroupMember, addGroupPost, updateGroupPost, removeGroupPost, addGroupComment, toggleGroupPostEncouragement, addGroupBook, updateGroupBook, updateSalon, addSalon, addSalonMessage,
+    getCommunity, toggleEncouragement, addComment, addPost, mergeRemotePosts, removeCommunityPost, mergeRemoteUsers, replaceRemoteClubs, replaceRemoteSalons, updateFriend, blockUser, unblockUser, replaceBlockedUsers, addGroup, getGroups, updateGroup, toggleClub, addGroupMember, removeGroupMember, addGroupPost, updateGroupPost, removeGroupPost, addGroupComment, toggleGroupPostEncouragement, addGroupBook, updateGroupBook, updateSalon, addSalon, addSalonMessage,
     getNotifications, replaceNotifications, addNotification, markNotification, markAllNotifications, getTimeline, getReaderDNA, getStats, getBadges, consumeBadgeCelebrations, mergeBadgeAwards, exportData, flushOutbox, clearAll, loadDemoData,
     statusLabel, situationLabel, localDateKey
   };

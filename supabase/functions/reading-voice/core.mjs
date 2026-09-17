@@ -28,7 +28,7 @@ export function createHandler({env, fetchImpl = fetch}) {
     if(!sb || !service) return reply({error:'Configuration serveur incomplète.'},503);
     const http=(url,options={})=>fetchImpl(url,{...options,signal:AbortSignal.timeout(20000)});
     const db=(path,options={})=>http(`${sb}/rest/v1/${path}`,{...options,headers:{apikey:service,Authorization:`Bearer ${service}`,'Content-Type':'application/json',...options.headers}});
-    let reservation=null;
+    let reservation=null, callId=null;
     try {
       const auth=await http(`${sb}/auth/v1/user`,{headers:{apikey:service,Authorization:authorization}});
       if(!auth.ok) return reply({error:'Session expirée. Reconnectez-vous.'},401);
@@ -70,14 +70,27 @@ export function createHandler({env, fetchImpl = fetch}) {
         await db(`boop_voice_calls?id=eq.${reservation}`,{method:'PATCH',body:JSON.stringify({status:'failed'})});
         return reply({error:upstream.status===429?'Quota OpenAI ou crédits API insuffisants. Vérifiez la facturation API.':'La connexion vocale OpenAI est indisponible. Vérifiez la clé et l’accès au modèle.'},502);
       }
-      const callId=(upstream.headers.get('location') || '').split('/').pop();
-      if(!/^rtc_[a-zA-Z0-9_-]+$/.test(callId || '')) throw new Error('missing call');
+      const upstreamCall=(upstream.headers.get('location') || '').split('/').pop();
+      if(!/^rtc_[a-zA-Z0-9_-]+$/.test(upstreamCall || '')) throw new Error('missing call');
+      callId=upstreamCall;
       const sdp=await upstream.text();
-      const saved=await db(`boop_voice_calls?id=eq.${reservation}`,{method:'PATCH',body:JSON.stringify({call_id:callId,status:'active'})});
-      if(!saved.ok) {await http(`${API}/${callId}/hangup`,{method:'POST',headers:{Authorization:`Bearer ${key}`}});throw new Error('database');}
+      const saved=await db(`boop_voice_calls?id=eq.${reservation}&user_id=eq.${user.id}&status=eq.pending`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({call_id:callId,status:'active'})});
+      const savedRows=saved.ok?await saved.json().catch(()=>[]):[];
+      if(savedRows.length!==1) throw new Error('database');
       return reply({id:reservation,sdp,model:MODEL,maxSeconds:1800});
     } catch {
-      if(reservation) await db(`boop_voice_calls?id=eq.${reservation}`,{method:'PATCH',body:JSON.stringify({status:'failed'})}).catch(()=>{});
+      let closed=false;
+      if(callId) {
+        // Includes PATCH timeouts and truncated SDP, not just HTTP errors. Keep
+        // the call recoverable in the ledger when hangup cannot be confirmed.
+        for(let attempt=0;attempt<2&&!closed;attempt++) {
+          try {
+            const ended=await http(`${API}/${callId}/hangup`,{method:'POST',headers:{Authorization:`Bearer ${env('OPENAI_API_KEY')}`}});
+            closed=ended.ok||ended.status===404;
+          } catch { /* Retry the idempotent hangup once. */ }
+        }
+      }
+      if(reservation) await db(`boop_voice_calls?id=eq.${reservation}`,{method:'PATCH',body:JSON.stringify({status:callId?(closed?'closed':'active'):'failed',...(callId?{call_id:callId}:{})})}).catch(()=>{});
       return reply({error:'La connexion n’a pas pu être établie. Réessayez dans un instant.'},502);
     }
   };

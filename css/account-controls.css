@@ -26,3 +26,8 @@
 .push-invitation__actions { display:grid; gap:8px; margin:20px 0 12px; }
 .push-invitation__actions button { min-height:46px; }
 .push-invitation [hidden], .push-invitation [data-invitation-status]:empty { display:none; }
+.safety-form-status { margin:0; font-size:var(--boo-text-small); line-height:1.55; }
+.safety-form-status:empty { display:none; }
+.danger-zone .button-row { flex-wrap:wrap; }
+.app-dialog.safety-dialog { margin:auto; }
+@media (max-width:600px) { .app-dialog.safety-dialog { margin:0; } }

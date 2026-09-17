@@ -59,6 +59,17 @@ test('push: filtres et destinataire viennent de la notification stockée',async(
  assert.equal(h.calls.some(c=>c.url.includes('fcm.googleapis')),false);assert.equal(permits(cleanPreferences({friends:false}),'friend'),false);
 });
 const worker=readFileSync(new URL('../js/push-worker.js',import.meta.url),'utf8');
+test('push: un blocage retire aussi une notification déjà chargée par le dispatcher',async()=>{
+ let notifications=0;
+ const h=setup({route:(url,opts)=>{
+  if(url.includes('push_jobs'))return json(opts.body&&JSON.parse(opts.body).status==='sending'?[{id:job,notification_id:9}]:[]);
+  if(url.includes('/notifications?'))return json(notifications++===0?[{id:9,recipient_id:owner,type:'trace',route:'#community'}]:[]);
+  if(url.includes('push_devices'))return json([{device_id:device,user_id:owner,token:'private-token'}]);
+ }});
+ const response=await h.send({action:'dispatch',jobId:job,capability:device},{bearer:''});
+ assert.equal(response.status,200);assert.equal((await response.json()).sent,0);
+ assert.equal(notifications,2);assert.equal(h.calls.some(c=>c.url.includes('fcm.googleapis')),false);
+});
 function workerHarness(state={enabled:true,owner}) {
  const handlers={},shown=[],opened=[];
  const self={BoopPushState:{access:async()=>state},registration:{scope:'https://example.com/boo-p/',showNotification:async(...args)=>shown.push(args)},clients:{matchAll:async()=>[],openWindow:async(url)=>opened.push(url)},addEventListener:(event,fn)=>handlers[event]=fn};

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const app = readFileSync(new URL('../js/mvp-app.js', import.meta.url), 'utf8');
-const deletion = app.slice(app.indexOf('  async function submitDeleteAccount('), app.indexOf('  function openPostDialog('));
+const deletion = app.slice(app.indexOf('  async function submitLocalDataErasure('), app.indexOf('  async function submitDeleteAccount('));
 
 function setup(signOut) {
   const events = [];
@@ -16,7 +16,7 @@ function setup(signOut) {
     clearTimeout:() => events.push('cancel-sync'), clearInterval:() => {},
     showToast:message => events.push(message)
   };
-  vm.runInNewContext(deletion + '\nthis.erase = submitDeleteAccount;', context);
+  vm.runInNewContext(deletion + '\nthis.erase = submitLocalDataErasure;', context);
   return { context, events, ui };
 }
 
@@ -51,6 +51,7 @@ test('effacement du store: aucune donnée de démonstration ni notification de s
     navigator:{ onLine:true }, console, Date, Math, JSON, Set, Map, Intl };
   vm.runInNewContext(readFileSync(new URL('../js/store.js', import.meta.url), 'utf8'), context);
   BT.store.useUser('erasure-test');
+  assert.equal(BT.store.getUserId(), 'erasure-test', 'Deletion can verify the active store owner');
   const snapshot = BT.store.getSyncedData();
   const reordered = Object.fromEntries(Object.entries(snapshot).reverse());
   BT.store.markDataSynced(new Date().toISOString(), reordered);
@@ -65,4 +66,8 @@ test('effacement du store: aucune donnée de démonstration ni notification de s
   assert.equal(BT.store.getSyncedData().books.length, 0);
   assert.equal(storage.has('boop_mvp_v5:erasure-test'), false);
   assert.equal(storage.has('boop_sync_recovery:erasure-test'), false);
+  BT.store.saveSettings({ theme:'dark' });
+  BT.store.saveDraft('late-note', { text:'Late asynchronous callback' });
+  assert.equal(storage.has('boop_mvp_v5:erasure-test'), false);
+  assert.equal(storage.has('boop_mvp_v5:erasure-test:drafts'), false);
 });

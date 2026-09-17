@@ -13,6 +13,11 @@ function setup(overrides={}, options={}) {
   if(url.includes('/rpc/')) return options.quota?Response.json({code:'P0001'},{status:400}):Response.json(rid);
   if(url==='https://api.openai.com/v1/realtime/calls')return options.upstreamError?new Response('secret debug',{status:429}):new Response('v=0\r\nanswer',{headers:{location:'/v1/realtime/calls/rtc_test'}});
   if(url.includes('select=id'))return Response.json([]);
+  if(init.headers?.Prefer==='return=representation'){
+   if(options.saveThrows)throw new Error('database timeout');
+   return Response.json(options.deletedDuringStart?[]:[{id:rid}]);
+  }
+  if(url.endsWith('/hangup')&&options.hangupFails)return new Response(null,{status:503});
   return new Response(null,{status:204});
  };
  return {handler:createHandler({env:n=>vars[n],fetchImpl}),calls};
@@ -40,6 +45,21 @@ test('voix : quota serveur bloque OpenAI et la fermeture ne permet pas de viser 
 });
 test('voix : une erreur fournisseur reste lisible et ne révèle pas son contenu',async()=>{
  const {handler}=setup({}, {upstreamError:true});const result=await handler(request({action:'start',adultConsent:true,sdp:'v=0'}));assert.equal(result.status,502);const text=await result.text();assert.ok(text.includes('crédits'));assert.ok(!text.includes('secret debug'));
+});
+test('voix : suppression simultanée du compte ferme l’appel créé sans transmettre le SDP',async()=>{
+ const {handler,calls}=setup({}, {deletedDuringStart:true});
+ const response=await handler(request({action:'start',adultConsent:true,sdp:'v=0'}));
+ assert.equal(response.status,502);assert.equal((await response.json()).sdp,undefined);
+ assert.ok(calls.some(c=>c.url.endsWith('/rtc_test/hangup')));
+});
+test('voix : timeout après création ferme l’appel, échec hangup conserve son identifiant pour reprise',async()=>{
+ for(const hangupFails of [false,true]){
+  const {handler,calls}=setup({}, {saveThrows:true,hangupFails});
+  assert.equal((await handler(request({action:'start',adultConsent:true,sdp:'v=0'}))).status,502);
+  assert.equal(calls.filter(c=>c.url.endsWith('/rtc_test/hangup')).length,hangupFails?2:1);
+  const final=JSON.parse(calls.at(-1).init.body);
+  assert.equal(final.call_id,'rtc_test');assert.equal(final.status,hangupFails?'active':'closed');
+ }
 });
 test('voix : contexte borné et absence de récupération automatique des notes privées',()=>{
  const config=sessionConfig({title:'a'.repeat(2000),notes:'secret-note'});assert.ok(config.instructions.length<2200);assert.ok(!JSON.stringify(config).includes('secret-note'));assert.equal(config.max_output_tokens,768);
