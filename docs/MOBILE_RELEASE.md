@@ -8,9 +8,11 @@ Limites actuelles :
 
 - Les e-mails de confirmation et de réinitialisation utilisent le parcours web public existant ; il faut revenir manuellement dans l'application. Le retour automatique par lien vérifié reste à intégrer et tester.
 - Le push natif n'est pas implémenté. Les exports de données et fichiers restent à tester sur appareils.
-- Les adaptations CORS de six fonctions Supabase sont préparées, mais **pas encore déployées**. Elles doivent être déployées puis vérifiées avant les tests des fonctions concernées depuis les origines natives.
-- Le workflow `.github/workflows/mobile-preview.yml` prévoit une compilation d'APK Android de débogage et une compilation iOS pour simulateur sans signature de distribution. Il **n'a pas encore été exécuté** ; aucun résultat de compilation native n'est acquis.
-- Le premier audit npm relève **trois alertes modérées dans les outils de développement**, via la CLI et ses dépendances `xcode` / `uuid`. Le contrôle distinct des dépendances de production reste à confirmer ; aucune absence de vulnérabilité en production n'est encore certifiée.
+- Les adaptations CORS de six fonctions Supabase sont préparées, mais **pas déployées, à la demande de l'utilisateur**. Une nouvelle autorisation est nécessaire avant ce déploiement, puis une vérification depuis les origines natives. Aucun changement de serveur n'a été effectué pendant cette étape.
+- Le workflow `.github/workflows/mobile-preview.yml` a **réussi le 17 septembre 2026** : APK Android de débogage et application iOS pour simulateur compilés. Cela ne vaut pas validation sur téléphone ni signature de distribution. [Compilation du commit 6e88f8d](https://github.com/credixbako-prog/boo-p-by-chatgpt/actions/runs/35225901684).
+- L'audit npm relève **trois alertes modérées dans les outils de développement**, via la CLI et ses dépendances `xcode` / `uuid`. `npm audit --omit=dev` ne signale aucune vulnérabilité connue dans les dépendances de production à cette date.
+
+Validation : **202 tests JavaScript et 3 contrôles du paquet mobile réussis**, localement puis dans GitHub Actions. Les deux artefacts de compilation sont conservés 14 jours dans le workflow. L'APK a aussi été téléchargé dans `output/mobile/0.1.0-6e88f8d/app-debug.apk` dans l'espace de travail local, avec vérification de l'empreinte SHA-256 de l'archive. SHA-256 de l'APK : `099cbf5e84ae15283fe5ae73f240829606d5f3c021fec0a1fab2ceffcb84258c`.
 
 ## 1. Comptes et outils à débloquer
 
