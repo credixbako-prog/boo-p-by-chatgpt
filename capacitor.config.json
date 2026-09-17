@@ -1,0 +1,9 @@
+{
+  "appId": "fr.boop.app",
+  "appName": "BOO-P",
+  "webDir": "dist-mobile",
+  "backgroundColor": "#F2EDE3",
+  "loggingBehavior": "debug",
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "automatic" }
+}

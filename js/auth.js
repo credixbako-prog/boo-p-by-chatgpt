@@ -195,6 +195,12 @@ BT.auth = (function () {
   }
 
   function redirectUrl(page) {
+    if (BT.native?.isNative) {
+      // Email links open the public web flow; the reader then signs in in the app.
+      const target = new URL(page, BT.native.publicAppUrl);
+      if (target.protocol !== 'https:' || target.username || target.password) throw new Error('L’adresse de retour BOO-P est indisponible. Réessayez après une mise à jour de l’application.');
+      return target.href;
+    }
     if (!['http:', 'https:'].includes(window.location.protocol)) return undefined;
     return new URL(page, window.location.href).href;
   }
@@ -459,8 +465,8 @@ BT.auth = (function () {
   async function requestPasswordReset(email) {
     await readyPromise;
     const cleanEmail=validateEmail(email);
-    if (!['https:','http:'].includes(window.location.protocol)) throw new Error('Ouvrez BOO-P depuis son adresse en ligne pour recevoir un lien de récupération.');
-    const redirectTo=new URL('index.html?auth=recovery',window.location.href).href;
+    const redirectTo=redirectUrl('index.html?auth=recovery');
+    if (!redirectTo) throw new Error('Ouvrez BOO-P depuis son adresse en ligne pour recevoir un lien de récupération.');
     const {error}=await client.auth.resetPasswordForEmail(cleanEmail,{redirectTo});
     if(error?.code==='user_not_found')return;
     if (error) throw friendlyError(error,'Le lien ne peut pas être envoyé pour le moment.');

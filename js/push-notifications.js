@@ -8,6 +8,7 @@ BT.push = (() => {
   const state = value => window.BoopPushState.access(value);
   const userId = () => BT.auth?.getCurrentUser?.()?.id;
   function support() {
+    if (BT.native?.isNative) return 'Les alertes sur cet appareil seront disponibles dans une prochaine version de l’application. Vos notifications restent consultables dans BOO-P.';
     if (!window.isSecureContext || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'Sur iPhone ou iPad, ajoutez BOO-P à l’écran d’accueil puis ouvrez cette application. Sinon, utilisez un navigateur compatible en HTTPS.';
     if (Notification.permission === 'denied') return 'Notifications bloquées : autorisez-les dans les réglages de ce site sur votre navigateur.';
     return '';
@@ -60,6 +61,7 @@ BT.push = (() => {
     } finally { busy = false; }
   }
   async function disable() {
+    if (BT.native?.isNative) return;
     const previous = await state();
     await state({...previous,enabled:false});
     if ('serviceWorker' in navigator) {
@@ -71,16 +73,19 @@ BT.push = (() => {
     if (previous.deviceId && previous.owner === userId()) await api('disable',{deviceId:previous.deviceId});
   }
   async function test() {
+    if (BT.native?.isNative) throw new Error(support());
     const current = await state();
     if (!current.enabled || current.owner !== userId()) throw new Error('Activez d’abord les notifications sur cet appareil.');
     return api('test',{deviceId:current.deviceId});
   }
   async function preferences(value) { if (userId()) await api('preferences',{preferences:value}); }
   async function describe() {
+    if (BT.native?.isNative) return {enabled:false,reason:support()};
     const current = await state();
     return {enabled:current.enabled && current.owner === userId() && window.Notification?.permission === 'granted',reason:support()};
   }
   async function reconcile() {
+    if (BT.native?.isNative) return;
     const current = await state();
     if (current.owner && current.owner !== userId()) { await disable(); return; }
     if (!current.enabled) return;

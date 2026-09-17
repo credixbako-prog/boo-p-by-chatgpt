@@ -20,12 +20,15 @@ const ALLOWED_HOSTS = [
   "shnyjvinzjvgourpscvh.supabase.co",
 ];
 
+function isAllowedOrigin(origin: string) {
+  const isLocal = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin);
+  return origin === PRODUCTION_ORIGIN || origin === "capacitor://localhost" || isLocal;
+}
+
 function corsHeaders(request: Request) {
   const origin = request.headers.get("origin") || "";
-  const isLocal = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin);
-  const allowedOrigin = origin === PRODUCTION_ORIGIN || isLocal ? origin : PRODUCTION_ORIGIN;
   return {
-    "Access-Control-Allow-Origin": allowedOrigin,
+    ...(isAllowedOrigin(origin) ? { "Access-Control-Allow-Origin": origin } : {}),
     "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
     "Access-Control-Allow-Methods": "GET, OPTIONS",
     "Access-Control-Max-Age": "86400",
@@ -87,6 +90,8 @@ async function fetchAllowedImage(initialUrl: URL) {
 }
 
 Deno.serve(async (request: Request) => {
+  const origin = request.headers.get("origin") || "";
+  if (origin && !isAllowedOrigin(origin)) return errorResponse(request, "Origine non autorisée.", 403);
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(request) });
   if (request.method !== "GET") return errorResponse(request, "Méthode non autorisée.", 405);
 

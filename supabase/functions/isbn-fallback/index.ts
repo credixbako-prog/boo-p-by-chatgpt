@@ -37,12 +37,15 @@ type SourceResult = {
 
 const metadataCache = new Map<string, { book: BookMetadata; expiresAt: number }>();
 
+function isAllowedOrigin(origin: string) {
+  const isLocal = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin);
+  return origin === PRODUCTION_ORIGIN || origin === "capacitor://localhost" || isLocal;
+}
+
 function corsHeaders(request: Request) {
   const origin = request.headers.get("origin") || "";
-  const isLocal = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin);
-  const allowedOrigin = origin === PRODUCTION_ORIGIN || isLocal ? origin : PRODUCTION_ORIGIN;
   return {
-    "Access-Control-Allow-Origin": allowedOrigin,
+    ...(isAllowedOrigin(origin) ? { "Access-Control-Allow-Origin": origin } : {}),
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
@@ -388,6 +391,8 @@ function mergePartnerBooks(books: BookMetadata[], isbn: string) {
 }
 
 Deno.serve(async (request: Request) => {
+  const origin = request.headers.get("origin") || "";
+  if (origin && !isAllowedOrigin(origin)) return jsonResponse(request, { error: "Origine non autorisée." }, 403);
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(request) });
   if (request.method !== "POST") return jsonResponse(request, { error: "Méthode non autorisée." }, 405);
 

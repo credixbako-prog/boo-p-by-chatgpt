@@ -12,3 +12,10 @@ Thumbs.db
 .env.*
 !.env.example
 .tmp/
+node_modules/
+dist-mobile/
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+android/local.properties

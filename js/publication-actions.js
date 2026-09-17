@@ -23,7 +23,10 @@ BT.publications=(()=>{
   async function ready(expected){await BT.auth.ready();if(!expected||who()!==expected)throw new Error('Votre compte a changé. Rouvrez la publication.');return BT.auth.getClient();}
   function result(r){if(r.error)throw new Error(r.error.code==='23505'?'Ce signalement a déjà été enregistré.':r.error.code==='42501'?'Cette action n’est pas autorisée pour ce compte.':'L’action n’a pas été enregistrée. Vérifiez la connexion et réessayez.');return r.data;}
   function plain(item){const kind=item.readingKind||item.reading_kind,content=item.readingContent||item.reading_content||'';return [item.bookTitle||item.book_title||item.title,kind==='citation'?Object.values(BT.sharing.citation(content)).join('\n'):kind==='thought'?BT.sharing.thought(content).text:content,item.text||item.body||item.caption].filter(Boolean).join('\n\n');}
-  function share(item){if(item.table==='reading_cards')return shareCard(item);const data={title:item.bookTitle||item.book_title||item.title||'Une lecture sur BOO-P',text:plain(item)};if(item.remote&&item.visibility==='public'&&item.table==='community_posts')data.url=new URL('app.html#community?publication='+encodeURIComponent(item.id),location.href).href;
+  function share(item){if(item.table==='reading_cards')return shareCard(item);const data={title:item.bookTitle||item.book_title||item.title||'Une lecture sur BOO-P',text:plain(item)};if(item.remote&&item.visibility==='public'&&item.table==='community_posts'){
+      const url=new URL('app.html#community?publication='+encodeURIComponent(item.id),BT.native?.isNative?BT.native.publicAppUrl:location.href);
+      if(!BT.native?.isNative||url.protocol==='https:'&&!url.username&&!url.password)data.url=url.href;
+    }
     if(navigator.share){navigator.share(data).catch(e=>{if(e.name!=='AbortError')copyDialog(data);});}else copyDialog(data);
   }
   function shareCard(item){

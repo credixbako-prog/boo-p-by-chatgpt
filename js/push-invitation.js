@@ -46,6 +46,7 @@ BT.pushInvitation = (() => {
     dialog.showModal();
   }
   async function check() {
+    if (BT.native?.isNative) return;
     if (checking || finished || document.body.dataset.authMode !== 'account' || !owner()) return;
     if (document.visibilityState === 'hidden' || document.querySelector('dialog[open]') || location.hash.startsWith('#session')) return;
     checking = true;
@@ -70,7 +71,7 @@ BT.pushInvitation = (() => {
     } catch { /* L'invitation ne doit jamais bloquer l'accès à la lecture. */ }
     finally { checking = false; }
   }
-  function schedule() { clearTimeout(timer); timer = setTimeout(check,1200); }
+  function schedule() { if (BT.native?.isNative) return; clearTimeout(timer); timer = setTimeout(check,1200); }
   document.addEventListener('visibilitychange',schedule);
   document.addEventListener('close',schedule,true);
   window.addEventListener('hashchange',schedule);

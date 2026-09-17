@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  if (!('serviceWorker' in navigator) || !['http:', 'https:'].includes(location.protocol)) return;
+  if (window.BT?.native?.isNative || !('serviceWorker' in navigator) || !['http:', 'https:'].includes(location.protocol)) return;
 
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./service-worker.js', { scope: './' })

@@ -75,7 +75,7 @@ BT.voice = (() => {
       const offer=await pc.createOffer();await pc.setLocalDescription(offer);
       const result=await api({action:'start',adultConsent:true,sdp:offer.sdp,book:{title:book.title,authors:book.authors.join(', '),finished:book.status==='lu',position:book.mediaType==='audio'?`${book.currentMinute} minutes`:`page ${book.currentPage}`}},controller.signal);
       if(current!==generation){void api({action:'stop',id:result.id}).catch(()=>{});return;}
-      callId=result.id;await pc.setRemoteDescription({type:'answer',sdp:result.sdp});startTime=Date.now();
+      callId=result.id;await pc.setRemoteDescription({type:'answer',sdp:result.sdp});if(current!==generation)return;startTime=Date.now();
       timer=setInterval(()=>{const seconds=Math.floor((Date.now()-startTime)/1000);$('[data-voice-clock]').textContent=`${Math.floor(seconds/60)} min ${seconds%60} s`;if(seconds>=result.maxSeconds)void stop('Les 30 minutes de test sont terminées.');},1000);
     } catch(error) {if(current===generation)await stop(error.name==='NotAllowedError'?'Le microphone n’a pas été autorisé.':error.message || 'Connexion impossible.');}
   }
@@ -102,6 +102,9 @@ BT.voice = (() => {
     finally{stopping=false;$('[data-voice-keep]').disabled=!transcript.length;$('[data-voice-keep]').hidden=!transcript.length;}
   }
   async function close(){await stop();dialog.close();document.body.classList.remove('reflection-open');transcript=[];meter=null;}
+  window.addEventListener('boop:native-paused',()=>{
+    if(dialog?.open && (running || callId || stream))void stop('Conversation terminée lors du passage en arrière-plan. Votre échange reste disponible ici.');
+  });
   window.addEventListener('pagehide',()=>{controller?.abort();stream?.getTracks().forEach(t=>t.stop());pc?.close();});
   BT.store?.subscribe(()=>{if(dialog?.open && (BT.auth.getCurrentUser?.()?.id!==owner || !BT.store.getBookById(book.id)))void close();});
   return {decorate,open};

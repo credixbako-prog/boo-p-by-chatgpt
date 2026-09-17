@@ -16,7 +16,7 @@ export function sessionConfig(book = {}) {
 export function createHandler({env, fetchImpl = fetch}) {
   return async request => {
     const origin=request.headers.get('origin') || '';
-    const allowed=origin==='https://credixbako-prog.github.io' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    const allowed=origin==='https://credixbako-prog.github.io' || origin==='https://localhost' || origin==='capacitor://localhost' || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
     const headers={'Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin', ...(allowed?{'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS'}:{})};
     const reply=(body,status=200)=>new Response(JSON.stringify(body),{status,headers});
     if(origin && !allowed) return reply({error:'Origine non autorisée.'},403);

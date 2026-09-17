@@ -1,0 +1,34 @@
+{
+  "name": "boop-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BOO-P — application Android et iOS",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "build:mobile": "node tools/build-mobile.mjs",
+    "mobile:assets": "node tools/mobile-assets.mjs",
+    "test:mobile-package": "node --test tests/mobile-package.check.mjs",
+    "mobile:sync": "npm run build:mobile && cap sync",
+    "mobile:android": "cap open android",
+    "mobile:ios": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.1",
+    "@capacitor/browser": "8.0.4",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/playfair-display": "5.3.0",
+    "@fontsource/poppins": "5.3.0",
+    "@supabase/supabase-js": "2.112.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2",
+    "esbuild": "0.28.2",
+    "sharp": "0.35.4"
+  }
+}
